@@ -318,6 +318,15 @@ Record decisions made during the build here (voice settings, library choices, an
 - **The order page has a small header of its own** (the brand, linking home) instead of `SiteHeader`: the cart it would open was just emptied, and its category links point at sections on the menu page.
 - **The Checkout button stays pending until the browser leaves for Stripe**, and clicks while pending do nothing, so a second click can't start a second session. It's `aria-disabled`, not `disabled`, so it keeps focus and screen readers hear "Taking you to checkout…". It resets on `pageshow` when the browser's Back button restores the page from the back/forward cache.
 - **Tests that load the route tree mock `cloudflare:workers`** (`src/router.test.ts`): routes reach the server functions, which import it, and only workerd has that module.
+- **The tools live in `src/agent/`, free of React and the server:** `tools.ts` (definitions), `handlers.ts` (`createToolHandlers(ports)`, plus `addLines` for Add all), `cartSummary.ts`, `menuSearch.ts`, `tapUpdates.ts`. Handlers reach the cart, the screen and checkout only through injected ports, so tests run them against a real core `ShoppingCart` and evals can import them.
+- **Handlers work out the cart after their change themselves** and summarize that, since a React component can't read the cart back right after an action (see `LIBRARY_FEEDBACK.md`). A test checks every summary against the real store.
+- **Every recovery result is `{ message }`**, the same shape `CheckoutResult` uses. Handlers also take their arguments as the JSON string Deepgram delivers, and a wrapper turns any unexpected error into a message.
+- **`set_quantity` and `remove_item` answer any id that isn't in the cart with the cart's lines and their ids**, whether or not the id is on the menu: that's the list the agent needs to retry ("pepperoni-pizza" finds "pepperoni-pizza-large").
+- **Close matches for an unknown id are scored by words:** each word of the id that matches a word in an item's name, id or sizes (equal, a prefix of 4+ letters, or two typos apart for 5+ letters) scores a point, and up to three items with the top score are offered with their variant ids. With no match, the message says nothing is close.
+- **`add_items` adds up repeated ids** into one `addItem` call, and the 20-per-line cap counts the sum plus what's in the cart. It checks every line before adding any.
+- **`find_menu_items` with no filters returns a message asking for one**, not the whole menu: the agent already has the menu, and lighting up every card says nothing. With `max_price`, only the sizes within it are listed. A query matches when every word appears in the name, description or id.
+- **`show_suggestions` checks its lines like `add_items` but not against the cart**, since the cart can change before Add all, which checks again. Repeated ids become one line, a blank title becomes "Suggestions".
+- **Tap updates cover add (menu card, Add, Add all), quantity (− and +, with the new quantity), remove and clear** (`describeTapChange`), each followed by the cart and total.
 
 ## Open questions
 
