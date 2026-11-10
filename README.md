@@ -41,11 +41,11 @@ The server accepts only Stripe test keys (`sk_test_…`), so no real payment can
 
 ### Try voice
 
-Press **Talk to order** at the bottom of the screen and allow the microphone when the browser asks. The agent greets you; ask it about the menu, such as "What's vegetarian?" The button shows what the agent is doing (connecting, listening, thinking, speaking), and captions above it show what it heard and its reply.
+Press **Talk to order** at the bottom of the screen and allow the microphone when the browser asks. The agent greets you; ask it about the menu, such as "What's vegetarian?" The button shows what the agent is doing (connecting, listening, thinking, speaking), and captions above it show what it heard and its reply. **Show conversation** above the captions opens the whole conversation, which stays until you press the button again.
 
 The agent can't change the cart yet: its tools are wired to voice in the next step. The session ends when you press the button again, when you leave the page, or after 60 seconds without speech from either side.
 
-To see the whole conversation, talk from http://localhost:3000/dev/tools: its **Session log** shows what you and the agent said, with times, and every message from Deepgram but the audio, for every session until you press **Clear**. **Copy as text** or **Copy as JSON** to share it, for example in a bug report. It's for development only; the browser console also prints each line as `[voice] you: …` and `[voice] agent: …`.
+For a log of every session, talk from http://localhost:3000/dev/tools: its **Session log** shows what you and the agent said, with times, and every message from Deepgram but the audio, for every session until you press **Clear**. **Copy as text** or **Copy as JSON** to share it, for example in a bug report. It's for development only; the browser console also prints each line as `[voice] you: …` and `[voice] agent: …`.
 
 ### Try the tools without a microphone
 
