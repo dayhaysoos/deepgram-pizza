@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "deepgram-pizza",
+  "compatibility_date": "2026-11-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@tanstack/react-start/server-entry",
+  "observability": {
+    "enabled": true
+  },
+  // Secret names only, never values. Locally the values live in .dev.vars;
+  // in production, set each one with `wrangler secret put <KEY>`.
+  // Listing them here keeps `wrangler types` the same with or without .dev.vars,
+  // warns in dev when one is missing, and makes deploy fail until both are set.
+  "secrets": {
+    "required": ["DEEPGRAM_API_KEY", "STRIPE_SECRET_KEY"]
+  }
+}

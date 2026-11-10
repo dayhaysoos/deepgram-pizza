@@ -292,6 +292,12 @@ Finish each step, and pass its check, before starting the next.
 
 Record decisions made during the build here (voice settings, library choices, anything this file left open), with one line on why.
 
+- **TypeScript pinned to `~6.0.3`.** typescript-eslint 8.x supports only `typescript <6.1.0`; TypeScript 7 would break linting.
+- **`compatibility_date` is `2026-11-08`.** The workerd bundled with `@cloudflare/vite-plugin` refuses newer dates, so `pnpm dev` would not start.
+- **Secret names are listed in `wrangler.jsonc` under `secrets.required`.** Names only, never values. `wrangler types` then gives the same output with or without `.dev.vars`, and deploy fails until both secrets are set.
+- **Generated files are committed** (`src/routeTree.gen.ts`, `worker-configuration.d.ts`), so `pnpm check` works on a fresh clone without running dev or `wrangler types` first.
+- **Vitest has its own `vitest.config.ts`** without the Cloudflare or Start plugins: tool handlers and other logic are tested as plain Node functions.
+
 ## Open questions
 
 - Should the agent offer a daily special? That would need a `specials` source.
