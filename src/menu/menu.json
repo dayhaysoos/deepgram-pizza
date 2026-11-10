@@ -251,6 +251,7 @@
   {
     "id": "garlic-knots",
     "name": "Garlic Knots (6)",
+    "spokenName": "garlic knots",
     "category": "sides",
     "description": "Six knots of pizza dough baked with garlic, butter and parsley.",
     "tags": ["vegetarian", "popular"],

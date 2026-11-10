@@ -9,6 +9,7 @@ import {
   menuToProducts,
   productFor,
   products,
+  spokenName,
   tags,
   type MenuItem,
 } from './menu'
@@ -27,11 +28,14 @@ function duplicates(values: string[]) {
 describe('menu.json', () => {
   it('gives every item the MenuItem fields, and nothing else', () => {
     const itemKeys = ['category', 'description', 'id', 'name', 'pairsWith', 'tags', 'variants']
+    const optionalItemKeys = ['spokenName']
     const variantKeys = ['id', 'label', 'price', 'serves']
 
     const wrongItems = menu.filter(
       (item) =>
-        JSON.stringify(Object.keys(item).sort()) !== JSON.stringify(itemKeys) ||
+        itemKeys.some((key) => !Object.hasOwn(item, key)) ||
+        Object.keys(item).some((key) => !itemKeys.includes(key) && !optionalItemKeys.includes(key)) ||
+        (item.spokenName !== undefined && (typeof item.spokenName !== 'string' || item.spokenName.trim() === '')) ||
         typeof item.id !== 'string' ||
         item.id === '' ||
         typeof item.name !== 'string' ||
@@ -250,6 +254,18 @@ describe('defaultVariant', () => {
 
   it('returns the only variant of a single-size item', () => {
     expect(defaultVariant(water).id).toBe('water')
+  })
+})
+
+describe('spokenName', () => {
+  const [calzone] = fixture
+
+  it('says an item by its name in lower case', () => {
+    expect(spokenName(calzone)).toBe('calzone')
+  })
+
+  it("says it by its spokenName when menu.json gives one, as for a name that doesn't read well aloud", () => {
+    expect(spokenName({ ...calzone, name: 'Calzone (2)', spokenName: 'calzones' })).toBe('calzones')
   })
 })
 

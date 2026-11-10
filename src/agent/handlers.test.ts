@@ -836,6 +836,26 @@ describe('plan_group_order', () => {
     expect(ui.showSuggestions).not.toHaveBeenCalled()
   })
 
+  it('plans around what the cart holds, so "add all of that" fits even after the pairings added a soda', async () => {
+    // The step 5 Check: the cheeseburger's pairings (fries and a soda) are in the cart, then a party of 20.
+    const { call, ui, given, storeSummary } = setup()
+    given({ 'classic-cheeseburger': 1, fries: 1, soda: 1 })
+
+    const shown = await call('plan_group_order', { people: 20 })
+    if (!('lines' in shown) || !('summary' in shown)) throw new Error('No plan shown')
+    expect(shown.lines.filter(({ id }) => id === 'soda' || id === 'lemonade')).toEqual([
+      { id: 'soda', name: 'Fountain Soda', quantity: 19 },
+      { id: 'lemonade', name: 'Fresh Lemonade', quantity: 1 },
+    ])
+
+    const added = await call('add_items', { items: shown.lines.map(({ id, quantity }) => ({ id, quantity })) })
+
+    expect(added).not.toHaveProperty('message')
+    expect(added).toEqual(storeSummary())
+    expect(added).toMatchObject({ lines: expect.arrayContaining([expect.objectContaining({ id: 'soda', quantity: 20 })]) })
+    expect(ui.closeSuggestions).toHaveBeenCalledTimes(1)
+  })
+
   it('closes the card when "add all of that" adds the plan, as for show_suggestions', async () => {
     const { call, ui, storeSummary } = setup()
     const shown = await call('plan_group_order', { people: 8, vegetarians: 2 })

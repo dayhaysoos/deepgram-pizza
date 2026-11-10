@@ -14,6 +14,7 @@
 
 import type { CartDetails } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
+import { isRecord } from '../isRecord'
 import { categories, findVariant, formatPrice, menu, tags, type Category, type Product, type Tag } from '../menu/menu'
 import { isLineQuantity, MAX_LINE_QUANTITY } from '../shop'
 import type { CartChanges } from './cartChanges'
@@ -26,11 +27,9 @@ import {
   type Quantities,
 } from './cartSummary'
 import { closeMatches, searchMenu, type MenuFilters } from './menuSearch'
-import { planGroupOrder, type GroupOrderRequest } from './planGroupOrder'
+import { planGroupOrder } from './planGroupOrder'
+import { orList, type Recovery } from './text'
 import { MAX_LINES_PER_CALL, type ToolName } from './tools'
-
-/** A short message the agent can act on, returned instead of throwing. */
-export type Recovery = { message: string }
 
 /**
  * The cart: `now()` to check a call against, `change()` to make a change and
@@ -178,10 +177,10 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
     }),
 
     // The code works out the plan (planGroupOrder.ts) and the card shows it, as
-    // show_suggestions would; the agent only sums it up. It doesn't change the cart.
+    // show_suggestions would; the agent only sums it up. It doesn't change the
+    // cart, but it leaves room for what's in it, so "add all of that" fits.
     plan_group_order: recovering((args) => {
-      // A cast, not a check: planGroupOrder checks every field at run time, since the agent can send anything.
-      const plan = planGroupOrder(args as GroupOrderRequest)
+      const plan = planGroupOrder(args, cart.now())
       if ('message' in plan) return { message: `Nothing was shown. ${plan.message}` }
       const shown = suggest(plan.title, plan.reason, plan.lines)
       if ('message' in shown) return shown
@@ -410,13 +409,4 @@ function isTag(value: unknown): value is Tag {
 /** The value trimmed, if it's a string that isn't blank. */
 function nonBlankText(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-}
-
-// ["medium", "large"] → "medium or large"; three or more get commas.
-function orList(words: string[]): string {
-  return words.length <= 2 ? words.join(' or ') : `${words.slice(0, -1).join(', ')} or ${words.at(-1)}`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

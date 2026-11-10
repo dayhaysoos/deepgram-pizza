@@ -128,27 +128,27 @@ describe('tap', () => {
     [
       'Add on a menu card',
       { type: 'add', lines: [{ id: 'soda', quantity: 1 }] },
-      'Customer added 1 × Fountain Soda by tapping. Cart: 2 × Large Margherita Pizza, 1 × Fries, 1 × Fountain Soda. Total $49.46.',
+      'Customer added 1 × Fountain Soda by tapping. Cart: 2 × Large Margherita Pizza, 1 × Fries, 1 × Fountain Soda. Total $49.46. Call view_cart before answering about the cart.',
     ],
     [
       '− in the cart drawer',
       { type: 'quantity', id: 'margherita-pizza-large', quantity: 1 },
-      'Customer changed Large Margherita Pizza to 1 by tapping. Cart: 1 × Large Margherita Pizza, 1 × Fries. Total $25.98.',
+      'Customer changed Large Margherita Pizza to 1 by tapping. Cart: 1 × Large Margherita Pizza, 1 × Fries. Total $25.98. Call view_cart before answering about the cart.',
     ],
     [
       '+ in the cart drawer',
       { type: 'quantity', id: 'fries', quantity: 2 },
-      'Customer changed Fries to 2 by tapping. Cart: 2 × Large Margherita Pizza, 2 × Fries. Total $51.96.',
+      'Customer changed Fries to 2 by tapping. Cart: 2 × Large Margherita Pizza, 2 × Fries. Total $51.96. Call view_cart before answering about the cart.',
     ],
     [
       'Remove in the cart drawer',
       { type: 'remove', id: 'margherita-pizza-large' },
-      'Customer removed Large Margherita Pizza by tapping. Cart: 1 × Fries. Total $4.99.',
+      'Customer removed Large Margherita Pizza by tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.',
     ],
     [
       'Add all on the suggestion card',
       { type: 'add', lines: [{ id: 'garlic-knots', quantity: 1 }, { id: 'fries', quantity: 1 }] },
-      'Customer added 1 × Garlic Knots (6), 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza, 2 × Fries, 1 × Garlic Knots (6). Total $57.95.',
+      'Customer added 1 × Garlic Knots (6), 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza, 2 × Fries, 1 × Garlic Knots (6). Total $57.95. Call view_cart before answering about the cart.',
     ],
   ])('%s: makes the change and tells the agent and the observer, with the cart after it', (_tap, change, told) => {
     const { cart, given, tellAgent, onTapUpdate, store } = setup()
@@ -177,7 +177,7 @@ describe('tap', () => {
 
     cart.tap({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
 
-    expect(tellAgent).toHaveBeenCalledExactlyOnceWith('Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.')
+    expect(tellAgent).toHaveBeenCalledExactlyOnceWith('Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.')
   })
 })
 
@@ -201,7 +201,7 @@ describe('taps and tool calls before React renders', () => {
     const summary = cart.tap({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
 
     expect(tellAgent).toHaveBeenCalledExactlyOnceWith(
-      'Customer added 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97.',
+      'Customer added 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97. Call view_cart before answering about the cart.',
     )
     expect(summary).toEqual(summarizeCart(quantitiesOf(store.getState().cartDetails)))
   })

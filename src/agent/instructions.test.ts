@@ -3,7 +3,7 @@ import { categories, formatPrice, menu, products, type MenuItem } from '../menu/
 import { SHOP_NAME } from '../shop'
 import { describeCart, summarizeCart } from './cartSummary'
 import { agentInstructions, describeMenu, GREETING } from './instructions'
-import { describeTapChange } from './tapUpdates'
+import { CALL_VIEW_CART, describeTapChange } from './tapUpdates'
 import { toolDefinitions, type ToolDefinition, type ToolName } from './tools'
 
 const emptyCart = summarizeCart({})
@@ -70,7 +70,8 @@ describe('describeMenu', () => {
   })
 })
 
-// The rules in SPEC.md's "Agent instructions (first draft)", word for word.
+// The rules in SPEC.md's "Agent instructions (first draft)", word for word,
+// with the wording recorded under Decisions since the first draft.
 const SPEC_DRAFT_RULES = [
   '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.',
   '- After each change, confirm it with the quantity, size and name, then the new total from the tool result.',
@@ -78,12 +79,12 @@ const SPEC_DRAFT_RULES = [
   '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.',
   '- When you suggest specific items, call show_suggestions so they appear on screen, and keep your spoken answer short: the screen shows the details.',
   '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.',
-  '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. To change the plan ("swap a pepperoni for a margherita"), call show_suggestions with the changed lines. Add it with add_items only after they agree.',
+  '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines. Add it with add_items only after they agree.',
   '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.',
   "- If asked about something not on the menu, say you don't have it and offer the closest thing you do have.",
   '- If the conversation goes off topic, answer in one friendly line and steer back to the order.',
   "- The customer can also change the cart by tapping. Before answering anything about what's in the cart or the total, call view_cart and answer from its result.",
-  '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm.',
+  '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm and say "Taking you to checkout now so you can pay." Never say the order is placed, done or confirmed: it isn\'t until they pay.',
 ]
 
 // The group rule for a session without plan_group_order: the agent plans from serves itself.
@@ -196,7 +197,7 @@ Conversation started. Cart: empty.`)
       "- You can't add, change or remove anything in the cart right now. If the customer asks, start by saying you can't do that yet, then tell them they can tap Add on the menu, all in one sentence. Never say you're adding, or that you did.",
     )
     expect(rules).toContain(
-      '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. To change the plan ("swap a pepperoni for a margherita"), call show_suggestions with the changed lines. Tell them they can add it by tapping Add all on the card.',
+      '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines. Tell them they can add it by tapping Add all on the card.',
     )
     expect(rulesOf(agentInstructions(emptyCart, allBut('plan_group_order', ...CART_TOOLS)))).toContain(
       "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. Show the plan with show_suggestions, say the total, and tell them they can add it by tapping Add on the menu.",
@@ -212,6 +213,34 @@ Conversation started. Cart: empty.`)
     // Each part follows its own tool.
     expect(groupRule(only('plan_group_order'))).toBe(
       '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. Tell them they can add it by tapping Add all on the card.',
+    )
+  })
+
+  it('with checkout, says the customer is going to pay, and never that the order is placed', () => {
+    const rule = rulesOf(fullPrompt).find((line) => line.startsWith('- When the customer is done'))
+    expect(rule).toContain('call checkout when they confirm and say "Taking you to checkout now so you can pay."')
+    expect(rule).toContain("Never say the order is placed, done or confirmed: it isn't until they pay.")
+    // The tool's own description says the same, so the agent reads it where it calls the tool.
+    const checkout = toolDefinitions.find((tool) => tool.name === 'checkout')
+    expect(checkout?.description).toContain('say "Taking you to checkout now so you can pay."')
+    expect(checkout?.description).toContain("Never say the order is placed, done or confirmed: it isn't until they pay.")
+  })
+
+  it('after plan_group_order, keeps show_suggestions for changes the customer asks for, since the plan is on screen', () => {
+    const groupRule = rulesOf(fullPrompt).find((line) => line.startsWith('- For a group'))
+    expect(groupRule).toContain('The plan is already on screen, so call show_suggestions only when the customer asks to change it')
+    expect(toolDefinitions.find((tool) => tool.name === 'plan_group_order')?.description).toContain(
+      "don't call show_suggestions after it unless the customer asks for a change",
+    )
+  })
+
+  it('has view_cart called before answers about the cart, even right after a tap update', () => {
+    expect(rulesOf(fullPrompt)).toContain(SPEC_DRAFT_RULES[10])
+    expect(toolDefinitions.find((tool) => tool.name === 'view_cart')?.description).toBe(
+      "Read what's in the cart and the total. Call it before answering any question about what's in the cart or the total, even right after you were told the customer tapped something.",
+    )
+    expect(describeTapChange({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] }, summarizeCart({ fries: 1 }))).toBe(
+      'Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.',
     )
   })
 
@@ -246,7 +275,9 @@ Conversation started. Cart: empty.`)
       expect(lastLine).toBe('Conversation started. Cart: 1 × Large Margherita Pizza. Total $20.99.')
       expect(lastLine).toBe(`Conversation started. ${describeCart(cart)}`)
     }
-    expect(describeTapChange({ type: 'remove', id: 'fries' }, cart)).toBe(`Customer removed Fries by tapping. ${describeCart(cart)}`)
+    expect(describeTapChange({ type: 'remove', id: 'fries' }, cart)).toBe(
+      `Customer removed Fries by tapping. ${describeCart(cart)} ${CALL_VIEW_CART}`,
+    )
   })
 
   // Deepgram's limit, with every product in the cart, is checked in src/voice/agentSettings.test.ts.

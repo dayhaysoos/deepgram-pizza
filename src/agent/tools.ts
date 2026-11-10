@@ -3,19 +3,40 @@
 // call it, and a JSON Schema for its parameters. A function without an
 // `endpoint` is client-side: the browser runs it, through handlers.ts.
 //
-// The enums come from menu.json, so editing the menu updates them. This module
-// imports nothing from React or the server, so evals can load it on its own.
+// The enums come from menu.json and the categories in menu.ts, so editing the
+// menu updates them. This module imports nothing from React or the server, so
+// evals can load it on its own.
+//
+// Tools that change the cart or leave the page set `defer_until_eot`: Deepgram
+// then calls them only once the customer's turn is over, not while they may
+// still be talking (https://developers.deepgram.com/docs/voice-agent-speculative-replies).
+// The others are called as soon as the LLM asks, which is quicker, and harmless
+// if the customer goes on talking: they only read the menu or the cart, or
+// change what's on screen, which the next call puts right.
 
-import { categories, menu, products, tags } from '../menu/menu'
+import { categories, mainCategories, menu, products, tags, type MainCategory } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
+import { orList } from './text'
 
 /** The most lines add_items and show_suggestions take in one call, and a group plan holds. */
 export const MAX_LINES_PER_CALL = 15
 
-/** What plan_group_order can plan a group's mains from. planGroupOrder.ts maps each to menu categories. */
-export const GROUP_MAINS = ['pizza', 'subs', 'mix'] as const
+/** What a group's mains can be: one main category, or a mix of them. */
+export type GroupMains = MainCategory | 'mix'
 
-export type GroupMains = (typeof GROUP_MAINS)[number]
+/**
+ * What plan_group_order can plan a group's mains from: each main category in
+ * menu.ts (pizza, subs), the first one the default, and a mix when there's more than one.
+ */
+export const GROUP_MAINS: readonly GroupMains[] = [
+  ...mainCategories.map((category) => category.id),
+  ...(mainCategories.length > 1 ? (['mix'] as const) : []),
+]
+
+// "What the mains are: pizza (the default), subs or mix for some of each."
+const mainsDescription = `What the mains are: ${orList(
+  GROUP_MAINS.map((mains, index) => (index === 0 ? `${mains} (the default)` : mains === 'mix' ? 'mix for some of each' : mains)),
+)}.`
 
 /** The part of JSON Schema these tools use. */
 export type JsonSchema = {
@@ -35,6 +56,12 @@ export type ToolDefinition<Name extends string = string> = {
   name: Name
   description: string
   parameters: JsonSchema & { type: 'object'; properties: Record<string, JsonSchema> }
+  /**
+   * True: Deepgram holds the call until the customer's turn is confirmed,
+   * instead of calling it while they may still be talking. Left out: called
+   * at once. Deepgram's field name, sent as it is.
+   */
+  defer_until_eot?: true
 }
 
 // Keeps each tool's name as a literal type, so ToolName below lists them.
@@ -63,6 +90,12 @@ const lines: JsonSchema = {
 }
 
 const noParameters: ToolDefinition['parameters'] = { type: 'object', properties: {} }
+
+/** What the agent says once checkout returns ok (SPEC.md, "Checkout"): they're going to pay, not done. */
+export const TO_CHECKOUT = 'Taking you to checkout now so you can pay.'
+
+/** Nothing is ordered until the customer pays on Stripe's page. */
+export const NOT_PLACED_YET = "Never say the order is placed, done or confirmed: it isn't until they pay."
 
 export const toolDefinitions = [
   tool({
@@ -100,7 +133,7 @@ export const toolDefinitions = [
   tool({
     name: 'plan_group_order',
     description:
-      "Plan food for a group and show it on the card on screen: mains for about one serving per person, sides to share and a drink each, worked out from the menu. Call it once you know how many people are eating. It doesn't add anything to the cart.",
+      "Plan food for a group and show it on the card on screen: mains for about one serving per person, sides to share and a drink each, worked out from the menu. Call it once you know how many people are eating. It doesn't add anything to the cart. The card already shows the plan, so don't call show_suggestions after it unless the customer asks for a change.",
     parameters: {
       type: 'object',
       properties: {
@@ -110,7 +143,7 @@ export const toolDefinitions = [
           type: 'object',
           description: 'Only what the customer said. Leave out the rest.',
           properties: {
-            mains: { type: 'string', enum: [...GROUP_MAINS], description: 'Pizza (the default), subs, or a mix of both.' },
+            mains: { type: 'string', enum: [...GROUP_MAINS], description: mainsDescription },
             spicy: { type: 'boolean', description: 'True when someone likes it spicy.' },
             drinks: { type: 'boolean', description: "False when they don't want drinks." },
             include: {
@@ -128,36 +161,43 @@ export const toolDefinitions = [
     name: 'add_item',
     description: 'Add an item to the cart.',
     parameters: { type: 'object', properties: { id, quantity }, required: ['id', 'quantity'] },
+    defer_until_eot: true,
   }),
   tool({
     name: 'add_items',
     description: 'Add several items to the cart in one go, such as a group plan the customer agreed to.',
     parameters: { type: 'object', properties: { items: lines }, required: ['items'] },
+    defer_until_eot: true,
   }),
   tool({
     name: 'set_quantity',
     description: 'Change how many of an item are in the cart.',
     parameters: { type: 'object', properties: { id, quantity }, required: ['id', 'quantity'] },
+    defer_until_eot: true,
   }),
   tool({
     name: 'remove_item',
     description: 'Take an item out of the cart.',
     parameters: { type: 'object', properties: { id }, required: ['id'] },
+    defer_until_eot: true,
   }),
   tool({
     name: 'view_cart',
-    description: "Read what's in the cart and the total. Call it before answering anything about the cart.",
+    description:
+      "Read what's in the cart and the total. Call it before answering any question about what's in the cart or the total, even right after you were told the customer tapped something.",
     parameters: noParameters,
   }),
   tool({
     name: 'clear_cart',
     description: 'Empty the cart, when the customer wants to start over.',
     parameters: noParameters,
+    defer_until_eot: true,
   }),
   tool({
     name: 'checkout',
-    description: 'Send the customer to the payment page, once they have confirmed their order.',
+    description: `Send the customer to the payment page, once they have confirmed their order. When it returns ok, say "${TO_CHECKOUT}" ${NOT_PLACED_YET} The page leaves as soon as you stop speaking.`,
     parameters: noParameters,
+    defer_until_eot: true,
   }),
 ]
 

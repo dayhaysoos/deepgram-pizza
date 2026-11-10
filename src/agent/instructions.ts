@@ -17,7 +17,8 @@
 import { categories, formatPrice, menu, type CategoryInfo, type MenuItem, type Variant } from '../menu/menu'
 import { SHOP_NAME } from '../shop'
 import { describeCart, type CartSummary } from './cartSummary'
-import type { ToolDefinition, ToolName } from './tools'
+import { orList } from './text'
+import { NOT_PLACED_YET, TO_CHECKOUT, type ToolDefinition, type ToolName } from './tools'
 
 /** What the agent says first, as soon as the session opens. */
 export const GREETING = `Hey, welcome to ${SHOP_NAME}! What can I get started for you?`
@@ -61,7 +62,9 @@ export function agentInstructions(cart: CartSummary, tools: readonly ToolDefinit
       : `- Answer anything about what's in the cart or the total from the last "Cart:" line you were given, and say the cart on screen is the up-to-date one, since the customer can change it by tapping.`,
     '- When the customer is done, ' +
       (has('view_cart') ? 'read back the order and total from view_cart, then ' : '') +
-      (has('checkout') ? 'call checkout when they confirm.' : 'tell them to tap Checkout in the cart.'),
+      (has('checkout')
+        ? `call checkout when they confirm and say "${TO_CHECKOUT}" ${NOT_PLACED_YET}`
+        : 'tell them to tap Checkout in the cart.'),
     '- Never end a reply by promising to do something later ("give me a sec", "let me check"). ' +
       (tools.length > 0 ? 'Either do it now with a tool, or answer now.' : 'Answer now.'),
   ])
@@ -95,7 +98,8 @@ function groupRule(has: HasTool): string {
     '- For a group, ask at most one short question about preferences, then call plan_group_order.',
     `Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it's on screen.`,
     'Never read out every line or do the math out loud.',
-    has('show_suggestions') && 'To change the plan ("swap a pepperoni for a margherita"), call show_suggestions with the changed lines.',
+    has('show_suggestions') &&
+      'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.',
     has('add_items') ? 'Add it with add_items only after they agree.' : 'Tell them they can add it by tapping Add all on the card.',
   ]).join(' ')
 }
@@ -133,11 +137,6 @@ function safeguardRule(has: HasTool, changesCart: boolean): string | undefined {
 // The phrases whose condition held: `cond && 'text'` leaves false when it didn't.
 function compact(phrases: Array<string | false | undefined>): string[] {
   return phrases.filter((phrase) => typeof phrase === 'string')
-}
-
-// "a, b or c", the way the rules list things.
-function orList(phrases: string[]): string {
-  return phrases.length > 1 ? `${phrases.slice(0, -1).join(', ')} or ${phrases.at(-1)}` : phrases.join('')
 }
 
 /**

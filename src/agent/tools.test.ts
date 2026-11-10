@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categories, menu, products, tags } from '../menu/menu'
+import { categories, mainCategories, menu, products, tags } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
 import { GROUP_MAINS, MAX_LINES_PER_CALL, toolDefinitions, type ToolDefinition } from './tools'
 
@@ -35,13 +35,24 @@ describe('toolDefinitions', () => {
 
   it('gives every tool a description and an object schema, and no endpoint (so it runs in the browser)', () => {
     for (const definition of toolDefinitions) {
-      expect(Object.keys(definition).sort()).toEqual(['description', 'name', 'parameters'])
+      const keys = Object.keys(definition).filter((key) => key !== 'defer_until_eot')
+      expect(keys.sort()).toEqual(['description', 'name', 'parameters'])
       expect(definition.description.length).toBeGreaterThan(20)
       expect(definition.parameters.type).toBe('object')
       expect(definition.parameters.properties).toBeDefined()
       for (const required of definition.parameters.required ?? []) {
         expect(definition.parameters.properties).toHaveProperty(required)
       }
+    }
+  })
+
+  it("waits for the end of the customer's turn only on the tools that change the cart or leave the page", () => {
+    // Deepgram calls the others as soon as the LLM asks, even if the customer goes on talking:
+    // they read the menu or the cart, or change what's on screen, which the next call puts right.
+    const deferred = toolDefinitions.filter((definition) => definition.defer_until_eot === true).map(({ name }) => name)
+    expect(deferred).toEqual(['add_item', 'add_items', 'set_quantity', 'remove_item', 'clear_cart', 'checkout'])
+    for (const definition of toolDefinitions) {
+      if (!deferred.includes(definition.name)) expect(definition, definition.name).not.toHaveProperty('defer_until_eot')
     }
   })
 
@@ -106,6 +117,10 @@ describe('toolDefinitions', () => {
     expect(preferences.type).toBe('object')
     expect(preferences.required).toBeUndefined()
     expect(preferences.properties?.mains.enum).toEqual([...GROUP_MAINS])
+    // From the categories menu.ts plans mains from, the first the default, plus a mix of them.
+    expect(GROUP_MAINS).toEqual([...mainCategories.map((category) => category.id), 'mix'])
+    expect(GROUP_MAINS).toEqual(['pizza', 'subs', 'mix'])
+    expect(preferences.properties?.mains.description).toBe('What the mains are: pizza (the default), subs or mix for some of each.')
     expect(preferences.properties?.spicy.type).toBe('boolean')
     expect(preferences.properties?.drinks.type).toBe('boolean')
     // Items, not sizes: the planner picks the size.

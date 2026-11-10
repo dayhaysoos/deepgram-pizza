@@ -1,15 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { findVariant, menu, type Category } from '../menu/menu'
+import { categories, findVariant, mainCategories, menu, spokenName, type Category } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
-import type { ItemQuantity } from './cartSummary'
+import type { ItemQuantity, Quantities } from './cartSummary'
+import { checkLinesToAdd } from './handlers'
 import { planGroupOrder, sizesOf, type GroupOrderRequest, type GroupPlan } from './planGroupOrder'
 import { MAX_LINES_PER_CALL } from './tools'
 
 /** The plan, or a failed test naming the message it returned instead. */
-function plan(request: GroupOrderRequest): GroupPlan {
-  const result = planGroupOrder(request)
+function plan(request: GroupOrderRequest, inCart: Quantities = {}): GroupPlan {
+  const result = planGroupOrder(request, inCart)
   if ('message' in result) throw new Error(`No plan for ${JSON.stringify(request)}: ${result.message}`)
   return result
+}
+
+/** The message, or a failed test naming the plan it returned instead. */
+function message(request: GroupOrderRequest, inCart: Quantities = {}): string {
+  const result = planGroupOrder(request, inCart)
+  if (!('message' in result)) throw new Error(`A plan for ${JSON.stringify(request)}, not a message`)
+  return result.message
+}
+
+/** How many different items (not sizes) these lines hold. */
+function kinds(lines: ItemQuantity[]): number {
+  return new Set(lines.map(({ id }) => found(id).item.id)).size
 }
 
 function found(id: string) {
@@ -18,7 +31,7 @@ function found(id: string) {
   return variant
 }
 
-const MAINS: Category[] = ['pizza', 'subs']
+const MAINS: Category[] = mainCategories.map((category) => category.id)
 
 function isMain({ id }: ItemQuantity) {
   return MAINS.includes(found(id).item.category)
@@ -74,14 +87,16 @@ describe('planGroupOrder', () => {
     })
   })
 
-  it('plans a party of 20 with no vegetarians as 5 large pizzas of the two popular kinds', () => {
+  it('plans a party of 20 with no vegetarians as 5 large pizzas of four kinds, the popular ones first', () => {
     expect(plan({ people: 20 })).toEqual({
       title: 'Party of 20',
       reason: 'Mains for 20, sides to share and a drink each.',
       summary: '5 large pizzas, plus garlic knots and a drink each',
       lines: [
-        { id: 'cheese-pizza-large', quantity: 2 },
-        { id: 'pepperoni-pizza-large', quantity: 3 },
+        { id: 'cheese-pizza-large', quantity: 1 },
+        { id: 'pepperoni-pizza-large', quantity: 2 },
+        { id: 'margherita-pizza-large', quantity: 1 },
+        { id: 'meat-lovers-pizza-large', quantity: 1 },
         { id: 'garlic-knots', quantity: 4 },
         { id: 'soda', quantity: 20 },
       ],
@@ -98,17 +113,33 @@ describe('planGroupOrder', () => {
     ])
   })
 
-  it('plans 4 as one large pizza', () => {
+  it('plans 4 as two medium pizzas of two kinds, which feed as many as one large', () => {
     expect(plan({ people: 4 })).toEqual({
       title: 'Party of 4',
       reason: 'Mains for 4, a side and a drink each.',
-      summary: '1 large pizza, plus garlic knots and a drink each',
+      summary: '2 medium pizzas, plus garlic knots and a drink each',
       lines: [
-        { id: 'pepperoni-pizza-large', quantity: 1 },
+        { id: 'cheese-pizza-medium', quantity: 1 },
+        { id: 'pepperoni-pizza-medium', quantity: 1 },
         { id: 'garlic-knots', quantity: 1 },
         { id: 'soda', quantity: 4 },
       ],
     })
+  })
+
+  it('gives a small group two kinds with mediums, without feeding more people than one large would', () => {
+    // 3 people: 1 large or 2 mediums both feed 4, so it's 2 mediums of two kinds.
+    expect(plan({ people: 3 }).lines.filter(isMain)).toEqual([
+      { id: 'cheese-pizza-medium', quantity: 1 },
+      { id: 'pepperoni-pizza-medium', quantity: 1 },
+    ])
+    // 2 people: one medium feeds them; two would be twice the food, so it stays one kind.
+    expect(plan({ people: 2 }).lines.filter(isMain)).toEqual([{ id: 'pepperoni-pizza-medium', quantity: 1 }])
+    // 4 people, all vegetarian: two vegetarian mediums.
+    expect(plan({ people: 4, vegetarians: 4 }).lines.filter(isMain)).toEqual([
+      { id: 'cheese-pizza-medium', quantity: 1 },
+      { id: 'margherita-pizza-medium', quantity: 1 },
+    ])
   })
 
   it('plans 1 as a medium, the smallest size, rather than a large', () => {
@@ -128,9 +159,11 @@ describe('planGroupOrder', () => {
     // 10 people: 3 larges would feed 12 (20% over), so it's 2 larges and a medium.
     const result = plan({ people: 10 })
     expect(result.lines.filter(isMain)).toEqual([
-      { id: 'cheese-pizza-medium', quantity: 1 },
-      { id: 'pepperoni-pizza-large', quantity: 2 },
+      { id: 'cheese-pizza-large', quantity: 1 },
+      { id: 'pepperoni-pizza-large', quantity: 1 },
+      { id: 'meat-lovers-pizza-medium', quantity: 1 },
     ])
+    expect(servings(result.lines.filter(isMain))).toBe(10)
     expect(result.summary).toBe('3 pizzas, plus garlic knots and a drink each')
     // 22 people: 6 larges feed 24, 9% over, so they stay.
     expect(servings(plan({ people: 22 }).lines.filter(isMain))).toBe(24)
@@ -144,17 +177,19 @@ describe('planGroupOrder', () => {
     expect(result.summary).toBe('5 large pizzas, plus garlic knots')
   })
 
-  it('plans subs one per person, with the vegetarian sub for the vegetarians and fries on the side', () => {
+  it('plans subs one per person, with the vegetarian sub for the vegetarians and four kinds in all', () => {
     const result = plan({ people: 30, vegetarians: 10, preferences: { mains: 'subs' } })
     expect(result.lines).toEqual([
-      { id: 'italian-sub', quantity: 10 },
-      { id: 'philly-cheesesteak', quantity: 10 },
+      { id: 'italian-sub', quantity: 7 },
+      { id: 'meatball-parm-sub', quantity: 6 },
+      { id: 'philly-cheesesteak', quantity: 7 },
       { id: 'eggplant-parm-sub', quantity: 10 },
-      { id: 'fries', quantity: 6 },
+      { id: 'garlic-knots', quantity: 3 },
+      { id: 'fries', quantity: 3 },
       { id: 'soda', quantity: 15 },
       { id: 'lemonade', quantity: 15 },
     ])
-    expect(result.summary).toBe('30 subs, 10 of them vegetarian, plus fries and a drink each')
+    expect(result.summary).toBe('30 subs, 10 of them vegetarian, plus garlic knots, fries and a drink each')
   })
 
   it('plans a mix with large pizzas for about half and subs for the rest', () => {
@@ -248,9 +283,10 @@ describe('planGroupOrder', () => {
         expect(fed, name).toBeGreaterThanOrEqual(people)
         expect(fed - people <= 1 || fed - people <= people * 0.1, `${name}: feeds ${fed}`).toBe(true)
         expect(servings(mains.filter(isVegetarian)), name).toBeGreaterThanOrEqual(vegetarians)
-        // Two to four kinds of mains, when there are enough of them to share out.
-        expect(mains.length, name).toBeGreaterThanOrEqual(Math.min(2, count(mains)))
-        expect(new Set(mains.map(({ id }) => found(id).item.id)).size, name).toBeLessThanOrEqual(4)
+        // Two to four kinds of mains: two whenever there are two mains to share out, which takes 3 people.
+        expect(kinds(mains), name).toBeGreaterThanOrEqual(Math.min(2, count(mains)))
+        if (people >= 3) expect(kinds(mains), name).toBeGreaterThanOrEqual(2)
+        expect(kinds(mains), name).toBeLessThanOrEqual(4)
         // One side per 5 people, one drink each.
         expect(count(lines.filter(inCategory('sides'))), name).toBe(Math.ceil(people / 5))
         expect(count(lines.filter(inCategory('drinks'))), name).toBe(people)
@@ -262,12 +298,14 @@ describe('planGroupOrder', () => {
     }
   })
 
-  it('says how many it can plan for when a group is too big for one order', () => {
+  it('says how many one order can feed when a group is too big for it, and only what is true', () => {
     // Two drinks on the menu, 20 of each at most: 40 drinks.
     expect(planGroupOrder({ people: 100, vegetarians: 25 })).toEqual({
       message:
-        "That's more than one order holds (at most 20 of each item), so a plan can feed up to 40 people at a time. Without drinks, all 100 fit.",
+        "That's more than one order holds: at most 20 of each item. With a drink each, one order can feed up to 40 people. Without drinks, all 100 fit.",
     })
+    expect(planGroupOrder({ people: 40, vegetarians: 25 })).toHaveProperty('lines')
+    expect(planGroupOrder({ people: 41, vegetarians: 25 })).toHaveProperty('message')
     expect(plan({ people: 40, vegetarians: 25 }).lines.filter(inCategory('drinks'))).toEqual([
       { id: 'soda', quantity: 20 },
       { id: 'lemonade', quantity: 20 },
@@ -284,7 +322,29 @@ describe('planGroupOrder', () => {
     expect(most).toBeGreaterThan(100)
     expect(planGroupOrder({ people: most, preferences: { drinks: false } })).toHaveProperty('lines')
     expect(planGroupOrder({ people: most + 1, preferences: { drinks: false } })).toHaveProperty('message')
-    expect((huge as { message: string }).message).not.toContain('Without drinks')
+    expect((huge as { message: string }).message).toBe(
+      `That's more than one order holds: at most 20 of each item. One order can feed up to ${most} people.`,
+    )
+  })
+
+  it('counts what is in the cart in the big-group message, and its numbers hold for that cart', () => {
+    const inCart = { soda: 1 }
+    expect(message({ people: 100 }, inCart)).toBe(
+      "That's more than one order holds: at most 20 of each item, counting what's already in the cart. With a drink each, one order can feed up to 39 people. Without drinks, all 100 fit.",
+    )
+    expect(planGroupOrder({ people: 39 }, inCart)).toHaveProperty('lines')
+    expect(planGroupOrder({ people: 40 }, inCart)).toHaveProperty('message')
+    expect(planGroupOrder({ people: 100, preferences: { drinks: false } }, inCart)).toHaveProperty('lines')
+
+    // With every drink line full, no group gets a drink each, but it fits without drinks.
+    expect(message({ people: 8 }, { soda: 20, lemonade: 20 })).toBe(
+      "Nothing on the menu fits that plan, counting what's already in the cart. Without drinks, it fits.",
+    )
+    // "Without drinks" means it: a drink asked for by name goes too.
+    expect(message({ people: 8, preferences: { include: ['lemonade'] } }, { soda: 20, lemonade: 20 })).toContain(
+      'Without drinks, it fits.',
+    )
+    expect(planGroupOrder({ people: 8, preferences: { drinks: false } }, { soda: 20, lemonade: 20 })).toHaveProperty('lines')
   })
 
   it.each([
@@ -311,25 +371,123 @@ describe('planGroupOrder', () => {
       { people: 10, preferences: { include: ['buffalo-wings'] } },
       'plan_group_order plans pizza, subs, sides and drinks, not Buffalo Wing Dings. Plan without it, then add it to the card with show_suggestions.',
     ],
-  ])('answers %j with a message instead of throwing', (request, message) => {
+  ])('answers %j with a message instead of throwing', (request, expected) => {
     // The agent can send anything, so the request is checked at run time.
-    expect(planGroupOrder(request as GroupOrderRequest)).toEqual({ message })
+    expect(planGroupOrder(request)).toEqual({ message: expected })
   })
 
   it('can count on every pizza, and every sub, having the same sizes, as it assumes', () => {
     for (const category of MAINS) {
-      const { big, small } = sizesOf(category)
+      const { largest, smallest } = sizesOf(category)
       for (const item of menu.filter((menuItem) => menuItem.category === category)) {
         const serves = item.variants.map((variant) => variant.serves)
-        expect([Math.max(...serves), Math.min(...serves)], item.id).toEqual([big, small])
+        expect([Math.max(...serves), Math.min(...serves)], item.id).toEqual([largest, smallest])
       }
     }
   })
 
   it('takes null as not given, the way the agent may send a field it leaves out', () => {
-    expect(
-      planGroupOrder({ people: 20, vegetarians: null, preferences: { mains: null, include: null } } as unknown as GroupOrderRequest),
-    ).toEqual(plan({ people: 20 }))
-    expect(planGroupOrder({ people: 20, preferences: null } as unknown as GroupOrderRequest)).toEqual(plan({ people: 20 }))
+    expect(planGroupOrder({ people: 20, vegetarians: null, preferences: { mains: null, include: null } })).toEqual(
+      plan({ people: 20 }),
+    )
+    expect(planGroupOrder({ people: 20, preferences: null })).toEqual(plan({ people: 20 }))
+  })
+})
+
+describe('planGroupOrder with items already in the cart', () => {
+  /** Whether add_items would take these lines into this cart: the check "add all of that" runs. */
+  function addable(lines: ItemQuantity[], inCart: Quantities) {
+    return checkLinesToAdd(lines, inCart)
+  }
+
+  it('leaves room for a soda already in the cart, so "add all of that" for a party of 20 is never refused', () => {
+    // After the cheeseburger's pairings added a soda: 20 more would make 21 on the line.
+    const inCart = { 'classic-cheeseburger': 1, fries: 1, soda: 1 }
+    const result = plan({ people: 20 }, inCart)
+
+    // As many sodas as the line takes, and a lemonade for the one that doesn't fit: the least change to the plan.
+    expect(result.lines.filter(inCategory('drinks'))).toEqual([
+      { id: 'soda', quantity: 19 },
+      { id: 'lemonade', quantity: 1 },
+    ])
+    expect(result.lines.filter((line) => !inCategory('drinks')(line))).toEqual(
+      plan({ people: 20 }).lines.filter((line) => !inCategory('drinks')(line)),
+    )
+    expect(addable(result.lines, inCart)).toEqual({ lines: result.lines })
+    expect(addable(plan({ people: 20 }).lines, inCart)).toHaveProperty('message')
+  })
+
+  it('never plans a line that, with what the cart holds, would go over the line cap', () => {
+    // Each cart leaves room for a plan: 30 people need room for 30 drinks, and 10 vegetarians on subs for 10 eggplant parms.
+    const carts: Quantities[] = [
+      { soda: 1 },
+      { soda: 5, lemonade: 3 },
+      { 'pepperoni-pizza-large': 19 },
+      { 'cheese-pizza-large': 20, 'cheese-pizza-medium': 20 },
+      { 'garlic-knots': 18, fries: 20 },
+      { 'philly-cheesesteak': 20, 'eggplant-parm-sub': 5 },
+    ]
+    const requests: GroupOrderRequest[] = [
+      { people: 4 },
+      { people: 8, vegetarians: 2 },
+      { people: 20 },
+      { people: 30, vegetarians: 10 },
+      { people: 30, vegetarians: 10, preferences: { mains: 'subs' } },
+      { people: 30, vegetarians: 10, preferences: { mains: 'mix', spicy: true } },
+    ]
+    for (const inCart of carts) {
+      for (const request of requests) {
+        const name = `${JSON.stringify(request)} with ${JSON.stringify(inCart)}`
+        const result = planGroupOrder(request, inCart)
+        if ('message' in result) throw new Error(`${name}: ${result.message}`)
+        expect(addable(result.lines, inCart), name).toEqual({ lines: result.lines })
+        expect(servings(result.lines.filter(isMain)), name).toBeGreaterThanOrEqual(request.people)
+      }
+    }
+  })
+
+  it('shares a category evenly over the kinds the line cap needs, whatever the cart holds', () => {
+    // 30 drinks need two kinds at 20 a line: half each, with a soda in the cart or not.
+    expect(plan({ people: 30, vegetarians: 10 }, { soda: 1 }).lines.filter(inCategory('drinks'))).toEqual([
+      { id: 'soda', quantity: 15 },
+      { id: 'lemonade', quantity: 15 },
+    ])
+    // With 6 sodas in the cart, the soda line takes 14, and lemonade the rest.
+    expect(plan({ people: 30, vegetarians: 10 }, { soda: 6 }).lines.filter(inCategory('drinks'))).toEqual([
+      { id: 'soda', quantity: 14 },
+      { id: 'lemonade', quantity: 16 },
+    ])
+  })
+
+  it('plans the same as for an empty cart when the cart leaves room for every line', () => {
+    expect(plan({ people: 30, vegetarians: 10 }, { 'margherita-pizza-large': 2, fries: 1 })).toEqual(
+      plan({ people: 30, vegetarians: 10 }),
+    )
+  })
+})
+
+describe("planGroupOrder's words come from the menu", () => {
+  it("counts each main category with the noun menu.ts gives it, and says sides by their spoken names", () => {
+    const pizza = mainCategories.find((category) => category.id === 'pizza')
+    const subs = mainCategories.find((category) => category.id === 'subs')
+    expect(pizza?.noun).toEqual(['pizza', 'pizzas'])
+    expect(subs?.noun).toEqual(['sub', 'subs'])
+
+    const knots = menu.find((item) => item.id === 'garlic-knots')
+    if (!knots) throw new Error('No garlic knots on the menu')
+    expect(knots.name).toBe('Garlic Knots (6)')
+    expect(spokenName(knots)).toBe('garlic knots')
+    expect(plan({ people: 20 }).summary).toContain('plus garlic knots and a drink each')
+    expect(plan({ people: 1, preferences: { mains: 'subs', include: ['fries'] } }).summary).toBe('1 sub, plus fries and a drink')
+  })
+
+  it('plans mains, sides and drinks from the categories menu.ts gives those roles, and nothing else', () => {
+    const planned = new Set(
+      [plan({ people: 30, vegetarians: 10, preferences: { mains: 'mix', spicy: true } }), plan({ people: 12 })]
+        .flatMap((result) => result.lines)
+        .map(({ id }) => found(id).item.category),
+    )
+    const roles = new Map(categories.map((category) => [category.id as Category, 'plan' in category ? category.plan : undefined]))
+    for (const category of planned) expect(roles.get(category), category).toBeDefined()
   })
 })

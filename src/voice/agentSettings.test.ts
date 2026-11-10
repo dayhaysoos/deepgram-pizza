@@ -38,6 +38,14 @@ describe('agentSettings', () => {
     expect(agentSettings(cart, some).think).toMatchObject({ functions: some, prompt: agentInstructions(cart, some) })
   })
 
+  it("sends defer_until_eot with the functions that set it, as Deepgram reads it, though the SDK's type doesn't list it yet", () => {
+    const sent = JSON.parse(JSON.stringify(agentSettings(cart, toolDefinitions))) as { think: { functions: Array<Record<string, unknown>> } }
+    const checkout = sent.think.functions.find((fn) => fn.name === 'checkout')
+    const viewCart = sent.think.functions.find((fn) => fn.name === 'view_cart')
+    expect(checkout).toMatchObject({ defer_until_eot: true })
+    expect(viewCart).not.toHaveProperty('defer_until_eot')
+  })
+
   it.each([
     ['no tools', []],
     ['every tool', toolDefinitions],

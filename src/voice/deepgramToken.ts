@@ -10,6 +10,8 @@
 // Docs: https://developers.deepgram.com/reference/auth/tokens/grant
 // and https://developers.deepgram.com/guides/fundamentals/token-based-authentication
 
+import { isRecord } from '../isRecord'
+
 /** Deepgram's endpoint for short-lived tokens. */
 export const DEEPGRAM_GRANT_URL = 'https://api.deepgram.com/v1/auth/grant'
 
@@ -72,8 +74,4 @@ export async function grantDeepgramToken(
     return { message: VOICE_UNAVAILABLE }
   }
   return { token }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

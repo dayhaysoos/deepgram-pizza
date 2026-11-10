@@ -56,7 +56,7 @@ For a log of every session, talk from http://localhost:3000/dev/tools: its **Ses
 Run `pnpm dev` and open http://localhost:3000/dev/tools. It's the menu page with a panel that runs the voice agent's tools through the same handlers the agent uses, so the page changes exactly as it will for a voice tool call. Pick a tool, edit its JSON arguments and press **Run** to see the result the agent would get back. Or use a preset, which fills in a call and runs it:
 
 - **Golden path:** find the vegetarian items, add two large margheritas, make that one, read the total, check out. Check out goes straight to Stripe's test checkout, unless a voice session is on: then it waits for the agent to finish speaking first.
-- **Suggestions:** what goes with the cheeseburger, then a party of 30 with 10 vegetarians planned by `plan_group_order` (the code works out how much food, from each item's `serves`, and puts it on the suggestion card), then add all of that.
+- **Suggestions:** what goes with the cheeseburger, then two parties planned by `plan_group_order`: 30 people with 10 vegetarians, and 20 people. The code works out how much food from each item's `serves`, leaving room for what's already in the cart, and puts it on the suggestion card. Each party's **Add all of that** adds its plan.
 - **Recovery:** calls the agent can get wrong, such as an item that isn't on the menu or a pizza without a size. Each answers with a message the agent can act on.
 
 When you change the cart by tapping (Add on a menu card, − or + or Remove in the cart, Add or Add all on the suggestion card), the panel logs the update it sends the agent while a voice session is on.
@@ -86,13 +86,14 @@ The page is for development only. A production build leaves the panel out, and `
 - An item that comes in sizes has one variant per size. Each variant's id is `<item-id>-<size>` and it has a `label`, the size the customer sees.
 - An item with one size has one variant whose id is the item id, with no `label`.
 - `pairsWith` lists the ids of items that go well with this one.
-- `serves` is how many people one of that variant feeds.
+- `serves` is how many people one of that variant feeds. The group-order planner reads it.
+- `spokenName` (optional) is how the agent says the item in a sentence when its name doesn't read well aloud, such as `"garlic knots"` for "Garlic Knots (6)". Without it, the agent uses the name in lower case.
 
 Run `pnpm check` after editing. The structural tests in `src/menu/menu.test.ts` catch a malformed menu and name the item or variant that breaks a rule.
 
 The rest:
 
-- **Categories:** their order, labels and size notes are in `categories` in `src/menu/menu.ts`. An item's `category` must be one of their ids.
+- **Categories:** their order, labels and size notes are in `categories` in `src/menu/menu.ts`. An item's `category` must be one of their ids. For group orders, give a category a `plan`: `'main'` for mains (the planner feeds about one serving per person from them, and the customer can ask for one main category or a mix by its id), `'side'` for shareable sides, or `'drink'` for one drink each. A main category also needs a `noun`, how the plan's summary counts its items: `['pizza', 'pizzas']`. Leave `plan` out for a category the planner shouldn't touch, such as dessert. Every item in a main category needs the same sizes, as every pizza is Medium for 2 and Large for 4; `pnpm test` checks it.
 - **Tags:** add the tag to `tags` in `src/menu/menu.ts`, then give it colours as `.tag-<name>` in `src/styles.css`, like `.tag-vegetarian`.
 - **Shop name, currency and locale:** `src/shop.ts`.
 - **Photos:** `public/images/<item-id>.jpg`, about 800 px wide and compressed. Use photos from Unsplash or Pexels, or your own, and add a row for each to `CREDITS.md`.

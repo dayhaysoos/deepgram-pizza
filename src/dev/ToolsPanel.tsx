@@ -10,12 +10,12 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
-import type { ItemQuantity } from '../agent/cartSummary'
+import type { ItemQuantity, Quantities } from '../agent/cartSummary'
 import type { ToolResult } from '../agent/handlers'
 import { planGroupOrder, type GroupOrderRequest } from '../agent/planGroupOrder'
 import { toolDefinitions, type ToolName } from '../agent/tools'
 import { defaultVariant, menu } from '../menu/menu'
-import { useToolHandlers } from '../pageContext'
+import { useCartChanges, useToolHandlers } from '../pageContext'
 import { SessionLogSection } from './SessionLogSection'
 import './ToolsPanel.css'
 
@@ -27,7 +27,8 @@ type Args = Record<string, unknown>
 type Preset = {
   label: string
   tool: ToolName
-  args: Args
+  /** The arguments, or how to work them out from the cart as it is when the preset runs. */
+  args: Args | ((inCart: Quantities) => Args)
   /** Runs only on an empty cart. With items in it, checkout would leave for Stripe. */
   needsEmptyCart?: boolean
 }
@@ -42,11 +43,20 @@ const pairings: ItemQuantity[] = (cheeseburger?.pairsWith ?? []).flatMap((id) =>
 const pairingsTitle = `Goes great with the ${cheeseburger?.name ?? 'cheeseburger'}`
 
 // The owner's group from their voice run, where the agent planned about twice
-// the food: plan_group_order works it out from menu.json. Add all of that adds
-// the same plan, so the card closes as it does for "add all of that" by voice.
-const party: GroupOrderRequest = { people: 30, vegetarians: 10 }
-const partyPlan = planGroupOrder(party)
-const partyLines: ItemQuantity[] = 'lines' in partyPlan ? partyPlan.lines : []
+// the food, and the party of 20 from step 5's Check: plan_group_order works
+// each out from menu.json. Each one's Add all of that plans it again for the
+// cart as it is then, as the handler did (the plan leaves room for what's in
+// the cart), so it adds the lines on the card, which closes, as it does for
+// "add all of that" by voice.
+const partyOf30: GroupOrderRequest = { people: 30, vegetarians: 10 }
+const partyOf20: GroupOrderRequest = { people: 20 }
+
+function addAllOf(party: GroupOrderRequest): (inCart: Quantities) => Args {
+  return (inCart) => {
+    const plan = planGroupOrder(party, inCart)
+    return { items: 'lines' in plan ? plan.lines : [] }
+  }
+}
 
 const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = [
   {
@@ -62,15 +72,17 @@ const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = 
   },
   {
     title: 'Suggestions',
-    note: 'They open the suggestion card. Only Add all of that changes the cart.',
+    note: 'They open the suggestion card. Only Add all of that changes the cart: it adds the plan above it, as planned for the cart now.',
     presets: [
       {
         label: `What goes with the ${cheeseburger?.name ?? 'cheeseburger'}?`,
         tool: 'show_suggestions',
         args: { title: pairingsTitle, items: pairings },
       },
-      { label: 'Party of 30, 10 vegetarian', tool: 'plan_group_order', args: party },
-      { label: 'Add all of that', tool: 'add_items', args: { items: partyLines } },
+      { label: 'Party of 30, 10 vegetarian', tool: 'plan_group_order', args: partyOf30 },
+      { label: 'Add all of that (30)', tool: 'add_items', args: addAllOf(partyOf30) },
+      { label: 'Party of 20', tool: 'plan_group_order', args: partyOf20 },
+      { label: 'Add all of that (20)', tool: 'add_items', args: addAllOf(partyOf20) },
     ],
   },
   {
@@ -107,6 +119,7 @@ const formatArgs = (args: Args) => JSON.stringify(args, null, 2)
 
 export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
   const handlers = useToolHandlers()
+  const cartChanges = useCartChanges()
   const cartIsEmpty = useShoppingCart((cart) => cart.cartCount === 0)
   const [open, setOpen] = useState(true)
   const [tool, setTool] = useState<ToolName>('find_menu_items')
@@ -140,7 +153,7 @@ export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
   }
 
   function runPreset(preset: Preset) {
-    const text = formatArgs(preset.args)
+    const text = formatArgs(typeof preset.args === 'function' ? preset.args(cartChanges.now()) : preset.args)
     setTool(preset.tool)
     setArgsText(text)
     run(preset.tool, text)

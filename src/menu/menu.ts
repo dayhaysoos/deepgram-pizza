@@ -1,28 +1,64 @@
 // The menu, typed, plus the helpers the rest of the app reads it through.
 // menu.json holds the items: it's the source of truth for what's sold and its
-// prices. `categories` below defines which category ids exist and how they're
-// shown (order, label, note).
+// prices. `categories` below defines which category ids exist, how they're
+// shown (order, label, note) and what each is in a group plan (plan, noun).
 
 import { CURRENCY, LOCALE } from '../shop'
 import menuJson from './menu.json'
 
+/**
+ * What a category's items are in a group plan (plan_group_order, src/agent/planGroupOrder.ts):
+ * - `main`: mains, about one serving per person. The customer can ask for one
+ *   main category, or a mix of them, by its id ("pizza", "subs" or "mix").
+ * - `side`: shareable sides, one per few people.
+ * - `drink`: one per person.
+ * A category without a `plan` (wings, burgers) isn't planned.
+ */
+export type PlanRole = 'main' | 'side' | 'drink'
+
+/** How a category is written in `categories` below. A main category also says how a plan counts its items. */
+type CategoryDefinition = { id: string; label: string; note?: string } & (
+  | {
+      plan: 'main'
+      /** How a plan's summary counts its items, one and many: "8 large pizzas". */
+      noun: readonly [one: string, many: string]
+    }
+  | { plan?: 'side' | 'drink'; noun?: never }
+)
+
 /** Every category, in the order the menu shows them. */
 export const categories = [
-  { id: 'pizza', label: 'Pizza', note: 'Medium 14″ · Large 18″' },
-  { id: 'subs', label: 'Subs' },
+  { id: 'pizza', label: 'Pizza', note: 'Medium 14″ · Large 18″', plan: 'main', noun: ['pizza', 'pizzas'] },
+  { id: 'subs', label: 'Subs', plan: 'main', noun: ['sub', 'subs'] },
   { id: 'wings', label: 'Wings', note: '6 or 12 pieces' },
   { id: 'burgers', label: 'Burgers' },
   { id: 'salads', label: 'Salads' },
-  { id: 'sides', label: 'Sides' },
-  { id: 'drinks', label: 'Drinks' },
+  { id: 'sides', label: 'Sides', plan: 'side' },
+  { id: 'drinks', label: 'Drinks', plan: 'drink' },
   { id: 'dessert', label: 'Dessert' },
-] as const satisfies ReadonlyArray<{ id: string; label: string; note?: string }>
+] as const satisfies ReadonlyArray<CategoryDefinition>
 
 /** A category id: 'pizza', 'subs' and so on. */
 export type Category = (typeof categories)[number]['id']
 
 /** What the menu shows for a category: its heading, and an optional note such as the pizza sizes. */
 export type CategoryInfo = { id: Category; label: string; note?: string }
+
+/** A category a group plan takes mains from, as `categories` lists it: pizza or subs. */
+export type MainCategoryInfo = Extract<(typeof categories)[number], { plan: 'main' }>
+
+/** The id of a category a group plan takes mains from: 'pizza' or 'subs'. */
+export type MainCategory = MainCategoryInfo['id']
+
+/** The categories a group plan takes mains from, in menu order. */
+export const mainCategories: readonly MainCategoryInfo[] = categories.filter(
+  (category): category is MainCategoryInfo => 'plan' in category && category.plan === 'main',
+)
+
+/** The ids of the categories with this role in a group plan, in menu order: `['sides']` for 'side'. */
+export function categoriesPlannedAs(...roles: PlanRole[]): Category[] {
+  return categories.flatMap((category) => ('plan' in category && roles.includes(category.plan) ? [category.id] : []))
+}
 
 /** Every tag an item can have. */
 export const tags = ['vegetarian', 'vegan', 'spicy', 'popular'] as const
@@ -49,6 +85,12 @@ export type MenuItem = {
   variants: Variant[]
   /** Ids of items that go well with this one. */
   pairsWith: string[]
+  /**
+   * How the agent says the item in a sentence, when its name doesn't read well
+   * aloud: "garlic knots" for "Garlic Knots (6)". Without it, `spokenName()`
+   * gives the name in lower case.
+   */
+  spokenName?: string
 }
 
 /** The flat product the cart and `validateCartItems` use: one per variant. */
@@ -81,6 +123,11 @@ export function menuToProducts(items: MenuItem[]): Product[] {
 }
 
 export const products = menuToProducts(menu)
+
+/** How the agent says an item in a sentence: its `spokenName`, or else its name in lower case ("fries"). */
+export function spokenName(item: MenuItem): string {
+  return item.spokenName ?? item.name.toLowerCase()
+}
 
 /**
  * The size a menu card selects before the customer picks one: the variant that

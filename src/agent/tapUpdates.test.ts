@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeCart } from './cartSummary'
-import { describeTapChange } from './tapUpdates'
+import { summarizeCart, type CartChange } from './cartSummary'
+import { CALL_VIEW_CART, describeTapChange } from './tapUpdates'
 
 const cartAfter = summarizeCart({ 'margherita-pizza-large': 2, fries: 1 })
-const CART = 'Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97.'
+const CART = 'Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97. Call view_cart before answering about the cart.'
 
 describe('describeTapChange', () => {
   it('describes an add from a menu card', () => {
@@ -37,19 +37,32 @@ describe('describeTapChange', () => {
 
   it('describes an emptied cart', () => {
     expect(describeTapChange({ type: 'clear' }, summarizeCart({}))).toBe(
-      'Customer emptied the cart by tapping. Cart: empty.',
+      'Customer emptied the cart by tapping. Cart: empty. Call view_cart before answering about the cart.',
     )
   })
 
   it('says the cart is empty after removing the last line', () => {
     expect(describeTapChange({ type: 'remove', id: 'fries' }, summarizeCart({}))).toBe(
-      'Customer removed Fries by tapping. Cart: empty.',
+      'Customer removed Fries by tapping. Cart: empty. Call view_cart before answering about the cart.',
     )
   })
 
   it('names a product that is no longer on the menu by its id', () => {
     expect(describeTapChange({ type: 'remove', id: 'hawaiian-pizza-large' }, summarizeCart({}))).toBe(
-      'Customer removed hawaiian-pizza-large by tapping. Cart: empty.',
+      'Customer removed hawaiian-pizza-large by tapping. Cart: empty. Call view_cart before answering about the cart.',
     )
+  })
+
+  it('ends every update by telling the agent to call view_cart before it answers about the cart', () => {
+    expect(CALL_VIEW_CART).toBe('Call view_cart before answering about the cart.')
+    const changes: CartChange[] = [
+      { type: 'add', lines: [{ id: 'fries', quantity: 1 }] },
+      { type: 'quantity', id: 'fries', quantity: 2 },
+      { type: 'remove', id: 'fries' },
+      { type: 'clear' },
+    ]
+    for (const change of changes) {
+      expect(describeTapChange(change, cartAfter).endsWith(` ${CALL_VIEW_CART}`), change.type).toBe(true)
+    }
   })
 })

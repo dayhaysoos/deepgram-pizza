@@ -8,6 +8,7 @@
 // parseCheckoutRequest, because that's the server function's input check.
 
 import { validateCartItems, type ValidatedItem } from 'use-shopping-cart/utilities'
+import { isRecord } from '../isRecord'
 import { findVariant, products } from '../menu/menu'
 import { isLineQuantity, MAX_LINE_QUANTITY } from '../shop'
 
@@ -110,8 +111,4 @@ function idsAndQuantities(cartDetails: Record<string, unknown>): Record<string, 
   return Object.fromEntries(
     Object.entries(cartDetails).map(([id, line]) => [id, { quantity: isRecord(line) ? line.quantity : undefined }]),
   )
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
