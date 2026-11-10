@@ -1,0 +1,305 @@
+[
+  {
+    "id": "cheese-pizza",
+    "name": "Cheese Pizza",
+    "category": "pizza",
+    "description": "Tomato sauce and melted mozzarella on a crisp, chewy crust.",
+    "tags": ["vegetarian", "popular"],
+    "variants": [
+      { "id": "cheese-pizza-medium", "label": "Medium", "price": 1599, "serves": 2 },
+      { "id": "cheese-pizza-large", "label": "Large", "price": 1899, "serves": 4 }
+    ],
+    "pairsWith": ["garlic-knots", "soda"]
+  },
+  {
+    "id": "pepperoni-pizza",
+    "name": "Pepperoni Pizza",
+    "category": "pizza",
+    "description": "Tomato sauce and mozzarella under a layer of crisp-edged pepperoni.",
+    "tags": ["popular"],
+    "variants": [
+      { "id": "pepperoni-pizza-medium", "label": "Medium", "price": 1799, "serves": 2 },
+      { "id": "pepperoni-pizza-large", "label": "Large", "price": 2099, "serves": 4 }
+    ],
+    "pairsWith": ["garlic-knots", "soda"]
+  },
+  {
+    "id": "margherita-pizza",
+    "name": "Margherita Pizza",
+    "category": "pizza",
+    "description": "Tomato sauce, fresh mozzarella and basil with a drizzle of olive oil.",
+    "tags": ["vegetarian"],
+    "variants": [
+      { "id": "margherita-pizza-medium", "label": "Medium", "price": 1799, "serves": 2 },
+      { "id": "margherita-pizza-large", "label": "Large", "price": 2099, "serves": 4 }
+    ],
+    "pairsWith": ["caesar-salad", "lemonade"]
+  },
+  {
+    "id": "meat-lovers-pizza",
+    "name": "Meat Lovers Pizza",
+    "category": "pizza",
+    "description": "Pepperoni, sausage, bacon and ham over tomato sauce and mozzarella.",
+    "tags": [],
+    "variants": [
+      { "id": "meat-lovers-pizza-medium", "label": "Medium", "price": 2099, "serves": 2 },
+      { "id": "meat-lovers-pizza-large", "label": "Large", "price": 2499, "serves": 4 }
+    ],
+    "pairsWith": ["garlic-knots", "soda"]
+  },
+  {
+    "id": "veggie-supreme-pizza",
+    "name": "Veggie Supreme Pizza",
+    "category": "pizza",
+    "description": "Peppers, onions, mushrooms, black olives and tomatoes over mozzarella.",
+    "tags": ["vegetarian"],
+    "variants": [
+      { "id": "veggie-supreme-pizza-medium", "label": "Medium", "price": 1999, "serves": 2 },
+      { "id": "veggie-supreme-pizza-large", "label": "Large", "price": 2299, "serves": 4 }
+    ],
+    "pairsWith": ["garden-salad", "lemonade"]
+  },
+  {
+    "id": "buffalo-chicken-pizza",
+    "name": "Buffalo Chicken Pizza",
+    "category": "pizza",
+    "description": "Chicken in hot buffalo sauce with mozzarella and a drizzle of ranch.",
+    "tags": ["spicy"],
+    "variants": [
+      { "id": "buffalo-chicken-pizza-medium", "label": "Medium", "price": 1999, "serves": 2 },
+      { "id": "buffalo-chicken-pizza-large", "label": "Large", "price": 2299, "serves": 4 }
+    ],
+    "pairsWith": ["mozzarella-sticks", "soda"]
+  },
+  {
+    "id": "white-pizza",
+    "name": "White Pizza",
+    "category": "pizza",
+    "description": "Ricotta, mozzarella and garlic on an olive oil base, with no tomato sauce.",
+    "tags": ["vegetarian"],
+    "variants": [
+      { "id": "white-pizza-medium", "label": "Medium", "price": 1899, "serves": 2 },
+      { "id": "white-pizza-large", "label": "Large", "price": 2199, "serves": 4 }
+    ],
+    "pairsWith": ["greek-salad", "lemonade"]
+  },
+  {
+    "id": "italian-sub",
+    "name": "Italian Sub",
+    "category": "subs",
+    "description": "Salami, ham, capicola and provolone with lettuce, tomato, oil and vinegar on a hero.",
+    "tags": [],
+    "variants": [{ "id": "italian-sub", "price": 1299, "serves": 1 }],
+    "pairsWith": ["fries", "soda"]
+  },
+  {
+    "id": "meatball-parm-sub",
+    "name": "Meatball Parm Sub",
+    "category": "subs",
+    "description": "Meatballs in tomato sauce under melted mozzarella on a toasted hero.",
+    "tags": [],
+    "variants": [{ "id": "meatball-parm-sub", "price": 1199, "serves": 1 }],
+    "pairsWith": ["garlic-knots", "soda"]
+  },
+  {
+    "id": "chicken-cutlet-sandwich",
+    "name": "Chicken Cutlet Sandwich",
+    "category": "subs",
+    "description": "A crispy breaded chicken cutlet with lettuce, tomato and mayo on a toasted roll.",
+    "tags": [],
+    "variants": [{ "id": "chicken-cutlet-sandwich", "price": 1199, "serves": 1 }],
+    "pairsWith": ["fries", "lemonade"]
+  },
+  {
+    "id": "philly-cheesesteak",
+    "name": "Philly Cheesesteak",
+    "category": "subs",
+    "description": "Thin-sliced steak with grilled onions and melted provolone on a hero.",
+    "tags": ["popular"],
+    "variants": [{ "id": "philly-cheesesteak", "price": 1399, "serves": 1 }],
+    "pairsWith": ["fries", "soda"]
+  },
+  {
+    "id": "eggplant-parm-sub",
+    "name": "Eggplant Parm Sub",
+    "category": "subs",
+    "description": "Breaded eggplant in tomato sauce under melted mozzarella on a toasted hero.",
+    "tags": ["vegetarian"],
+    "variants": [{ "id": "eggplant-parm-sub", "price": 1099, "serves": 1 }],
+    "pairsWith": ["garden-salad", "lemonade"]
+  },
+  {
+    "id": "buffalo-wings",
+    "name": "Buffalo Wing Dings",
+    "category": "wings",
+    "description": "Crispy wings tossed in tangy, hot buffalo sauce.",
+    "tags": ["spicy", "popular"],
+    "variants": [
+      { "id": "buffalo-wings-6pc", "label": "6 pc", "price": 899, "serves": 2 },
+      { "id": "buffalo-wings-12pc", "label": "12 pc", "price": 1599, "serves": 4 }
+    ],
+    "pairsWith": ["fries", "soda"]
+  },
+  {
+    "id": "honey-bbq-wings",
+    "name": "Honey BBQ Wing Dings",
+    "category": "wings",
+    "description": "Crispy wings glazed in sweet, smoky honey barbecue sauce.",
+    "tags": [],
+    "variants": [
+      { "id": "honey-bbq-wings-6pc", "label": "6 pc", "price": 899, "serves": 2 },
+      { "id": "honey-bbq-wings-12pc", "label": "12 pc", "price": 1599, "serves": 4 }
+    ],
+    "pairsWith": ["fries", "soda"]
+  },
+  {
+    "id": "garlic-parm-wings",
+    "name": "Garlic Parm Wing Dings",
+    "category": "wings",
+    "description": "Crispy wings tossed in garlic butter and grated parmesan.",
+    "tags": [],
+    "variants": [
+      { "id": "garlic-parm-wings-6pc", "label": "6 pc", "price": 899, "serves": 2 },
+      { "id": "garlic-parm-wings-12pc", "label": "12 pc", "price": 1599, "serves": 4 }
+    ],
+    "pairsWith": ["garlic-knots", "lemonade"]
+  },
+  {
+    "id": "lemon-pepper-wings",
+    "name": "Lemon Pepper Wing Dings",
+    "category": "wings",
+    "description": "Crispy wings dusted with zesty lemon pepper seasoning.",
+    "tags": [],
+    "variants": [
+      { "id": "lemon-pepper-wings-6pc", "label": "6 pc", "price": 899, "serves": 2 },
+      { "id": "lemon-pepper-wings-12pc", "label": "12 pc", "price": 1599, "serves": 4 }
+    ],
+    "pairsWith": ["fries", "lemonade"]
+  },
+  {
+    "id": "classic-cheeseburger",
+    "name": "Classic Cheeseburger",
+    "category": "burgers",
+    "description": "A beef patty with American cheese, lettuce, tomato, pickles and onion on a toasted bun.",
+    "tags": ["popular"],
+    "variants": [{ "id": "classic-cheeseburger", "price": 1099, "serves": 1 }],
+    "pairsWith": ["fries", "soda"]
+  },
+  {
+    "id": "bacon-bbq-burger",
+    "name": "Bacon BBQ Burger",
+    "category": "burgers",
+    "description": "A beef patty with crispy bacon, cheddar and smoky barbecue sauce on a toasted bun.",
+    "tags": [],
+    "variants": [{ "id": "bacon-bbq-burger", "price": 1299, "serves": 1 }],
+    "pairsWith": ["fries", "soda"]
+  },
+  {
+    "id": "mushroom-swiss-burger",
+    "name": "Mushroom Swiss Burger",
+    "category": "burgers",
+    "description": "A beef patty topped with sautéed mushrooms and melted Swiss on a toasted bun.",
+    "tags": [],
+    "variants": [{ "id": "mushroom-swiss-burger", "price": 1199, "serves": 1 }],
+    "pairsWith": ["fries", "lemonade"]
+  },
+  {
+    "id": "black-bean-burger",
+    "name": "Black Bean Burger",
+    "category": "burgers",
+    "description": "A hearty black bean patty with lettuce, tomato and onion on a toasted bun.",
+    "tags": ["vegetarian"],
+    "variants": [{ "id": "black-bean-burger", "price": 1099, "serves": 1 }],
+    "pairsWith": ["fries", "lemonade"]
+  },
+  {
+    "id": "caesar-salad",
+    "name": "Caesar Salad",
+    "category": "salads",
+    "description": "Crisp romaine, parmesan and croutons tossed in a classic anchovy Caesar dressing.",
+    "tags": [],
+    "variants": [{ "id": "caesar-salad", "price": 899, "serves": 1 }],
+    "pairsWith": ["garlic-knots"]
+  },
+  {
+    "id": "garden-salad",
+    "name": "Garden Salad",
+    "category": "salads",
+    "description": "Mixed greens, tomatoes, cucumbers, carrots and red onion with balsamic vinaigrette.",
+    "tags": ["vegetarian", "vegan"],
+    "variants": [{ "id": "garden-salad", "price": 799, "serves": 1 }],
+    "pairsWith": ["lemonade"]
+  },
+  {
+    "id": "greek-salad",
+    "name": "Greek Salad",
+    "category": "salads",
+    "description": "Romaine, tomatoes, cucumbers, red onion, kalamata olives and feta with Greek dressing.",
+    "tags": ["vegetarian"],
+    "variants": [{ "id": "greek-salad", "price": 999, "serves": 1 }],
+    "pairsWith": ["lemonade"]
+  },
+  {
+    "id": "buffalo-chicken-salad",
+    "name": "Buffalo Chicken Salad",
+    "category": "salads",
+    "description": "Crispy buffalo chicken over romaine with tomatoes, celery and blue cheese dressing.",
+    "tags": ["spicy"],
+    "variants": [{ "id": "buffalo-chicken-salad", "price": 1199, "serves": 1 }],
+    "pairsWith": ["soda"]
+  },
+  {
+    "id": "garlic-knots",
+    "name": "Garlic Knots (6)",
+    "category": "sides",
+    "description": "Six knots of pizza dough baked with garlic, butter and parsley.",
+    "tags": ["vegetarian", "popular"],
+    "variants": [{ "id": "garlic-knots", "price": 599, "serves": 2 }],
+    "pairsWith": []
+  },
+  {
+    "id": "fries",
+    "name": "Fries",
+    "category": "sides",
+    "description": "Golden, crispy fries, lightly salted.",
+    "tags": ["vegetarian", "vegan"],
+    "variants": [{ "id": "fries", "price": 499, "serves": 2 }],
+    "pairsWith": []
+  },
+  {
+    "id": "mozzarella-sticks",
+    "name": "Mozzarella Sticks",
+    "category": "sides",
+    "description": "Breaded mozzarella fried golden, with marinara for dipping.",
+    "tags": ["vegetarian"],
+    "variants": [{ "id": "mozzarella-sticks", "price": 799, "serves": 2 }],
+    "pairsWith": []
+  },
+  {
+    "id": "soda",
+    "name": "Fountain Soda",
+    "category": "drinks",
+    "description": "An ice-cold fountain soda.",
+    "tags": ["vegetarian", "vegan"],
+    "variants": [{ "id": "soda", "price": 249, "serves": 1 }],
+    "pairsWith": []
+  },
+  {
+    "id": "lemonade",
+    "name": "Fresh Lemonade",
+    "category": "drinks",
+    "description": "Sweet, tart lemonade served ice cold.",
+    "tags": ["vegetarian", "vegan"],
+    "variants": [{ "id": "lemonade", "price": 349, "serves": 1 }],
+    "pairsWith": []
+  },
+  {
+    "id": "cannoli",
+    "name": "Cannoli",
+    "category": "dessert",
+    "description": "A crisp pastry shell filled with sweet ricotta cream and chocolate chips.",
+    "tags": ["vegetarian", "popular"],
+    "variants": [{ "id": "cannoli", "price": 499, "serves": 1 }],
+    "pairsWith": []
+  }
+]
