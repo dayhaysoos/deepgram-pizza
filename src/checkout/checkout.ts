@@ -2,8 +2,10 @@
 // Stripe Checkout Session. createCheckoutSession.ts wires it to the request and
 // to Stripe; keeping the logic here lets tests run it with a fake Stripe.
 //
-// Like the voice tools, it recovers instead of throwing: every problem comes
-// back as a short message the agent can say or the cart drawer can show.
+// checkoutCart recovers instead of throwing: every problem with the cart, the
+// key or Stripe comes back as a short message the cart drawer can show (and,
+// later, the voice agent can say). Only a malformed request body throws, in
+// parseCheckoutRequest, because that's the server function's input check.
 
 import { validateCartItems, type ValidatedItem } from 'use-shopping-cart/utilities'
 import { findVariant, products } from '../menu/menu'
