@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { categories, formatPrice, menu, products, type MenuItem } from '../menu/menu'
-import { MAX_LINE_QUANTITY, SHOP_NAME } from '../shop'
+import { SHOP_NAME } from '../shop'
 import { describeCart, summarizeCart } from './cartSummary'
 import { agentInstructions, describeMenu, GREETING } from './instructions'
 import { describeTapChange } from './tapUpdates'
@@ -100,9 +100,8 @@ describe('agentInstructions', () => {
     expect(describeTapChange({ type: 'remove', id: 'fries' }, cart)).toBe(`Customer removed Fries by tapping. ${describeCart(cart)}`)
   })
 
-  it("stays well under Deepgram's 25,000-character cap, even with every product in the cart", () => {
-    const fullCart = summarizeCart(Object.fromEntries(products.map((product) => [product.id, MAX_LINE_QUANTITY])))
+  // Deepgram's limit, with every product in the cart, is checked in src/voice/agentSettings.test.ts.
+  it('stays compact: under 12,000 characters with an empty cart', () => {
     expect(prompt.length).toBeLessThan(12_000)
-    expect(agentInstructions(fullCart).length).toBeLessThan(25_000)
   })
 })

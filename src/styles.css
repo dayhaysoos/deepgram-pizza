@@ -972,10 +972,11 @@ body:has(.drawer[data-open]) .voice {
   font-weight: 800;
 }
 
+/* Smaller and lighter than the label, in the same colour: no opacity, so the
+   small text keeps at least 4.5:1 contrast in every state. */
 .talk-hint {
   font-size: 0.8125rem;
   font-weight: 600;
-  opacity: 0.85;
 }
 
 /* Each state has its own colours and icon. */

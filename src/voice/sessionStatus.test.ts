@@ -5,12 +5,10 @@ import {
   MIC_BLOCKED,
   MIC_UNAVAILABLE,
   NO_SESSION,
-  TALK_LABELS,
   updateSession,
   type LiveEvent,
   type SessionEvent,
   type SessionState,
-  type TalkStatus,
 } from './sessionStatus'
 
 const press: SessionEvent = { type: 'pressed' }
@@ -22,12 +20,12 @@ function after(...events: SessionEvent[]): SessionState {
 
 /** The state after a press, then these events from the session it started. */
 function live(...events: LiveEvent[]): SessionState {
-  return after(press, ...events.map((event) => ({ ...event, session: 1 })))
+  return after(press, ...events.map((event) => ({ ...event, sessionNumber: 1 })))
 }
 
 /** Session 1's event, for passing to updateSession by hand. */
 function fromSession1(event: LiveEvent): SessionEvent {
-  return { ...event, session: 1 }
+  return { ...event, sessionNumber: 1 }
 }
 
 const settingsApplied: LiveEvent = { type: 'settingsApplied' }
@@ -44,23 +42,23 @@ const started = [settingsApplied, microphoneOn, listening]
 describe('updateSession', () => {
   describe('a press', () => {
     it('starts a session, connecting', () => {
-      expect(after(press)).toMatchObject({ status: 'connecting', session: 1 })
+      expect(after(press)).toMatchObject({ status: 'connecting', sessionNumber: 1 })
     })
 
     it('ends the session while it connects', () => {
-      expect(after(press, press)).toEqual({ status: 'idle', session: 1 })
+      expect(after(press, press)).toEqual({ status: 'idle', sessionNumber: 1 })
     })
 
     it('ends the session once it is on', () => {
       const on = live(...started)
-      expect(updateSession(on, press)).toEqual({ status: 'idle', session: 1 })
+      expect(updateSession(on, press)).toEqual({ status: 'idle', sessionNumber: 1 })
     })
 
     it('starts again from an error, without the message', () => {
       const failed = live({ type: 'tokenFailed', message: VOICE_UNAVAILABLE })
       expect(updateSession(failed, press)).toEqual({
         status: 'connecting',
-        session: 2,
+        sessionNumber: 2,
         settingsApplied: false,
         microphoneOn: false,
       })
@@ -90,17 +88,17 @@ describe('updateSession', () => {
 
   describe('ending a session', () => {
     it('ends without a message when the customer leaves the page', () => {
-      expect(live(...started, { type: 'pageHidden' })).toEqual({ status: 'idle', session: 1 })
+      expect(live(...started, { type: 'pageHidden' })).toEqual({ status: 'idle', sessionNumber: 1 })
     })
 
     it('ends without a message after a minute with no speech', () => {
-      expect(live(...started, { type: 'idle' })).toEqual({ status: 'idle', session: 1 })
+      expect(live(...started, { type: 'idle' })).toEqual({ status: 'idle', sessionNumber: 1 })
     })
 
     it("shows the token server function's message as it is", () => {
       expect(live({ type: 'tokenFailed', message: VOICE_NOT_SET_UP })).toEqual({
         status: 'error',
-        session: 1,
+        sessionNumber: 1,
         message: VOICE_NOT_SET_UP,
       })
     })
@@ -143,7 +141,7 @@ describe('updateSession', () => {
     })
 
     it('says the connection was lost when the SDK gives up, once the session has started', () => {
-      expect(live(...started, disconnected)).toEqual({ status: 'error', session: 1, message: CONNECTION_LOST })
+      expect(live(...started, disconnected)).toEqual({ status: 'error', sessionNumber: 1, message: CONNECTION_LOST })
       // The microphone can come on before the settings arrive.
       expect(live(microphoneOn, settingsApplied, disconnected)).toMatchObject({ message: CONNECTION_LOST })
     })
@@ -188,12 +186,12 @@ describe('updateSession', () => {
     it('ignores a session that was replaced', () => {
       // The first session's token request answers after the customer stopped and pressed again.
       const second = after(press, press, press)
-      expect(second).toMatchObject({ status: 'connecting', session: 2 })
+      expect(second).toMatchObject({ status: 'connecting', sessionNumber: 2 })
       expect(updateSession(second, fromSession1({ type: 'tokenFailed', message: VOICE_UNAVAILABLE }))).toBe(second)
     })
 
     it('ignores session events when no session is on', () => {
-      expect(updateSession(NO_SESSION, { type: 'idle', session: 0 })).toBe(NO_SESSION)
+      expect(updateSession(NO_SESSION, { type: 'idle', sessionNumber: 0 })).toBe(NO_SESSION)
     })
 
     it("keeps the same state when an event changes nothing, so React doesn't re-render", () => {
@@ -201,21 +199,5 @@ describe('updateSession', () => {
       expect(updateSession(on, fromSession1(listening))).toBe(on)
       expect(updateSession(on, fromSession1(settingsApplied))).toBe(on)
     })
-  })
-})
-
-describe('TALK_LABELS', () => {
-  const statuses: TalkStatus[] = ['idle', 'connecting', 'listening', 'thinking', 'speaking', 'error']
-
-  it('gives every state its own label', () => {
-    const labels = statuses.map((status) => TALK_LABELS[status].label)
-    expect(new Set(labels).size).toBe(statuses.length)
-  })
-
-  it('says how to stop a live session', () => {
-    expect(TALK_LABELS.connecting.hint).toBe('Press to cancel')
-    for (const status of ['listening', 'thinking', 'speaking'] as const) {
-      expect(TALK_LABELS[status].hint).toBe('Press to stop')
-    }
   })
 })

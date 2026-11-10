@@ -6,8 +6,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { env } from 'cloudflare:workers'
 import { grantDeepgramToken } from './deepgramToken'
 
-export type { DeepgramTokenResult } from './deepgramToken'
-
 /**
  * Mints a short-lived Deepgram token for the Voice Agent socket. Returns
  * `{ token }`, or `{ message }` to show instead. POST, so it's never cached.

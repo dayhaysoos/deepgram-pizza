@@ -27,16 +27,6 @@ export type TalkStatus = 'idle' | 'connecting' | 'listening' | 'thinking' | 'spe
 /** The states while a session is on. */
 export type LiveStatus = Extract<TalkStatus, 'connecting' | 'listening' | 'thinking' | 'speaking'>
 
-/** Each state's label, and what a press does then. */
-export const TALK_LABELS: Record<TalkStatus, { label: string; hint?: string }> = {
-  idle: { label: 'Talk to order' },
-  connecting: { label: 'Connecting…', hint: 'Press to cancel' },
-  listening: { label: 'Listening…', hint: 'Press to stop' },
-  thinking: { label: 'Thinking…', hint: 'Press to stop' },
-  speaking: { label: 'Speaking…', hint: 'Press to stop' },
-  error: { label: 'Try again' },
-}
-
 /** What the button says when the microphone is blocked. */
 export const MIC_BLOCKED = 'Allow the microphone to talk to us.'
 
@@ -49,8 +39,8 @@ export const CONNECTION_LOST = 'We lost the connection. Press to talk again.'
 /** A session that's on. */
 export type LiveSession = {
   status: LiveStatus
-  /** Which press started it: 1 for the first. */
-  session: number
+  /** Which session this is: 1 for the first. */
+  sessionNumber: number
   /** The agent has its settings. */
   settingsApplied: boolean
   /** The microphone is on, so AgentProvider has finished starting the session. */
@@ -58,14 +48,14 @@ export type LiveSession = {
 }
 
 export type SessionState =
-  /** No session. `session` is the last one's number (0 before the first press). */
-  | { status: 'idle'; session: number }
+  /** No session. `sessionNumber` is the last one's (0 before the first press). */
+  | { status: 'idle'; sessionNumber: number }
   /** The last session failed. The button shows why until the next press. */
-  | { status: 'error'; session: number; message: string }
+  | { status: 'error'; sessionNumber: number; message: string }
   | LiveSession
 
 /** The page's first render: no session yet. */
-export const NO_SESSION: SessionState = { status: 'idle', session: 0 }
+export const NO_SESSION: SessionState = { status: 'idle', sessionNumber: 0 }
 
 /** What a live session reports. */
 export type LiveEvent =
@@ -91,8 +81,8 @@ export type LiveEvent =
 export type SessionEvent =
   /** The customer pressed the talk button. */
   | { type: 'pressed' }
-  /** Something happened in session number `session`. */
-  | (LiveEvent & { session: number })
+  /** Something happened in session number `sessionNumber`. */
+  | (LiveEvent & { sessionNumber: number })
 
 export function isLive(state: SessionState): state is LiveSession {
   return state.status !== 'idle' && state.status !== 'error'
@@ -101,13 +91,13 @@ export function isLive(state: SessionState): state is LiveSession {
 /** The session after `event`. Returns `state` itself when the event changes nothing. */
 export function updateSession(state: SessionState, event: SessionEvent): SessionState {
   if (event.type === 'pressed') {
-    if (isLive(state)) return { status: 'idle', session: state.session }
-    return { status: 'connecting', session: state.session + 1, settingsApplied: false, microphoneOn: false }
+    if (isLive(state)) return { status: 'idle', sessionNumber: state.sessionNumber }
+    return { status: 'connecting', sessionNumber: state.sessionNumber + 1, settingsApplied: false, microphoneOn: false }
   }
 
   // Only the first end of a session counts, and a session that has ended or
   // been replaced changes nothing (its token request can answer late).
-  if (!isLive(state) || event.session !== state.session) return state
+  if (!isLive(state) || event.sessionNumber !== state.sessionNumber) return state
 
   switch (event.type) {
     case 'agentChanged': {
@@ -120,13 +110,13 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
       return state.microphoneOn ? state : { ...state, microphoneOn: true }
     case 'idle':
     case 'pageHidden':
-      return { status: 'idle', session: state.session }
+      return { status: 'idle', sessionNumber: state.sessionNumber }
     case 'tokenFailed':
       return failed(state, event.message)
     case 'agentError':
       return failed(state, VOICE_UNAVAILABLE)
     case 'sdkError': {
-      const message = explainError(event.error)
+      const message = microphoneMessage(event.error)
       if (message) return failed(state, message)
       return state.settingsApplied ? state : failed(state, VOICE_UNAVAILABLE)
     }
@@ -138,7 +128,7 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
 }
 
 function failed(state: LiveSession, message: string): SessionState {
-  return { status: 'error', session: state.session, message }
+  return { status: 'error', sessionNumber: state.sessionNumber, message }
 }
 
 /**
@@ -152,7 +142,7 @@ function liveStatus(state: AgentState, mode: AgentMode): LiveStatus {
 }
 
 /** The message for a microphone problem (getUserMedia's DOMException names), or `undefined`. */
-function explainError(error: unknown): string | undefined {
+function microphoneMessage(error: unknown): string | undefined {
   const name = error instanceof Error ? error.name : ''
   if (name === 'NotAllowedError' || name === 'SecurityError') return MIC_BLOCKED
   if (name === 'NotFoundError' || name === 'NotReadableError' || name === 'OverconstrainedError') return MIC_UNAVAILABLE

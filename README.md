@@ -4,7 +4,7 @@ Talk to a pizza shop. A voice agent answers questions about the menu, suggests w
 
 Clone it to put voice ordering on your own shop: swap the menu, the photos and the agent's instructions.
 
-> Work in progress: the app is being built step by step. The menu, the cart and test mode checkout work by clicking today. The voice agent's tools are built and can be tried without a microphone (see below); the voice session itself lands next.
+> Work in progress: the app is being built step by step. The menu, the cart and test mode checkout work by clicking today, and you can talk to the voice agent about the menu. The agent's tools are built and can be tried without a microphone (see below); wiring them to voice, so the agent can change your cart, lands next.
 
 ## Stack
 
@@ -29,6 +29,8 @@ Fill in both keys in `.dev.vars`, which stays out of git:
 - `DEEPGRAM_API_KEY`: create an API key in the [Deepgram console](https://console.deepgram.com) with **Member** permissions or higher (Create Key → Advanced → Member). The server uses it to mint short-lived tokens, and Deepgram refuses that with a 403 for keys below Member.
 - `STRIPE_SECRET_KEY`: a Stripe test mode secret key (`sk_test_…`) from the [Stripe dashboard](https://dashboard.stripe.com/test/apikeys).
 
+Voice also needs a microphone. Browsers allow one only on `https://` pages and on `localhost`, so open the dev server at `localhost`, not at your machine's network address.
+
 Then run `pnpm dev` and open http://localhost:3000.
 
 ### Try checkout
@@ -36,6 +38,12 @@ Then run `pnpm dev` and open http://localhost:3000.
 Add something to the cart, open it and press **Checkout**. Stripe's test checkout page opens. Pay with the test card `4242 4242 4242 4242`, any future expiry date and any CVC. Stripe sends you back to the order page, which shows an order number and empties the cart. Leave Stripe's page with its back link instead and the menu says checkout was cancelled, with the cart as you left it.
 
 The server accepts only Stripe test keys (`sk_test_…`), so no real payment can be taken.
+
+### Try voice
+
+Press **Talk to order** at the bottom of the screen and allow the microphone when the browser asks. The agent greets you; ask it about the menu, such as "What's vegetarian?" The button shows what the agent is doing (connecting, listening, thinking, speaking), and captions above it show what it heard and its reply.
+
+The agent can't change the cart yet: its tools are wired to voice in the next step. The session ends when you press the button again, when you leave the page, or after 60 seconds without speech from either side.
 
 ### Try the tools without a microphone
 
@@ -83,7 +91,7 @@ The rest:
 - **Shop name, currency and locale:** `src/shop.ts`.
 - **Photos:** `public/images/<item-id>.jpg`, about 800 px wide and compressed. Use photos from Unsplash or Pexels, or your own, and add a row for each to `CREDITS.md`.
 - **Colours and fonts:** the tokens at the top of `src/styles.css`.
-- **The agent's instructions** arrive with the voice steps.
+- **The agent's instructions:** its greeting, persona and rules are in `src/agent/instructions.ts`. It knows the menu from `menu.json`, and the cart as it is when you press the talk button. The models it listens, thinks and speaks with, and its voice, are in `src/voice/agentSettings.ts`.
 
 ## Checks
 
@@ -101,9 +109,11 @@ pnpm run deploy
 
 Deploy fails until both secrets are set: they're listed under `secrets.required` in `wrangler.jsonc`.
 
+**Before you host it publicly:** the token server function has no rate limit or authentication. Anyone who can open your shop can mint Deepgram tokens on your key and run up your Deepgram bill. Add a rate limit or a sign-in first.
+
 ## How it works
 
-The cart lives in the browser. Voice, the next step, is built around it: when you ask for something, the voice agent calls a tool, and the tool updates the cart on the page. The server does two things. It creates the Stripe Checkout session, taking names and prices from `menu.json` rather than from the cart the browser sends (`src/checkout/`). Once voice lands, it also mints a short-lived Deepgram token, so your API key never reaches the browser.
+The cart lives in the browser, and voice is built around it: the voice agent changes the cart only by calling a tool, and the tool updates the cart on the page (`src/agent/`). The browser talks to Deepgram directly. The server does two things. It mints a short-lived Deepgram token each time the browser connects to Deepgram, so your API key never reaches the browser (`src/voice/getDeepgramToken.ts`). And it creates the Stripe Checkout session, taking names and prices from `menu.json` rather than from the cart the browser sends (`src/checkout/`).
 
 ## License
 

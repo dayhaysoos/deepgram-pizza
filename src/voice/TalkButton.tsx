@@ -1,5 +1,15 @@
 import { useId } from 'react'
-import { TALK_LABELS, type TalkStatus } from './sessionStatus'
+import type { TalkStatus } from './sessionStatus'
+
+/** Each state's label, and what a press does then. */
+export const TALK_LABELS: Record<TalkStatus, { label: string; hint?: string }> = {
+  idle: { label: 'Talk to order' },
+  connecting: { label: 'Connecting…', hint: 'Press to cancel' },
+  listening: { label: 'Listening…', hint: 'Press to stop' },
+  thinking: { label: 'Thinking…', hint: 'Press to stop' },
+  speaking: { label: 'Speaking…', hint: 'Press to stop' },
+  error: { label: 'Try again' },
+}
 
 type TalkButtonProps = {
   status: TalkStatus
@@ -11,13 +21,13 @@ type TalkButtonProps = {
 /**
  * The talk button: a press starts a session, and a press during one ends it.
  * Each state has its own label, colour and icon (styles.css, "Voice"), so the
- * button never looks frozen. It needs no Deepgram provider, so it renders the
- * same with or without a session.
+ * button never looks frozen. It's a plain button, not a toggle with
+ * `aria-pressed`: its label already says the state and what a press does. It
+ * needs no Deepgram provider, so it renders the same with or without a session.
  */
 export function TalkButton({ status, message, onPress }: TalkButtonProps) {
   const messageId = useId()
   const { label, hint } = TALK_LABELS[status]
-  const live = status !== 'idle' && status !== 'error'
 
   return (
     <>
@@ -30,7 +40,6 @@ export function TalkButton({ status, message, onPress }: TalkButtonProps) {
         type="button"
         className="talk-button"
         data-status={status}
-        aria-pressed={live}
         aria-describedby={message ? messageId : undefined}
         onClick={onPress}
       >

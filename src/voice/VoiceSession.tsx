@@ -68,7 +68,9 @@ export function VoiceSession() {
 
   return (
     <div className="voice">
-      {isLive(state) && <LiveSession key={state.session} session={state.session} send={send} />}
+      {isLive(state) && (
+        <DeepgramSession key={state.sessionNumber} sessionNumber={state.sessionNumber} send={send} />
+      )}
       {/* After the session, so it keeps its place (and its focus) as sessions come and go. */}
       <TalkButton
         status={state.status}
@@ -79,14 +81,17 @@ export function VoiceSession() {
   )
 }
 
-type LiveSessionProps = {
-  session: number
+type DeepgramSessionProps = {
+  sessionNumber: number
   send: (event: SessionEvent) => void
 }
 
-/** One session: connects on mount, hangs up on unmount. */
-function LiveSession({ session, send: sendToPage }: LiveSessionProps) {
-  const send = useCallback((event: LiveEvent) => sendToPage({ ...event, session }), [sendToPage, session])
+/** One session's Deepgram connection: connects on mount, hangs up on unmount. */
+function DeepgramSession({ sessionNumber, send: sendToPage }: DeepgramSessionProps) {
+  const send = useCallback(
+    (event: LiveEvent) => sendToPage({ ...event, sessionNumber }),
+    [sendToPage, sessionNumber],
+  )
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
   // Built once. This session mounts right after the press, so the agent
   // starts with the cart as it is at the press.
