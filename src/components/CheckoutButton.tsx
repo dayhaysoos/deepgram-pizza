@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { redirectToCheckout, useShoppingCart } from 'use-shopping-cart'
+import { CHECKOUT_UNAVAILABLE } from '../checkout/checkout'
 import { createCheckoutSession } from '../checkout/createCheckoutSession'
 
 // The cart drawer's Checkout button. The server rebuilds the order from
@@ -22,12 +23,14 @@ export function CheckoutButton() {
   }, [])
 
   async function checkout() {
+    // One session per click: while a request is out, more clicks do nothing.
+    if (pending) return
     setPending(true)
     setMessage(null)
     try {
       const result = await createCheckoutSession({ data: { cartDetails } })
       if ('url' in result) {
-        // The button stays disabled while the browser leaves for Stripe.
+        // The button stays pending while the browser leaves for Stripe.
         redirectToCheckout(result.url)
         return
       }
@@ -35,7 +38,7 @@ export function CheckoutButton() {
     } catch (error) {
       // The request itself failed: offline, or the server is down.
       console.error('Checkout request failed:', error)
-      setMessage("Checkout isn't available right now. Please try again in a moment.")
+      setMessage(CHECKOUT_UNAVAILABLE)
     }
     setPending(false)
   }
@@ -47,7 +50,9 @@ export function CheckoutButton() {
           {message}
         </p>
       )}
-      <button type="button" className="checkout-button" disabled={pending} onClick={checkout}>
+      {/* aria-disabled, not disabled: a disabled button loses focus, and with it
+          the screen reader's announcement of the new label. */}
+      <button type="button" className="checkout-button" aria-disabled={pending} onClick={checkout}>
         {pending ? 'Taking you to checkout…' : 'Checkout'}
       </button>
     </>

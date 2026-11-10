@@ -20,15 +20,24 @@ export const Route = createFileRoute('/')({
 function Home() {
   const cartOpen = useShoppingCart((cart) => cart.shouldDisplayCart)
   const cartButtonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLElement>(null)
   const { checkout } = Route.useSearch()
   const navigate = Route.useNavigate()
+
+  function dismissNotice() {
+    // Dropping the search param hides the notice, and a reload won't bring it back.
+    navigate({ to: '/', search: {}, replace: true, resetScroll: false })
+    // The Dismiss button goes with the notice. Move focus to the menu so it
+    // isn't dropped on the page body.
+    menuRef.current?.focus({ preventScroll: true })
+  }
 
   return (
     <>
       {/* While the cart is open, the page behind it can't be focused or clicked. */}
       <div className="page" inert={cartOpen}>
         <SiteHeader cartButtonRef={cartButtonRef} />
-        <main className="menu">
+        <main className="menu" ref={menuRef} tabIndex={-1}>
           {checkout === 'cancelled' && (
             <div className="notice" role="status">
               <p>Checkout cancelled. Your cart is just as you left it.</p>
@@ -36,8 +45,7 @@ function Home() {
                 type="button"
                 className="icon-button"
                 aria-label="Dismiss"
-                // Dropping the search param hides the notice, and a reload won't bring it back.
-                onClick={() => navigate({ to: '/', search: {}, replace: true, resetScroll: false })}
+                onClick={dismissNotice}
               >
                 ✕
               </button>

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { products } from '../menu/menu'
 import {
-  createCheckout,
+  CHECKOUT_UNAVAILABLE,
+  checkoutCart,
   orderNumber,
   parseCheckoutRequest,
   type CheckoutInput,
@@ -26,7 +27,7 @@ function fakeStripe(respond: () => Promise<{ url: string | null }> = async () =>
 }
 
 function checkout(input: Partial<CheckoutInput>, stripe = fakeStripe()) {
-  return createCheckout({ cartDetails: {}, origin: ORIGIN, secretKey: TEST_KEY, ...input }, stripe.createSession)
+  return checkoutCart({ cartDetails: {}, origin: ORIGIN, secretKey: TEST_KEY, ...input }, stripe.createSession)
 }
 
 // A cart line the way the browser posts it: use-shopping-cart's full entry.
@@ -34,7 +35,7 @@ function cartLine(product: (typeof products)[number], quantity: unknown) {
   return { ...product, quantity, value: product.price * Number(quantity), formattedValue: '', formattedPrice: '' }
 }
 
-describe('createCheckout', () => {
+describe('checkoutCart', () => {
   // Failures are logged server-side; keep the test output quiet.
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -174,7 +175,7 @@ describe('createCheckout', () => {
 
     const result = await checkout({ cartDetails: { [first.id]: cartLine(first, 1) } }, stripe)
 
-    expect(result).toEqual({ message: "Checkout isn't available right now. Please try again in a moment." })
+    expect(result).toEqual({ message: CHECKOUT_UNAVAILABLE })
     expect(console.error).toHaveBeenCalled()
   })
 
@@ -183,7 +184,7 @@ describe('createCheckout', () => {
 
     const result = await checkout({ cartDetails: { [first.id]: cartLine(first, 1) } }, stripe)
 
-    expect(result).toEqual({ message: "Checkout isn't available right now. Please try again in a moment." })
+    expect(result).toEqual({ message: CHECKOUT_UNAVAILABLE })
   })
 })
 

@@ -56,7 +56,7 @@ Add a dependency outside this table only after asking.
 - Read secrets with `import { env } from "cloudflare:workers"` inside server functions.
 - Secrets: `DEEPGRAM_API_KEY` and `STRIPE_SECRET_KEY`. Locally they live in `.dev.vars`, which stays out of git. In production, set them with `wrangler secret put <KEY>`. Values go in neither `wrangler.jsonc` `vars` nor client code.
 - To check a deploy without publishing, run `pnpm build`, then `wrangler deploy --dry-run`. Leave out `--config`, because the plugin generates the deploy config.
-- Before calling Stripe from a Worker, confirm how Stripe's current docs say to use their SDK on Workers.
+- Before calling Stripe from a Worker, confirm how Stripe's current docs say to use their SDK on Workers. As of stripe@23 they say nothing about Workers; the package ships a `workerd` build that uses fetch, and we also pass `httpClient: Stripe.createFetchHttpClient()` explicitly, as Cloudflare's guide does.
 - `compatibility_date` can't be newer than what the workerd bundled with `@cloudflare/vite-plugin` supports; `pnpm dev` refuses to start otherwise. Bump it only together with the plugin.
 - `worker-configuration.d.ts` and `src/routeTree.gen.ts` are generated and committed, so `pnpm check` works on a fresh clone. After changing bindings or secrets in `wrangler.jsonc`, run `pnpm cf-typegen` (`wrangler types`) and commit the result. After adding or renaming a route, run `pnpm dev` or `pnpm build` once so the route tree regenerates, and commit it. Secret names are listed under `secrets.required` in `wrangler.jsonc` (names only).
 - `vite build` copies `.dev.vars` into `dist/server/`, so `dist/` must stay ignored.
@@ -82,6 +82,7 @@ The shop is fictional.
 
 - Once the app is scaffolded, `pnpm check` runs lint, typecheck and tests. Keep it passing, and wire every new kind of check into it.
 - Test tool handlers as plain functions: given a cart and arguments, assert the action called and the summary returned. That covers the logic voice can't exercise in a headless run.
+- Vitest runs in Node, which has no `cloudflare:workers`. A test that imports the route tree (or anything that reaches a server function) must `vi.mock('cloudflare:workers', () => ({ env: {} }))`, as `src/router.test.ts` does. Keep pure logic out of server-function files so most tests don't need the mock.
 - Voice itself needs a human with a microphone. Run the golden path in a real browser, or say plainly that you couldn't and which steps are still unverified.
 
 ## Tooling

@@ -254,6 +254,12 @@ button:disabled {
   padding: var(--space-4) var(--space-4) var(--space-12);
 }
 
+/* The menu takes focus only from code, after the cancelled notice is
+   dismissed. It isn't a control, so it shows no focus ring. */
+.menu:focus {
+  outline: none;
+}
+
 .menu-section {
   padding-block: var(--space-6);
   scroll-margin-top: var(--header-offset);
@@ -720,11 +726,12 @@ button:disabled {
   font-weight: 700;
 }
 
-.checkout-button:hover:not(:disabled) {
+.checkout-button:hover:not([aria-disabled='true']) {
   background: var(--red-dark);
 }
 
-.checkout-button:disabled {
+/* Pending. The button keeps focus, so it uses aria-disabled rather than disabled. */
+.checkout-button[aria-disabled='true'] {
   cursor: progress;
   opacity: 0.75;
 }

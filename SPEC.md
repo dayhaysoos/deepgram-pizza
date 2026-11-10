@@ -316,7 +316,7 @@ Record decisions made during the build here (voice settings, library choices, an
 - **The order number is the last 8 letters and digits of the Checkout Session id, uppercased** (`orderNumber`). The success page already has the id in its url, so showing the number takes no Stripe call. It's for people to read; the full id finds the order in the dashboard.
 - **The order page clears the cart whenever its url has a `session_id`, without asking Stripe if it was paid.** Stripe sends customers there only after paying, and a hand-typed url can only empty the visitor's own cart. Without a `session_id` it says there's no order to show and leaves the cart alone.
 - **The order page has a small header of its own** (the brand, linking home) instead of `SiteHeader`: the cart it would open was just emptied, and its category links point at sections on the menu page.
-- **The Checkout button stays disabled until the browser leaves for Stripe**, so a second click can't start a second session. It resets on `pageshow` when the browser's Back button restores the page from the back/forward cache.
+- **The Checkout button stays pending until the browser leaves for Stripe**, and clicks while pending do nothing, so a second click can't start a second session. It's `aria-disabled`, not `disabled`, so it keeps focus and screen readers hear "Taking you to checkout…". It resets on `pageshow` when the browser's Back button restores the page from the back/forward cache.
 - **Tests that load the route tree mock `cloudflare:workers`** (`src/router.test.ts`): routes reach the server functions, which import it, and only workerd has that module.
 
 ## Open questions

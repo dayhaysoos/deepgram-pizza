@@ -9,6 +9,9 @@ import { validateCartItems, type ValidatedItem } from 'use-shopping-cart/utiliti
 import { findVariant, products } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
 
+/** What to show or say when Stripe fails, or the request never reaches the server. */
+export const CHECKOUT_UNAVAILABLE = "Checkout isn't available right now. Please try again in a moment."
+
 /** Where to send the customer, or a short message to show or say instead. */
 export type CheckoutResult = { url: string } | { message: string }
 
@@ -38,7 +41,8 @@ export function parseCheckoutRequest(data: unknown): { cartDetails: Record<strin
   throw new Error("Expected { cartDetails }, the cart from use-shopping-cart's useShoppingCart().")
 }
 
-export async function createCheckout(input: CheckoutInput, createSession: CreateSession): Promise<CheckoutResult> {
+/** Checks out the cart: a Stripe Checkout url, or a short message saying why not. */
+export async function checkoutCart(input: CheckoutInput, createSession: CreateSession): Promise<CheckoutResult> {
   // Log a hint for the developer, never the key itself.
   const { secretKey } = input
   if (!secretKey) {
@@ -81,7 +85,7 @@ export async function createCheckout(input: CheckoutInput, createSession: Create
   } catch (error) {
     console.error('Creating the Stripe Checkout Session failed:', error instanceof Error ? error.message : error)
   }
-  return { message: "Checkout isn't available right now. Please try again in a moment." }
+  return { message: CHECKOUT_UNAVAILABLE }
 }
 
 /**

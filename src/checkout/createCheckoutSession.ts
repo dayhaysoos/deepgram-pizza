@@ -7,7 +7,7 @@ import { getRequest } from '@tanstack/react-start/server'
 import { env } from 'cloudflare:workers'
 import Stripe from 'stripe'
 import type { CartDetails } from 'use-shopping-cart'
-import { createCheckout, parseCheckoutRequest, type SessionParams } from './checkout'
+import { checkoutCart, parseCheckoutRequest, type SessionParams } from './checkout'
 
 /**
  * Starts Stripe Checkout for the cart. Returns `{ url }` to pass to
@@ -18,7 +18,7 @@ import { createCheckout, parseCheckoutRequest, type SessionParams } from './chec
 export const createCheckoutSession = createServerFn({ method: 'POST' })
   .validator((data: { cartDetails: CartDetails }) => parseCheckoutRequest(data))
   .handler(({ data }) =>
-    createCheckout(
+    checkoutCart(
       {
         cartDetails: data.cartDetails,
         origin: new URL(getRequest().url).origin,
@@ -29,7 +29,7 @@ export const createCheckoutSession = createServerFn({ method: 'POST' })
   )
 
 // Workers have no Node `https`, so the Stripe client uses its fetch-based HTTP
-// client. It's built per call, after createCheckout has checked the key.
+// client. It's built per call, after checkoutCart has checked the key.
 function createStripeSession(secretKey: string, params: SessionParams) {
   const stripe = new Stripe(secretKey, { httpClient: Stripe.createFetchHttpClient() })
   return stripe.checkout.sessions.create(params)
