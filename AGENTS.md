@@ -64,6 +64,7 @@ Add a dependency outside this table only after asking.
 ## use-shopping-cart
 
 - In components, read state through selectors: `useShoppingCart((cart) => cart.cartCount)`. Tool handlers call actions from `useShoppingCart()`.
+- Select actions the same way as state: `useShoppingCart((cart) => cart.addItem)`, so a component doesn't re-render on every cart change. To open the drawer from code, call `handleCartHover()`; `handleCartClick()` toggles and `handleCloseCart()` closes. See `LIBRARY_FEEDBACK.md`.
 - Checkout: the client posts `cartDetails` to the checkout server function. The server rebuilds the line items with `validateCartItems(menu, cartDetails)` from `use-shopping-cart/utilities`, creates the session, and returns `session.url`. The client then calls `redirectToCheckout(url)`. Prices come from `menu.json` on the server, never from the browser.
 - use-shopping-cart v4 is a release candidate. When it surprises you, write it down in `LIBRARY_FEEDBACK.md` so it can be reported upstream: a bug, a confusing doc, or an API that fought you. Record what you expected, what happened, and the workaround. Then continue.
 

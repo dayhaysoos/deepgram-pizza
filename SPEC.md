@@ -301,6 +301,9 @@ Record decisions made during the build here (voice settings, library choices, an
 - **`observability.enabled: true` in `wrangler.jsonc`.** Workers logs are on so a deployed copy can be debugged from the dashboard; it's the Cloudflare template default.
 - **Currency and locale live in `src/shop.ts`** (`CURRENCY`, `LOCALE`). `CartProvider`, the product list and `formatPrice` all read them, so a shop in another currency edits one file and server and browser format prices alike.
 - **No formatter in `pnpm check`.** Step 1 asks for lint, typecheck and tests only, and Prettier or Biome would be another dependency outside the stack table. Add one if the owner wants it.
+- **Category display data lives in `src/menu/menu.ts`.** SPEC fixes `menu.json` as a list of items; the category order, labels and size notes sit next to it in `categories`.
+- **Menu cards start on the size that feeds the most people** (Large, 12 pc), via `defaultVariant`: the common order is one tap away; the SPEC sketch's mixed defaults were illustrative.
+- **Clicks share the voice tools' cap of 20 per line** (`MAX_LINE_QUANTITY` in `src/shop.ts`): Add and + stop at 20, so a line the agent reads back never exceeds what its tools accept.
 
 ## Open questions
 

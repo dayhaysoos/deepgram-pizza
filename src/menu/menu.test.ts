@@ -69,7 +69,7 @@ describe('menu.json', () => {
   })
 
   it('uses only the tags listed in menu.ts', () => {
-    const allowed = tags as string[]
+    const allowed: readonly string[] = tags
 
     expect(
       menu.filter((item) => item.tags.some((tag) => !allowed.includes(tag))).map((item) => item.id),

@@ -10,7 +10,7 @@ type SiteHeaderProps = {
 
 export function SiteHeader({ cartButtonRef }: SiteHeaderProps) {
   const cartCount = useShoppingCart((cart) => cart.cartCount)
-  const openCart = useShoppingCart((cart) => cart.handleCartClick)
+  const toggleCart = useShoppingCart((cart) => cart.handleCartClick)
 
   return (
     <header className="site-header">
@@ -22,7 +22,7 @@ export function SiteHeader({ cartButtonRef }: SiteHeaderProps) {
           className="cart-button"
           aria-haspopup="dialog"
           aria-label={`Cart, ${cartCount} ${cartCount === 1 ? 'item' : 'items'}`}
-          onClick={openCart}
+          onClick={toggleCart}
         >
           Cart
           {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}

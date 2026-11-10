@@ -1,12 +1,33 @@
 // The menu, typed, plus the helpers the rest of the app reads it through.
-// menu.json is the single source of truth: edit it to make this your shop.
+// menu.json holds the items: it's the source of truth for what's sold and its
+// prices. The category order, labels and notes are display only, and live in
+// `categories` below.
 
 import { CURRENCY, LOCALE } from '../shop'
 import menuJson from './menu.json'
 
-export type Category = 'pizza' | 'subs' | 'wings' | 'burgers' | 'salads' | 'sides' | 'drinks' | 'dessert'
+/** Every category, in the order the menu shows them. */
+export const categories = [
+  { id: 'pizza', label: 'Pizza', note: 'Medium 14″ · Large 18″' },
+  { id: 'subs', label: 'Subs' },
+  { id: 'wings', label: 'Wings', note: '6 or 12 pieces' },
+  { id: 'burgers', label: 'Burgers' },
+  { id: 'salads', label: 'Salads' },
+  { id: 'sides', label: 'Sides' },
+  { id: 'drinks', label: 'Drinks' },
+  { id: 'dessert', label: 'Dessert' },
+] as const satisfies ReadonlyArray<{ id: string; label: string; note?: string }>
 
-export type Tag = 'vegetarian' | 'vegan' | 'spicy' | 'popular'
+/** A category id: 'pizza', 'subs' and so on. */
+export type Category = (typeof categories)[number]['id']
+
+/** What the menu shows for a category: its heading, and an optional note such as the pizza sizes. */
+export type CategoryInfo = { id: Category; label: string; note?: string }
+
+/** Every tag an item can have. */
+export const tags = ['vegetarian', 'vegan', 'spicy', 'popular'] as const
+
+export type Tag = (typeof tags)[number]
 
 /** One orderable size of an item. An item with one size has one variant whose id is the item id. */
 export type Variant = {
@@ -43,21 +64,6 @@ export type Product = {
 // menu.test.ts are what prove menu.json has this shape. Run `pnpm test` after
 // editing menu.json.
 export const menu = menuJson as MenuItem[]
-
-/** Every category, in the order the menu shows them. */
-export const categories: Array<{ id: Category; label: string; note?: string }> = [
-  { id: 'pizza', label: 'Pizza', note: 'Medium 14″ · Large 18″' },
-  { id: 'subs', label: 'Subs' },
-  { id: 'wings', label: 'Wings', note: '6 or 12 pieces' },
-  { id: 'burgers', label: 'Burgers' },
-  { id: 'salads', label: 'Salads' },
-  { id: 'sides', label: 'Sides' },
-  { id: 'drinks', label: 'Drinks' },
-  { id: 'dessert', label: 'Dessert' },
-]
-
-/** Every tag an item can have. */
-export const tags: Tag[] = ['vegetarian', 'vegan', 'spicy', 'popular']
 
 /** The cart product for one variant. A sized product's name includes the size: "Large Pepperoni Pizza". */
 export function productFor(item: MenuItem, variant: Variant): Product {

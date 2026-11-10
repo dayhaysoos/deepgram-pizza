@@ -1,8 +1,8 @@
-import type { Category, MenuItem } from '../menu/menu'
+import type { CategoryInfo, MenuItem } from '../menu/menu'
 import { MenuCard } from './MenuCard'
 
 type MenuSectionProps = {
-  category: { id: Category; label: string; note?: string }
+  category: CategoryInfo
   items: MenuItem[]
 }
 

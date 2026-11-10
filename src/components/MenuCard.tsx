@@ -23,18 +23,25 @@ export function MenuCard({ item }: { item: MenuItem }) {
     return () => clearTimeout(timer)
   }, [recentAdds])
 
+  // What screen readers hear after an add. It's written at click time, so it
+  // names what was added even if the size changes afterwards, and the count
+  // changes the text on every add, so each one is announced.
+  const [addedMessage, setAddedMessage] = useState('')
+
   function add() {
     if (atLimit) return
     addItem(product, { count: 1 })
     setRecentAdds((n) => n + 1)
+    setAddedMessage(`Added ${product.name}. ${quantityInCart + 1} in your cart.`)
   }
 
   return (
     <article className="menu-card">
+      {/* Empty alt: the heading below already names the item, so screen readers would read it twice. */}
       <img
         className="menu-card-photo"
         src={imagePath(item)}
-        alt={item.name}
+        alt=""
         width={800}
         height={600}
         loading="lazy"
@@ -78,7 +85,7 @@ export function MenuCard({ item }: { item: MenuItem }) {
           </div>
         </div>
         <span className="visually-hidden" role="status">
-          {recentAdds > 0 ? `Added ${product.name} to the cart` : ''}
+          {recentAdds > 0 ? addedMessage : ''}
         </span>
       </div>
     </article>
