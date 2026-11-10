@@ -189,9 +189,15 @@ function SessionEvents({ send }: { send: (event: LiveEvent) => void }) {
       agentSession.on(event, listener)
       return () => void agentSession.off(event, listener)
     })
+    // A reconnect resends the settings but not the greeting, so nothing else
+    // would end the pause if the drop came while the agent was speaking.
+    agentSession.on('reconnecting', timer.reset)
+    agentSession.on('settings-applied', timer.reset)
     return () => {
       timer.stop()
       for (const removeListener of listeners) removeListener()
+      agentSession.off('reconnecting', timer.reset)
+      agentSession.off('settings-applied', timer.reset)
     }
   }, [agentSession, send])
 

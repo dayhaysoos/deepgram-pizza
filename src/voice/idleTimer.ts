@@ -1,6 +1,7 @@
 // Ends a voice session nobody is using. An open connection costs money every
 // second, so after a minute with no speech from either side the session
-// closes on its own. Time while the agent is speaking doesn't count.
+// closes on its own. Time while the agent is speaking doesn't count. A
+// reconnect cuts the agent off, so the count starts again from there.
 //
 // The timer only counts. VoiceSession.tsx feeds it the session's events, and
 // sends sessionStatus.ts an `idle` event when it fires.
@@ -21,6 +22,11 @@ export type SpeechEvent = (typeof SPEECH_EVENTS)[number]
 export type IdleTimer = {
   /** Something was said: the count starts again, and pauses while the agent speaks. */
   heard: (event: SpeechEvent) => void
+  /**
+   * The connection dropped or came back: whatever the agent was saying is cut
+   * off, and its agent-audio-done won't come. The count starts again.
+   */
+  reset: () => void
   /** Stops counting for good. */
   stop: () => void
 }
@@ -47,6 +53,10 @@ export function createIdleTimer(onIdle: () => void, timeoutMs = IDLE_TIMEOUT_MS)
       if (event === 'agent-started-speaking') agentSpeaking = true
       // The customer can cut the agent off, and then no agent-audio-done may come.
       if (event === 'agent-audio-done' || event === 'user-started-speaking') agentSpeaking = false
+      restart()
+    },
+    reset() {
+      agentSpeaking = false
       restart()
     },
     stop() {

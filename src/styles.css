@@ -1088,7 +1088,7 @@ body:has(.drawer[data-open]) .voice {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--red) 45%, transparent), var(--shadow-raised);
   }
   to {
-    box-shadow: 0 0 0 14px color-mix(in srgb, var(--red) 0%, transparent), var(--shadow-raised);
+    box-shadow: 0 0 0 14px transparent, var(--shadow-raised);
   }
 }
 
@@ -1121,7 +1121,8 @@ body:has(.drawer[data-open]) .voice {
 }
 
 /* Captions: the customer's last line and the agent's reply. Each is cut to a
-   few lines, so the box fits in --captions-space. */
+   few lines, so the box fits in --captions-space: the customer's line keeps
+   its start, and the agent's reply keeps its newest words. */
 .captions {
   display: flex;
   flex-direction: column;
@@ -1143,14 +1144,10 @@ body:has(.drawer[data-open]) .voice {
   pointer-events: none;
 }
 
-.caption-customer,
-.caption-agent {
+.caption-customer {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-}
-
-.caption-customer {
   color: var(--ink-soft);
   font-size: 0.875rem;
   font-style: italic;
@@ -1158,10 +1155,15 @@ body:has(.drawer[data-open]) .voice {
   line-clamp: 2;
 }
 
+/* The reply's text sits at the bottom of a box three lines tall. A longer
+   reply grows upward, and its oldest lines go out of the top, hidden. */
 .caption-agent {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: 3lh;
+  overflow: hidden;
   font-weight: 600;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
 }
 
 /* Checkout, in the drawer footer. On phones the drawer is full screen, so the

@@ -69,6 +69,22 @@ describe('createIdleTimer', () => {
     expect(onIdle).toHaveBeenCalledTimes(1)
   })
 
+  // A reconnect resends the settings without the greeting, so no
+  // agent-audio-done ends the reply the drop cut off.
+  it('counts again after a reconnect cuts the agent off', () => {
+    const onIdle = vi.fn()
+    const timer = createIdleTimer(onIdle)
+
+    timer.heard('agent-started-speaking')
+    vi.advanceTimersByTime(IDLE_TIMEOUT_MS * 2)
+    timer.reset()
+    vi.advanceTimersByTime(IDLE_TIMEOUT_MS - 1)
+    expect(onIdle).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(1)
+    expect(onIdle).toHaveBeenCalledTimes(1)
+  })
+
   it('never fires once stopped, whatever it hears after', () => {
     const onIdle = vi.fn()
     const timer = createIdleTimer(onIdle)
