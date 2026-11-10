@@ -25,6 +25,7 @@
     "@tanstack/react-start": "^1.169.5",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "stripe": "^23.1.0",
     "use-shopping-cart": "4.0.0-rc.2"
   },
   "devDependencies": {

@@ -310,6 +310,10 @@ Record decisions made during the build here (voice settings, library choices, an
 - **A click on Add doesn't open the drawer.** The button says "Added ✓" and the badge updates; SPEC opens the drawer on its own only for voice changes.
 - **The drawer is a custom sheet, not a native `<dialog>`.** While it's open only the page wrapper is `inert`, so the step 4 talk button can live outside it and stay usable mid-conversation. Open/closed is the cart library's `shouldDisplayCart`.
 - **System font stacks, no web fonts.** A bold serif stack for headings and a sans stack for text keep the page free of third-party requests.
+- **The Stripe client is built with `httpClient: Stripe.createFetchHttpClient()`.** Stripe's docs and README say nothing about Workers. stripe@23's `workerd` export already defaults to fetch, and Cloudflare's own Stripe guide passes the fetch client, so passing it explicitly keeps the code working whichever build gets resolved.
+- **Checkout reads only ids and quantities from the posted cart** (`src/checkout/checkout.ts`). It checks each line (on the menu, quantity 1–20) before `validateCartItems`, so the message can name the line. Passing only ids and quantities also keeps out the browser's `product_data.metadata`, which `validateCartItems` would otherwise copy (see `LIBRARY_FEEDBACK.md`).
+- **Stripe's return urls use the request's own origin** (`getRequest().url`), not `x-forwarded-*` headers, so local dev and every deployed hostname work without configuration.
+- **The order number is the last 8 letters and digits of the Checkout Session id, uppercased** (`orderNumber`). The success page already has the id in its url, so showing the number takes no Stripe call. It's for people to read; the full id finds the order in the dashboard.
 
 ## Open questions
 

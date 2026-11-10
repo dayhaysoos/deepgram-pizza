@@ -25,3 +25,15 @@ Surprises we hit with use-shopping-cart v4 (release candidate) while building th
 - **What I expected:** a page listing `CartProvider`'s props.
 - **What happened:** the docs sidebar shows "Components" and "Hooks" as plain headings with no pages under them. The props (`cartDetails`, `currency`, `language`, `shouldPersist`, `persistKey`, `storage`) appear only in the migration guide and in `dist/react.d.ts`.
 - **Workaround:** read the type definitions.
+
+## `validateCartItems` copies the browser's metadata into the Stripe line items
+
+- **What I expected:** Getting Started says never to price the session from the `cartDetails` the browser sends, "because anyone can edit it", and to pass the cart to `validateCartItems`, which takes prices from your inventory. So I expected nothing from the browser except ids and quantities to reach Stripe.
+- **What happened:** prices and names do come from the inventory, but `validateCartItems` (rc.2 source, `dist/utilities.mjs`) merges the browser entry's `product_data.metadata` into each line item's `price_data.product_data.metadata`. Whatever the browser posts there ends up on the Stripe product. Nothing in the docs mentions it.
+- **Workaround:** before calling it, reduce the posted cart to `{ [id]: { quantity } }`. `src/checkout/checkout.ts` does this and its tests check that posted metadata doesn't reach the line items.
+
+## `validateCartItems` wants full cart entries, and its cart type isn't exported from `/utilities`
+
+- **What I expected:** to call `validateCartItems(inventory, { [id]: { quantity } })`, since it reads only each entry's `quantity` (plus that metadata).
+- **What happened:** its second parameter is typed `CartDetails`, which requires every `CartEntry` field (`name`, `price`, `currency`, `value`, `formattedValue`, `formattedPrice`, `timestamp`). `CartDetails` isn't exported from `use-shopping-cart/utilities`, only from the React entry. It also enforces a minimum quantity of 1 but takes no maximum, so a per-line cap has to be checked separately, and when a quantity is wrong it calls `console.warn` before throwing, which adds noise to server logs.
+- **Workaround:** cast with `Parameters<typeof validateCartItems>[1]`, and check quantities (1 to `MAX_LINE_QUANTITY`) before calling it, so its own checks never fire.
