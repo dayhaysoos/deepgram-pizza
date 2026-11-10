@@ -178,7 +178,7 @@ export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
       </h2>
 
       <div className="tools-panel-body" id={bodyId} hidden={!open}>
-        <SessionLogSection />
+        <SessionLogSection open={open} />
 
         <p className="tools-panel-note">
           Runs the voice agent&apos;s tools through the page&apos;s own handlers, exactly as the agent&apos;s tool calls

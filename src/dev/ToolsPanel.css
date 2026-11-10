@@ -214,6 +214,13 @@
   line-height: 1.45;
 }
 
+/* Says how many older entries the log dropped, above the oldest it kept. */
+.session-log-dropped {
+  margin-top: var(--space-2);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
 .session-log h4 {
   margin-top: var(--space-2);
   font-family: var(--font-sans);

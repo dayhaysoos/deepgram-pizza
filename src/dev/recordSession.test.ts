@@ -1,27 +1,46 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { useAgentSession } from '@deepgram/react'
+import type { AgentSessionConfig, useAgentSession } from '@deepgram/react'
 import { summarizeCart } from '../agent/cartSummary'
+import { GREETING } from '../agent/instructions'
 import { agentSettings } from '../voice/agentSettings'
 import { CONNECTION_LOST, MIC_BLOCKED, NO_SESSION, type SessionEnd } from '../voice/sessionStatus'
-import { recordEnd, recordSession, recordSessionEnd } from './recordSession'
+import { recordEnd, recordSession, recordSessionEnd, settingsPayload } from './recordSession'
 import { createSessionLog } from './sessionLog'
 
 type AgentSession = ReturnType<typeof useAgentSession>
+type ContextMessage = AgentSession['conversationHistory'][number]
 
-/** Stands in for the SDK's AgentSession: an event emitter with a connection state. */
+/**
+ * Stands in for the SDK's AgentSession: an event emitter with a connection
+ * state and the conversation so far, which the SDK keeps to restore on a reconnect.
+ */
 function fakeSession(state: AgentSession['state'] = 'connected') {
   const emitter = new EventEmitter()
-  return { emitter, session: Object.assign(emitter, { state }) as unknown as AgentSession }
+  const conversationHistory: ContextMessage[] = []
+  return {
+    emitter,
+    conversationHistory,
+    session: Object.assign(emitter, { state, conversationHistory }) as unknown as AgentSession,
+  }
 }
 
 const settings = agentSettings(summarizeCart({}))
+/** The config VoiceSession gives AgentProvider: a token factory and the agent's settings. */
+const config: AgentSessionConfig = { auth: { tokenFactory: async () => 'token' }, agent: settings }
+
+/** The Settings the SDK sends with the config above, on a first connect. */
+const firstSettings = {
+  type: 'Settings',
+  audio: { input: { encoding: 'linear16', sample_rate: 16_000 } },
+  agent: settings,
+}
 
 function setUp({ agentSpeaking = false } = {}) {
   const log = createSessionLog()
-  const { emitter, session } = fakeSession()
-  const stop = recordSession(session, { settings, page: '/dev/tools', agentSpeaking: () => agentSpeaking, log })
-  return { log, emitter, session, stop }
+  const { emitter, session, conversationHistory } = fakeSession()
+  const stop = recordSession(session, { config, page: '/dev/tools', agentSpeaking: () => agentSpeaking, log })
+  return { log, emitter, session, conversationHistory, stop }
 }
 
 afterEach(() => {
@@ -59,9 +78,47 @@ describe('recordSession', () => {
       'app Disconnected',
     ])
     expect(log.entries()[0]?.payload).toEqual({ page: '/dev/tools' })
-    expect(log.entries()[4]?.payload).toEqual({ type: 'Settings', agent: settings })
+    expect(log.entries()[4]?.payload).toEqual(firstSettings)
+    expect(log.entries()[4]).not.toHaveProperty('restoredMessages')
     expect(log.entries()[8]?.payload).toEqual({ attempt: 1, delayMs: 500 })
     expect(log.entries()[9]?.payload).toEqual({ name: 'Error', message: 'socket closed: 1006' })
+  })
+
+  it('records the Settings again after a reconnect, as the SDK rebuilt them to restore the conversation', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const { log, emitter, conversationHistory } = setUp()
+
+    emitter.emit('welcome', { type: 'Welcome', request_id: 'req-1' })
+    // The SDK keeps each line, and each answered function call, to restore on a reconnect.
+    const lines = [
+      { type: 'History', role: 'assistant', content: 'Hi!' },
+      { type: 'History', role: 'user', content: "What's vegetarian?" },
+    ] as const
+    for (const { role, content } of lines) {
+      conversationHistory.push({ type: 'History', role, content })
+      emitter.emit('conversation-text', { type: 'ConversationText', role, content })
+    }
+    emitter.emit('reconnecting', 1, 500)
+    emitter.emit('connecting')
+    emitter.emit('connected')
+    emitter.emit('welcome', { type: 'Welcome', request_id: 'req-2' })
+
+    const sent = log.entries().filter(({ type }) => type === 'Settings')
+    expect(sent.map(({ payload }) => payload)).toEqual([
+      firstSettings,
+      { ...firstSettings, agent: { ...settings, greeting: undefined, context: { messages: lines } } },
+    ])
+    expect(sent[1]?.payload).not.toHaveProperty('agent.greeting')
+    expect(sent[1]?.restoredMessages).toBe(2)
+  })
+
+  it('notes that the session is already connecting when recording starts after AgentProvider started it', () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const log = createSessionLog()
+    recordSession(fakeSession('connecting').session, { config, page: '/', agentSpeaking: () => false, log })
+
+    expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted', 'Connecting'])
   })
 
   it('records every Deepgram message the SDK passes on, as it came', () => {
@@ -134,7 +191,7 @@ describe('recordSession', () => {
     vi.spyOn(console, 'debug').mockImplementation(() => {})
     const log = createSessionLog()
     const { emitter, session } = fakeSession('idle')
-    const options = { settings, page: '/', agentSpeaking: () => false, log }
+    const options = { config, page: '/', agentSpeaking: () => false, log }
     recordSession(session, options)()
     recordSession(session, options)
     emitter.emit('connecting')
@@ -145,12 +202,63 @@ describe('recordSession', () => {
     expect(log.entries().at(-1)).toMatchObject({ session: 2, type: 'SessionStarted' })
   })
 
+  it('notes that a session is already connecting only once, however often React subscribes', () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const log = createSessionLog()
+    const { session } = fakeSession('connecting')
+    const options = { config, page: '/', agentSpeaking: () => false, log }
+    recordSession(session, options)()
+    recordSession(session, options)
+
+    expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted', 'Connecting'])
+  })
+
   it('waits for no hang-up when the session is already closed', () => {
     const log = createSessionLog()
     const { emitter, session } = fakeSession('disconnected')
-    recordSession(session, { settings, page: '/', agentSpeaking: () => false, log })()
+    recordSession(session, { config, page: '/', agentSpeaking: () => false, log })()
 
     expect(emitter.eventNames()).toEqual([])
+  })
+})
+
+describe('settingsPayload', () => {
+  it('is what the SDK sends on a first connect: the audio format, and the agent as configured', () => {
+    expect(settingsPayload(config, [])).toEqual(firstSettings)
+    expect(settingsPayload(config, []).agent).toBe(settings)
+  })
+
+  it('carries the audio formats, experimental flag and tags from the config, in the names Deepgram uses', () => {
+    const payload = settingsPayload(
+      {
+        ...config,
+        audio: { input: { encoding: 'mulaw', sampleRate: 8_000 }, output: { encoding: 'linear16', sampleRate: 24_000 } },
+        experimental: true,
+        tags: ['pizza'],
+      },
+      [],
+    )
+    expect(payload).toEqual({
+      ...firstSettings,
+      experimental: true,
+      tags: ['pizza'],
+      audio: { input: { encoding: 'mulaw', sample_rate: 8_000 }, output: { encoding: 'linear16', sample_rate: 24_000 } },
+    })
+  })
+
+  it('restores the conversation so far after a reconnect, after any context of its own, and leaves out the greeting', () => {
+    const history: ContextMessage[] = [{ type: 'History', role: 'assistant', content: GREETING }]
+    const earlier: ContextMessage = { type: 'History', role: 'user', content: 'Earlier.' }
+    const payload = settingsPayload({ ...config, agent: { ...settings, context: { messages: [earlier] } } }, history)
+
+    expect(payload.agent).toEqual({ ...settings, greeting: undefined, context: { messages: [earlier, ...history] } })
+    // The greeting is in the history: saying it again would greet the customer twice.
+    expect(JSON.parse(JSON.stringify(payload))).not.toHaveProperty('agent.greeting')
+  })
+
+  it("leaves an agent id as it is: there's no context to restore it into", () => {
+    const history: ContextMessage[] = [{ type: 'History', role: 'assistant', content: 'Hi!' }]
+    expect(settingsPayload({ ...config, agent: 'agent-uuid' }, history).agent).toBe('agent-uuid')
   })
 })
 

@@ -15,7 +15,9 @@
 // at all: nothing connects, and nothing asks for the microphone, until a press.
 //
 // In development, every session is also recorded in the session log that
-// /dev/tools shows (src/dev/SessionRecorder.tsx and recordSession.ts).
+// /dev/tools shows. Its recorder (src/dev/SessionRecorder.tsx) sits next to the
+// talk button, where it sees each session start and end, and gets the live
+// session's AgentSession handed up from inside its provider.
 
 import {
   createContext,
@@ -54,11 +56,19 @@ import {
 import { TalkButton } from './TalkButton'
 
 // Dev only: the session log's recorder. `import.meta.env.DEV` is `false` in a
-// production build, so Vite drops both branches, and the log's code with them.
-const SessionRecorder = import.meta.env.DEV ? lazy(() => import('../dev/SessionRecorder')) : null
-const recordSessionEnd = import.meta.env.DEV
-  ? (state: SessionState) => void import('../dev/recordSession').then((recorder) => recorder.recordSessionEnd(state))
+// production build, so Vite drops the import, and the log's code with it. If
+// the recorder fails to load, voice works on without it.
+const SessionRecorder = import.meta.env.DEV
+  ? lazy(() =>
+      import('../dev/SessionRecorder').catch((error: unknown) => {
+        console.warn("The voice session log's recorder didn't load:", error)
+        return { default: () => null }
+      }),
+    )
   : null
+
+/** A live session's AgentSession, and the config its AgentProvider made it from. */
+export type LiveAgent = { session: ReturnType<typeof useAgentSession>; config: AgentSessionConfig }
 
 type VoiceSessionContextValue = { state: SessionState; send: (event: SessionEvent) => void }
 
@@ -84,18 +94,15 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
  */
 export function VoiceSession() {
   const voice = useContext(VoiceSessionContext)
+  // The live session's AgentSession, for code outside its provider: the session log, in development.
+  const [live, setLive] = useState<LiveAgent | null>(null)
   if (!voice) throw new Error('VoiceSession needs a <VoiceSessionProvider> above it.')
   const { state, send } = voice
-
-  // Dev only: notes in the session log how each session ended.
-  useEffect(() => {
-    recordSessionEnd?.(state)
-  }, [state])
 
   return (
     <div className="voice">
       {isLive(state) && (
-        <DeepgramSession key={state.sessionNumber} sessionNumber={state.sessionNumber} send={send} />
+        <DeepgramSession key={state.sessionNumber} sessionNumber={state.sessionNumber} send={send} onLive={setLive} />
       )}
       {/* After the session, so it keeps its place (and its focus) as sessions come and go. */}
       <TalkButton
@@ -103,6 +110,11 @@ export function VoiceSession() {
         message={state.status === 'error' ? state.message : undefined}
         onPress={() => send({ type: 'pressed' })}
       />
+      {SessionRecorder && (
+        <Suspense fallback={null}>
+          <SessionRecorder state={state} live={live} />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -110,10 +122,12 @@ export function VoiceSession() {
 type DeepgramSessionProps = {
   sessionNumber: number
   send: (event: SessionEvent) => void
+  /** Hears about the session's AgentSession once its provider has made it, and `null` once it's gone. */
+  onLive: (live: LiveAgent | null) => void
 }
 
 /** One session's Deepgram connection: connects on mount, hangs up on unmount. */
-function DeepgramSession({ sessionNumber, send: sendToPage }: DeepgramSessionProps) {
+function DeepgramSession({ sessionNumber, send: sendToPage, onLive }: DeepgramSessionProps) {
   const send = useCallback(
     (event: LiveEvent) => sendToPage({ ...event, sessionNumber }),
     [sendToPage, sessionNumber],
@@ -127,27 +141,22 @@ function DeepgramSession({ sessionNumber, send: sendToPage }: DeepgramSessionPro
   }))
 
   return (
-    // In development, holds the session back until the recorder's code has
-    // loaded, so the log has the session from its first event.
-    <Suspense fallback={null}>
-      <AgentProvider
-        config={config}
-        autoStart
-        onSdkError={(error) => {
-          console.warn('Deepgram voice SDK error:', error)
-          send({ type: 'sdkError', error })
-        }}
-        onError={({ code, description }) => {
-          console.error(`Deepgram voice agent error ${code}: ${description}`)
-          send({ type: 'agentError' })
-        }}
-        onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
-      >
-        <SessionEvents send={send} />
-        {SessionRecorder && <SessionRecorder settings={config.agent} />}
-        <Captions />
-      </AgentProvider>
-    </Suspense>
+    <AgentProvider
+      config={config}
+      autoStart
+      onSdkError={(error) => {
+        console.warn('Deepgram voice SDK error:', error)
+        send({ type: 'sdkError', error })
+      }}
+      onError={({ code, description }) => {
+        console.error(`Deepgram voice agent error ${code}: ${description}`)
+        send({ type: 'agentError' })
+      }}
+      onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
+    >
+      <SessionEvents config={config} send={send} onLive={onLive} />
+      <Captions />
+    </AgentProvider>
   )
 }
 
@@ -163,17 +172,28 @@ async function fetchToken(send: (event: LiveEvent) => void): Promise<string> {
   throw new Error(`No voice token: ${result.message}`)
 }
 
+type SessionEventsProps = {
+  config: AgentSessionConfig
+  send: (event: LiveEvent) => void
+  onLive: (live: LiveAgent | null) => void
+}
+
 /**
- * Sends the live session's changes as events: the connection and the agent's
- * mode, the settings, the microphone, the customer starting and finishing a
- * turn, a disconnect, the customer leaving the page, and a minute with no
- * speech.
+ * Hands the live session up to VoiceSession (`onLive`), and sends its changes
+ * as events: the connection and the agent's mode, the settings, the
+ * microphone, the customer starting and finishing a turn, a disconnect, the
+ * customer leaving the page, and a minute with no speech.
  */
-function SessionEvents({ send }: { send: (event: LiveEvent) => void }) {
+function SessionEvents({ config, send, onLive }: SessionEventsProps) {
   const agentSession = useAgentSession()
   const { state, stop } = useAgentState()
   const { mode } = useAgentMode()
   const { micActive } = useAgentMicrophone()
+
+  useEffect(() => {
+    onLive({ session: agentSession, config })
+    return () => onLive(null)
+  }, [agentSession, config, onLive])
 
   useEffect(() => send({ type: 'agentChanged', state, mode }), [state, mode, send])
 

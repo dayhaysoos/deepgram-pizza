@@ -1,14 +1,21 @@
 // The dev tools panel's Session log: every voice session since the log was
 // cleared, as readable lines (who said what, and when, plus what else
-// happened), with buttons to copy it as text or JSON and to clear it. It
-// follows the newest line while you talk, unless you've scrolled up to read.
+// happened), with buttons to copy it as text or JSON and to clear it. Opening
+// the panel shows the newest line, and it follows new lines while you talk,
+// unless you've scrolled up to read. Sessions from other tabs show up too.
 //
 // Dev only, like the rest of the panel (ToolsPanel.tsx).
 
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { formatJson, formatText, readableLog, sectionHeading, sessionLog, type LogEntry } from './sessionLog'
-
-const NO_ENTRIES: readonly LogEntry[] = []
+import {
+  droppedNote,
+  formatJson,
+  formatText,
+  NO_ENTRIES,
+  readableLog,
+  sectionHeading,
+  sessionLog,
+} from './sessionLog'
 
 /** The server has no log: it renders the section empty, and the browser fills it in after hydration. */
 const serverEntries = () => NO_ENTRIES
@@ -16,17 +23,24 @@ const serverEntries = () => NO_ENTRIES
 /** How close to the bottom, in pixels, still counts as reading the newest line. */
 const FOLLOW_SLACK = 32
 
-export function SessionLogSection() {
+/** `open`: whether the panel is open, so the log is on screen. */
+export function SessionLogSection({ open }: { open: boolean }) {
   const entries = useSyncExternalStore(sessionLog.subscribe, sessionLog.entries, serverEntries)
   const sections = useMemo(() => readableLog(entries), [entries])
+  const dropped = droppedNote(entries)
   const [status, setStatus] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
   const following = useRef(true)
 
+  // Opening the panel goes to the newest line, and follows from there.
+  useLayoutEffect(() => {
+    if (open) following.current = true
+  }, [open])
+
   useLayoutEffect(() => {
     const box = scroller.current
-    if (box && following.current) box.scrollTop = box.scrollHeight
-  }, [entries])
+    if (open && box && following.current) box.scrollTop = box.scrollHeight
+  }, [entries, open])
 
   async function copy(format: 'text' | 'JSON') {
     if (entries.length === 0) {
@@ -84,6 +98,7 @@ export function SessionLogSection() {
             following.current = box.scrollHeight - box.scrollTop - box.clientHeight < FOLLOW_SLACK
           }}
         >
+          {dropped && <p className="session-log-dropped">{dropped}</p>}
           {sections.map((section) => (
             <section key={section.lines[0]?.seq ?? section.session}>
               <h4>{sectionHeading(section)}</h4>

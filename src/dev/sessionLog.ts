@@ -13,34 +13,50 @@
 //
 // Each entry is one of:
 // - server: a message from Deepgram, as it came (Welcome, ConversationText, …)
-// - client: a message the app sent (Settings)
+// - client: a message the app sent (the Settings, on every connect)
 // - app: something the app saw happen: the session started or ended, and the
 //   SDK's connection events and errors
 //
 // The log is append-only, kept in localStorage so it survives a reload or a
-// redirect, and capped at the newest MAX_ENTRIES until someone clears it.
+// redirect, and capped at the newest MAX_ENTRIES until someone clears it; the
+// readable log says how many older entries it dropped. Every tab on the site
+// shares it: a tab reads in what another tab recorded (on the `storage`
+// event), so it shows it and doesn't write over it.
 
-/** Who an entry came from. */
-export type Direction = 'server' | 'client' | 'app'
+/** What the app saw happen: an `app` entry's type. */
+export type AppEntryType =
+  | 'SessionStarted'
+  | 'Connecting'
+  | 'Connected'
+  | 'Reconnecting'
+  | 'Disconnected'
+  | 'SdkError'
+  | 'SessionEnded'
 
-export type LogEntry = {
-  /** Order across the whole log, from 1. */
-  seq: number
-  /** When the browser recorded it, as an ISO 8601 date. Deepgram's messages carry no time of their own. */
-  ts: string
+/** What a recorder passes in: the log adds `seq` and `ts`. */
+export type NewEntry = {
   /** The session it belongs to: 1 for the first since the log was cleared. */
   session: number
-  direction: Direction
-  /** A Deepgram message's own `type`, or what the app saw (SessionStarted, Connected, …). */
-  type: string
   /** A Deepgram message exactly as it came or went, or what the app saw. */
   payload: unknown
   /** UserStartedSpeaking only: the agent's voice was still playing, so this cut it off. */
   interruptsAgent?: true
-}
+  /** Settings only, when a reconnect sent them again: how many earlier messages they restored. */
+  restoredMessages?: number
+} & (
+  | { direction: 'server'; /** Deepgram's own `type` for the message. */ type: string }
+  // The only message the app records sending, for now. Step 5 adds the client
+  // tools' FunctionCallResponses.
+  | { direction: 'client'; type: 'Settings' }
+  | { direction: 'app'; type: AppEntryType }
+)
 
-/** What a recorder passes in: the log adds `seq` and `ts`. */
-export type NewEntry = Omit<LogEntry, 'seq' | 'ts'>
+export type LogEntry = NewEntry & {
+  /** Order across the whole log, from 1 after a clear. */
+  seq: number
+  /** When the browser recorded it, as an ISO 8601 date. Deepgram's messages carry no time of their own. */
+  ts: string
+}
 
 /** The part of localStorage the log uses. */
 export type LogStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
@@ -54,6 +70,8 @@ export type SessionLog = {
   /** Ends the session started last with a SessionEnded entry, unless it has already ended. */
   endSession: (details: Record<string, unknown>) => LogEntry | undefined
   clear: () => void
+  /** Reads the entries in again from storage, which another tab may have changed. */
+  reload: () => void
   /** Calls `listener` after every change. Returns the unsubscribe function. */
   subscribe: (listener: () => void) => () => void
 }
@@ -70,10 +88,11 @@ export const STORAGE_KEY = 'voice-session-log'
 /** A JSON Web Token, as Deepgram's short-lived tokens are. None belongs in the log. */
 const TOKEN_PATTERN = /eyJ[\w-]+\.[\w-]+\.[\w-]+/g
 
-const NO_ENTRIES: readonly LogEntry[] = []
+/** An empty log. One array, so `entries()` hands out the same one until something changes. */
+export const NO_ENTRIES: readonly LogEntry[] = []
 
 type Options = {
-  /** Where the log is kept. Called once, on first use; leave it out to keep the log in memory. */
+  /** Where the log is kept, read on first use and on every reload. Leave it out to keep the log in memory. */
   storage?: () => LogStorage | null | undefined
   limit?: number
   now?: () => Date
@@ -103,6 +122,10 @@ export function createSessionLog({ storage: getStorage, limit = MAX_ENTRIES, now
     return entries
   }
 
+  function notify() {
+    for (const listener of listeners) listener()
+  }
+
   function change(next: readonly LogEntry[]) {
     entries = next
     try {
@@ -111,7 +134,7 @@ export function createSessionLog({ storage: getStorage, limit = MAX_ENTRIES, now
     } catch {
       // Full or blocked: the entries stay in memory.
     }
-    for (const listener of listeners) listener()
+    notify()
   }
 
   function append(entry: NewEntry): LogEntry {
@@ -142,7 +165,13 @@ export function createSessionLog({ storage: getStorage, limit = MAX_ENTRIES, now
       return append({ session, direction: 'app', type: 'SessionEnded', payload: details })
     },
     clear() {
+      // Reading first finds the storage, so this clears it even when nothing has read the log yet.
+      current()
       change(NO_ENTRIES)
+    },
+    reload() {
+      entries = load()
+      notify()
     },
     subscribe(listener) {
       listeners.add(listener)
@@ -156,6 +185,13 @@ export const sessionLog: SessionLog = createSessionLog({
   storage: () => (typeof window === 'undefined' ? null : window.localStorage),
 })
 
+// Another tab changed the log (or cleared all of storage, when `key` is null).
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === STORAGE_KEY || event.key === null) sessionLog.reload()
+  })
+}
+
 /** A stored entry from an older version of this file, or another app on localhost, may not be one. */
 function isEntry(value: unknown): value is LogEntry {
   return typeof field(value, 'seq') === 'number' && typeof field(value, 'session') === 'number'
@@ -165,6 +201,22 @@ function isEntry(value: unknown): value is LogEntry {
 function withoutTokens(payload: unknown): unknown {
   const json = JSON.stringify(payload ?? {})
   return JSON.parse(json.replace(TOKEN_PATTERN, '[token removed]'))
+}
+
+/**
+ * How many of the oldest entries the log dropped to stay under its limit.
+ * Entries are numbered from 1 after a clear, so it's the first one's number, less one.
+ */
+export function droppedCount(entries: readonly LogEntry[]): number {
+  return (entries[0]?.seq ?? 1) - 1
+}
+
+/** `312 older entries were dropped; …`, or '' when none were. */
+export function droppedNote(entries: readonly LogEntry[]): string {
+  const dropped = droppedCount(entries)
+  if (dropped === 0) return ''
+  const count = dropped === 1 ? '1 older entry was' : `${dropped.toLocaleString('en-US')} older entries were`
+  return `${count} dropped; the log keeps the newest ${MAX_ENTRIES.toLocaleString('en-US')}.`
 }
 
 // Reading it back
@@ -227,11 +279,16 @@ export function sectionHeading({ session, date, requestIds }: LogSection): strin
   return `Session ${session} · ${date} · ${ids}`
 }
 
-/** The whole log as plain text: a heading per session, then its lines, `13:52:17.204  you: …`. */
+/**
+ * The whole log as plain text: a note first when older entries were dropped,
+ * then a heading per session and its lines, `13:52:17.204  you: …`.
+ */
 export function formatText(entries: readonly LogEntry[]): string {
-  return readableLog(entries)
-    .map((section) => [sectionHeading(section), ...section.lines.map(({ time, text }) => `${time}  ${text}`)].join('\n'))
-    .join('\n\n')
+  const sections = readableLog(entries).map((section) =>
+    [sectionHeading(section), ...section.lines.map(({ time, text }) => `${time}  ${text}`)].join('\n'),
+  )
+  const note = droppedNote(entries)
+  return (note ? [note, ...sections] : sections).join('\n\n')
 }
 
 /** The raw entries, for a bug report. */
@@ -239,17 +296,27 @@ export function formatJson(entries: readonly LogEntry[]): string {
   return JSON.stringify(entries, null, 2)
 }
 
-/** One entry in words. */
-export function describeEntry({ type, payload, direction, interruptsAgent }: LogEntry): {
-  kind: LineKind
-  text: string
-} {
-  const event = (words: string) => ({ kind: 'event' as const, text: words })
-  const problem = (words: string) => ({ kind: 'problem' as const, text: words })
-  const get = (key: string) => text(field(payload, key))
+type Description = { kind: LineKind; text: string }
 
+const event = (words: string): Description => ({ kind: 'event', text: words })
+const problem = (words: string): Description => ({ kind: 'problem', text: words })
+
+/** One entry in words. */
+export function describeEntry(entry: LogEntry): Description {
+  const get = (key: string) => text(field(entry.payload, key))
+  switch (entry.direction) {
+    case 'app':
+      return describeAppEntry(entry.type, get)
+    case 'client':
+      return event(describeSettings(entry))
+    case 'server':
+      return describeServerMessage(entry, get)
+  }
+}
+
+/** What the app saw, in words. */
+function describeAppEntry(type: AppEntryType, get: (key: string) => string): Description {
   switch (type) {
-    // What the app saw
     case 'SessionStarted':
       return event(get('page') ? `session started on ${get('page')}` : 'session started')
     case 'Connecting':
@@ -264,12 +331,12 @@ export function describeEntry({ type, payload, direction, interruptsAgent }: Log
       return problem(`SDK error: ${get('name')}: ${get('message')}`)
     case 'SessionEnded':
       return event(`session ended: ${get('reason')}${get('message') ? ` (“${get('message')}”)` : ''}`)
+  }
+}
 
-    // What the app sent
-    case 'Settings':
-      return event(`settings sent: ${describeSettings(field(payload, 'agent'))}`)
-
-    // What Deepgram sent
+/** A message from Deepgram, in words. */
+function describeServerMessage({ type, payload, interruptsAgent }: LogEntry, get: (key: string) => string): Description {
+  switch (type) {
     case 'Welcome':
       return event(`welcome: request_id ${get('request_id')}`)
     case 'SettingsApplied':
@@ -299,7 +366,7 @@ export function describeEntry({ type, payload, direction, interruptsAgent }: Log
       return event(`function call: ${calls.join('; ')}`)
     }
     case 'FunctionCallResponse':
-      return event(`function result${direction === 'client' ? ' sent' : ''}: ${get('name')} → ${get('content')}`)
+      return event(`function result: ${get('name')} → ${get('content')}`)
     case 'PromptUpdated':
     case 'ThinkUpdated':
     case 'SpeakUpdated':
@@ -319,23 +386,33 @@ export function describeEntry({ type, payload, direction, interruptsAgent }: Log
     case 'Warning':
       return problem(`warning: ${get('description')} (${get('code')})`)
     default:
-      return event(`${direction === 'client' ? 'sent ' : ''}${type} ${JSON.stringify(payload)}`)
+      return event(`${type} ${JSON.stringify(payload)}`)
   }
 }
 
-/** The Settings' models and prompt length, without the prompt: `listen deepgram flux-general-en · …`. */
-function describeSettings(agent: unknown): string {
-  if (typeof agent === 'string') return `agent ${agent}`
+/**
+ * The Settings' models and prompt length, without the prompt:
+ * `settings sent: listen deepgram flux-general-en · …`, and after a reconnect,
+ * how many earlier messages they restored.
+ */
+function describeSettings({ payload, restoredMessages }: LogEntry): string {
+  const agent = field(payload, 'agent')
   const think = list(field(agent, 'think'))
   const prompt = text(field(think[0], 'prompt'))
   const functions = list(field(think[0], 'functions')).length
-  return [
-    `listen ${describeProviders(field(agent, 'listen'))}`,
-    `think ${describeProviders(think)}`,
-    `speak ${describeProviders(field(agent, 'speak'))}`,
-    `prompt ${prompt.length.toLocaleString('en-US')} characters`,
-    ...(functions > 0 ? [`${functions} functions`] : []),
-  ].join(' · ')
+  const summary =
+    typeof agent === 'string'
+      ? `agent ${agent}`
+      : [
+          `listen ${describeProviders(field(agent, 'listen'))}`,
+          `think ${describeProviders(think)}`,
+          `speak ${describeProviders(field(agent, 'speak'))}`,
+          `prompt ${prompt.length.toLocaleString('en-US')} characters`,
+          ...(functions > 0 ? [`${functions} functions`] : []),
+        ].join(' · ')
+  if (restoredMessages === undefined) return `settings sent: ${summary}`
+  const restored = `${restoredMessages} earlier ${restoredMessages === 1 ? 'message' : 'messages'} restored`
+  return `settings re-sent after reconnect, ${restored}: ${summary}`
 }
 
 /** `deepgram flux-general-en`, or each of a fallback list's providers. */
@@ -359,17 +436,20 @@ function describeLatencies(payload: unknown, names: string[]): string {
     .join(', ')
 }
 
+/** `7` as `07`, or as `007` with a length of 3. */
+function pad(value: number, length = 2): string {
+  return String(value).padStart(length, '0')
+}
+
 /** `13:52:17.204`, in the browser's time zone. */
 export function formatTime(ts: string): string {
   const date = new Date(ts)
-  const pad = (value: number, length = 2) => String(value).padStart(length, '0')
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
 /** `2026-11-10`, in the browser's time zone. */
 function formatDate(ts: string): string {
   const date = new Date(ts)
-  const pad = (value: number) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 

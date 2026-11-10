@@ -1,15 +1,19 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { summarizeCart } from '../agent/cartSummary'
 import { agentInstructions } from '../agent/instructions'
 import { agentSettings } from '../voice/agentSettings'
 import {
   createSessionLog,
+  describeEntry,
+  droppedCount,
   formatJson,
   formatText,
   readableLog,
   STORAGE_KEY,
+  type AppEntryType,
   type LogEntry,
   type LogStorage,
+  type NewEntry,
 } from './sessionLog'
 
 /** A clock that starts at 13:52:17.204 local time on 2026-11-10 and moves 1 ms per reading. */
@@ -104,6 +108,21 @@ describe('the session log', () => {
 
     expect(log.entries().map((entry) => entry.type)).toEqual(['A', 'B', 'C'])
     expect(log.entries()[0]?.seq).toBe(2)
+    expect(droppedCount(log.entries())).toBe(1)
+  })
+
+  it('counts the entries it dropped, across a reload, until it is cleared', () => {
+    const storage = memoryStorage()
+    const log = createSessionLog({ storage: () => storage, limit: 3 })
+    const session = log.startSession()
+    for (const type of ['A', 'B', 'C', 'D']) log.append({ session, direction: 'server', type, payload: { type } })
+    expect(droppedCount(log.entries())).toBe(2)
+    expect(droppedCount(createSessionLog({ storage: () => storage, limit: 3 }).entries())).toBe(2)
+
+    log.clear()
+    log.startSession()
+    expect(droppedCount(log.entries())).toBe(0)
+    expect(droppedCount([])).toBe(0)
   })
 
   it('takes out anything shaped like a token', () => {
@@ -162,6 +181,35 @@ describe('the session log', () => {
       expect(unavailable.startSession()).toBe(1)
     })
 
+    it("reads in what another tab recorded, so it shows it and doesn't write over it", () => {
+      const storage = memoryStorage()
+      const thisTab = createSessionLog({ storage: () => storage })
+      const otherTab = createSessionLog({ storage: () => storage })
+      thisTab.startSession({ page: '/' })
+      otherTab.entries()
+
+      thisTab.append({ session: 1, direction: 'app', type: 'Connected', payload: {} })
+      otherTab.reload()
+      expect(otherTab.entries()).toEqual(thisTab.entries())
+
+      expect(otherTab.startSession({ page: '/dev/tools' })).toBe(2)
+      thisTab.reload()
+      expect(thisTab.entries().map(({ seq, session, type }) => `${seq} ${session} ${type}`)).toEqual([
+        '1 1 SessionStarted',
+        '2 1 Connected',
+        '3 2 SessionStarted',
+      ])
+      expect(createSessionLog({ storage: () => storage }).entries()).toEqual(thisTab.entries())
+    })
+
+    it('reads in a clear from another tab', () => {
+      const storage = memoryStorage()
+      const thisTab = recordConversation(createSessionLog({ storage: () => storage }))
+      createSessionLog({ storage: () => storage }).clear()
+      thisTab.reload()
+      expect(thisTab.entries()).toEqual([])
+    })
+
     it('clears storage too', () => {
       const storage = memoryStorage()
       const log = recordConversation(createSessionLog({ storage: () => storage }))
@@ -186,6 +234,20 @@ describe('the session log', () => {
       unsubscribe()
       log.startSession()
       expect(listener).toHaveBeenCalledTimes(3)
+    })
+
+    it('tells listeners when it reloads, with a new list of entries', () => {
+      const storage = memoryStorage()
+      const log = createSessionLog({ storage: () => storage })
+      const before = log.entries()
+      const listener = vi.fn()
+      log.subscribe(listener)
+
+      createSessionLog({ storage: () => storage }).startSession()
+      log.reload()
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(log.entries()).not.toBe(before)
+      expect(log.entries()).toHaveLength(1)
     })
 
     it('hands out the same entries until something changes, as useSyncExternalStore needs', () => {
@@ -294,6 +356,69 @@ describe('the readable log', () => {
     const log = createSessionLog({ now: clock() })
     log.append({ session: 1, direction: 'server', type: 'Mystery', payload: { type: 'Mystery', n: 1 } })
     expect(formatText(log.entries())).toContain('Mystery {"type":"Mystery","n":1}')
+  })
+
+  it('has words for everything the app records', () => {
+    const lines: Array<[AppEntryType, Record<string, unknown>, string]> = [
+      ['SessionStarted', { page: '/' }, 'session started on /'],
+      ['Connecting', {}, 'connecting'],
+      ['Connected', {}, 'connected'],
+      ['Reconnecting', { attempt: 2, delayMs: 1012 }, 'reconnecting (attempt 2, in 1012 ms)'],
+      ['Disconnected', { reason: 'socket closed: 1006' }, 'disconnected: socket closed: 1006'],
+      ['SdkError', { name: 'NotAllowedError', message: 'Permission denied' }, 'SDK error: NotAllowedError: Permission denied'],
+      [
+        'SessionEnded',
+        { endedBy: 'sdkError', reason: 'microphone or connection error', message: 'Allow the microphone.' },
+        'session ended: microphone or connection error (“Allow the microphone.”)',
+      ],
+    ]
+    for (const [type, payload, text] of lines) {
+      const entry: LogEntry = { seq: 1, ts: '2026-11-10T13:52:17.204Z', session: 1, direction: 'app', type, payload }
+      expect(describeEntry(entry).text).toBe(text)
+    }
+  })
+
+  it('takes only the app entry types it has words for, so a typo fails typecheck', () => {
+    expectTypeOf<{ session: 1; direction: 'app'; type: 'Connected'; payload: object }>().toExtend<NewEntry>()
+    expectTypeOf<{ session: 1; direction: 'app'; type: 'Conected'; payload: object }>().not.toExtend<NewEntry>()
+    // Deepgram's messages keep whatever type they came with.
+    expectTypeOf<{ session: 1; direction: 'server'; type: 'Mystery'; payload: object }>().toExtend<NewEntry>()
+  })
+
+  it('says when the settings were sent again after a reconnect, and how many earlier messages they restored', () => {
+    const log = createSessionLog({ now: clock() })
+    const resent = (restoredMessages: number) =>
+      log.append({
+        session: 1,
+        direction: 'client',
+        type: 'Settings',
+        payload: { type: 'Settings', agent: settings },
+        restoredMessages,
+      })
+    resent(4)
+    resent(1)
+    resent(0)
+
+    const summary = `listen deepgram flux-general-en · think open_ai gpt-4.1-mini · speak deepgram flux-cole-en · prompt ${prompt.length.toLocaleString('en-US')} characters`
+    expect(formatText(log.entries()).split('\n').slice(1)).toEqual([
+      `13:52:17.204  settings re-sent after reconnect, 4 earlier messages restored: ${summary}`,
+      `13:52:17.205  settings re-sent after reconnect, 1 earlier message restored: ${summary}`,
+      `13:52:17.206  settings re-sent after reconnect, 0 earlier messages restored: ${summary}`,
+    ])
+  })
+
+  it('says first when older entries were dropped', () => {
+    const log = createSessionLog({ now: clock(), limit: 3 })
+    const session = log.startSession()
+    for (const type of ['A', 'B', 'C']) log.append({ session, direction: 'server', type, payload: { type } })
+
+    expect(formatText(log.entries()).split('\n').slice(0, 3)).toEqual([
+      '1 older entry was dropped; the log keeps the newest 5,000.',
+      '',
+      'Session 1 · 2026-11-10 · no request_id yet',
+    ])
+    log.append({ session, direction: 'server', type: 'D', payload: { type: 'D' } })
+    expect(formatText(log.entries())).toMatch(/^2 older entries were dropped; the log keeps the newest 5,000\.\n\n/)
   })
 
   it('is empty with no entries', () => {
