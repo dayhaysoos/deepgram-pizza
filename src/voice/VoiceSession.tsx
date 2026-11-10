@@ -53,7 +53,7 @@ import { activityLabel } from './AgentActivity'
 import { agentSettings } from './agentSettings'
 import { Captions } from './Captions'
 import { getDeepgramToken } from './getDeepgramToken'
-import { createIdleTimer, RESET_EVENTS, SPEECH_EVENTS, type IdleTimer } from './idleTimer'
+import { createIdleTimer, RESTART_EVENTS, type IdleTimer } from './idleTimer'
 import {
   isLive,
   NO_SESSION,
@@ -63,7 +63,7 @@ import {
   type SessionState,
 } from './sessionStatus'
 import { TalkButton } from './TalkButton'
-import { NO_TRANSCRIPT, sessionLines, updateTranscript, type ConversationUpdate, type TranscriptLine } from './transcript'
+import { NO_TRANSCRIPT, sessionLines, updateTranscript, type Transcript, type TranscriptLine } from './transcript'
 
 // Dev only: the session log's recorder. `import.meta.env.DEV` is `false` in a
 // production build, so Vite drops the import, and the log's code with it. If
@@ -159,7 +159,7 @@ type DeepgramSessionProps = {
   agentSpeaking: boolean
   send: (event: SessionEvent) => void
   /** Hears the session's conversation each time it changes, for the transcript. */
-  onConversation: (update: ConversationUpdate) => void
+  onConversation: (conversation: Transcript) => void
   /** Hears about the session's AgentSession once its provider has made it, and `null` once it's gone. */
   onLive?: (live: LiveAgent | null) => void
 }
@@ -171,7 +171,7 @@ function DeepgramSession({ sessionNumber, agentSpeaking, send: sendToPage, onCon
     [sendToPage, sessionNumber],
   )
   const keepConversation = useCallback(
-    (conversation: readonly TranscriptLine[]) => onConversation({ sessionNumber, conversation }),
+    (conversation: readonly TranscriptLine[]) => onConversation({ sessionNumber, lines: conversation }),
     [onConversation, sessionNumber],
   )
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
@@ -298,11 +298,10 @@ function SessionEvents({ config, agentSpeaking, send, keepConversation, onLive }
   useEffect(() => {
     const timer = createIdleTimer(() => send({ type: 'idle' }))
     idleTimer.current = timer
-    const events = [...SPEECH_EVENTS, ...RESET_EVENTS]
-    for (const event of events) agentSession.on(event, timer.restart)
+    for (const event of RESTART_EVENTS) agentSession.on(event, timer.restart)
     return () => {
       timer.stop()
-      for (const event of events) agentSession.off(event, timer.restart)
+      for (const event of RESTART_EVENTS) agentSession.off(event, timer.restart)
     }
   }, [agentSession, send])
 

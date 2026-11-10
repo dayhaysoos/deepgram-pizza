@@ -16,19 +16,16 @@ export type Transcript = { sessionNumber: number; lines: readonly TranscriptLine
 /** The page's first render: no session, no lines. */
 export const NO_TRANSCRIPT: Transcript = { sessionNumber: 0, lines: [] }
 
-/** Session number `sessionNumber`'s conversation, as its AgentProvider has it now. */
-export type ConversationUpdate = { sessionNumber: number; conversation: readonly TranscriptLine[] }
-
 /**
- * The transcript after `update`: a session's conversation replaces an earlier
- * session's, and the same session's newer one replaces it. An earlier
- * session's changes nothing. Returns `transcript` itself when nothing changes.
+ * The transcript after `next`, a session's conversation as its AgentProvider
+ * has it now: it replaces an earlier session's, and the same session's older
+ * one. An earlier session's changes nothing. Returns `transcript` itself when
+ * nothing changes.
  */
-export function updateTranscript(transcript: Transcript, update: ConversationUpdate): Transcript {
-  const { sessionNumber, conversation } = update
-  if (sessionNumber < transcript.sessionNumber) return transcript
-  if (sessionNumber === transcript.sessionNumber && conversation === transcript.lines) return transcript
-  return { sessionNumber, lines: conversation }
+export function updateTranscript(transcript: Transcript, next: Transcript): Transcript {
+  if (next.sessionNumber < transcript.sessionNumber) return transcript
+  if (next.sessionNumber === transcript.sessionNumber && next.lines === transcript.lines) return transcript
+  return next
 }
 
 /**

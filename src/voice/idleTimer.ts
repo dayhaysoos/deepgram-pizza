@@ -19,21 +19,18 @@ import type { AgentSessionEvents } from '@deepgram/react'
 export const IDLE_TIMEOUT_MS = 60_000
 
 /**
- * The Deepgram session events that count as speech: the customer starting to
- * speak, and either side's line arriving as text. The agent's voice counts
- * through `setAgentSpeaking`.
+ * The Deepgram session events that start the count again: speech (the
+ * customer starting to speak, and either side's line arriving as text; the
+ * agent's voice counts through `setAgentSpeaking`), and the connection
+ * dropping or coming back, since the time it was down isn't the customer's
+ * silence.
  */
-export const SPEECH_EVENTS = ['user-started-speaking', 'conversation-text'] as const satisfies ReadonlyArray<
-  keyof AgentSessionEvents
->
-
-/**
- * The Deepgram session events that mean the connection dropped or came back.
- * The time it was down isn't the customer's silence, so the count starts again.
- */
-export const RESET_EVENTS = ['reconnecting', 'settings-applied'] as const satisfies ReadonlyArray<
-  keyof AgentSessionEvents
->
+export const RESTART_EVENTS = [
+  'user-started-speaking',
+  'conversation-text',
+  'reconnecting',
+  'settings-applied',
+] as const satisfies ReadonlyArray<keyof AgentSessionEvents>
 
 export type IdleTimer = {
   /** Someone spoke, or the connection came back: the count starts again, unless the agent is speaking. */
