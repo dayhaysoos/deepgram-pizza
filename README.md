@@ -4,7 +4,7 @@ Talk to a pizza shop. A voice agent answers questions about the menu, suggests w
 
 Clone it to put voice ordering on your own shop: swap the menu, the photos and the agent's instructions.
 
-> Work in progress: the app is being built step by step. The menu, the cart and test mode checkout work by clicking today; voice lands next.
+> Work in progress: the app is being built step by step. The menu, the cart and test mode checkout work by clicking today. The voice agent's tools are built and can be tried without a microphone (see below); the voice session itself lands next.
 
 ## Stack
 
