@@ -6,18 +6,19 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import type { Suggestions } from './handlers'
 
-/** The suggestion card on screen. `key` is new for every card, so a replaced card starts fresh. */
-export type ShownSuggestion = { key: number; card: Suggestions }
+/** The suggestions on screen. `key` is new for every card, so a replaced card starts fresh. */
+export type ShownSuggestions = { key: number; suggestions: Suggestions }
 
 export type MenuUi = {
   /** Item ids of the highlighted menu cards, in the order find_menu_items found them. */
   highlighted: readonly string[]
-  suggestion: ShownSuggestion | null
+  /** What the suggestion card shows now, or null when it's closed. */
+  shown: ShownSuggestions | null
   /** Highlights these menu cards, replacing any highlighted before. */
   highlight(itemIds: readonly string[]): void
   clearHighlight(): void
   /** Opens the suggestion card, replacing any card already open. */
-  showSuggestions(card: Suggestions): void
+  showSuggestions(suggestions: Suggestions): void
   closeSuggestions(): void
 }
 
@@ -27,17 +28,17 @@ const MenuUiContext = createContext<MenuUi | null>(null)
 
 export function MenuUiProvider({ children }: { children: ReactNode }) {
   const [highlighted, setHighlighted] = useState(NONE)
-  const [suggestion, setSuggestion] = useState<ShownSuggestion | null>(null)
+  const [shown, setShown] = useState<ShownSuggestions | null>(null)
 
   // Created once, so the tool handlers can hold on to them for the page's lifetime.
   const [actions] = useState(() => ({
     highlight: (itemIds: readonly string[]) => setHighlighted(itemIds.length > 0 ? itemIds : NONE),
     clearHighlight: () => setHighlighted(NONE),
-    showSuggestions: (card: Suggestions) => setSuggestion((shown) => ({ key: (shown?.key ?? 0) + 1, card })),
-    closeSuggestions: () => setSuggestion(null),
+    showSuggestions: (suggestions: Suggestions) => setShown((before) => ({ key: (before?.key ?? 0) + 1, suggestions })),
+    closeSuggestions: () => setShown(null),
   }))
 
-  const value = useMemo(() => ({ highlighted, suggestion, ...actions }), [highlighted, suggestion, actions])
+  const value = useMemo(() => ({ highlighted, shown, ...actions }), [highlighted, shown, actions])
   return <MenuUiContext value={value}>{children}</MenuUiContext>
 }
 

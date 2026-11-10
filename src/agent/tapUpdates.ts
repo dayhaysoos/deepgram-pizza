@@ -11,7 +11,8 @@ import { describeLine, type CartChange, type CartSummary } from './cartSummary'
  * 1 × Fries. Total $46.97."
  *
  * The taps: add is Add on a menu card, or Add / Add all on the suggestion card;
- * quantity is − or + in the cart drawer, with the line's new quantity.
+ * quantity is − or + in the cart drawer, with the line's new quantity; remove
+ * is Remove in the cart drawer.
  */
 export function describeTapChange(change: CartChange, cartAfter: CartSummary): string {
   return `Customer ${describeChange(change)} by tapping. ${describeCart(cartAfter)}`

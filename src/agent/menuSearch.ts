@@ -33,7 +33,7 @@ export function searchMenu(filters: MenuFilters): Array<{ item: MenuItem; varian
 const MAX_CLOSE_MATCHES = 3
 
 /**
- * Up to three menu items that look most like `text` (an id the agent made
+ * Up to `MAX_CLOSE_MATCHES` menu items that look most like `text` (an id the agent made
  * up, such as "pepperoni-pizza-xl" or "margarita"), in menu order. Empty when
  * nothing is close.
  *

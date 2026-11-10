@@ -45,7 +45,7 @@ Run `pnpm dev` and open http://localhost:3000/dev/tools. It's the menu page with
 - **Suggestions:** what goes with the cheeseburger, a plan for a party of 20 on the suggestion card, then add all of that.
 - **Recovery:** calls the agent can get wrong, such as an item that isn't on the menu or a pizza without a size. Each answers with a message the agent can act on.
 
-When you change the cart by tapping (Add on a menu card, − or + in the cart, Add on the suggestion card), the panel logs the update a voice session would send the agent.
+When you change the cart by tapping (Add on a menu card, − or + or Remove in the cart, Add or Add all on the suggestion card), the panel logs the update a voice session would send the agent.
 
 The page is for development only. A production build leaves the panel out, and `/dev/tools` answers 404.
 

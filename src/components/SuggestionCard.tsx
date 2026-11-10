@@ -19,7 +19,7 @@ type SuggestionCardProps = {
 // stays usable behind it, and the conversation goes on. A new set of
 // suggestions replaces it.
 export function SuggestionCard({ returnFocusRef }: SuggestionCardProps) {
-  const { suggestion, closeSuggestions } = useMenuUi()
+  const { shown, closeSuggestions } = useMenuUi()
 
   function close() {
     closeSuggestions()
@@ -30,9 +30,9 @@ export function SuggestionCard({ returnFocusRef }: SuggestionCardProps) {
     <>
       {/* Always rendered: screen readers announce a change to a live region, not a new one. */}
       <p className="visually-hidden" role="status">
-        {suggestion ? `Suggestions: ${suggestion.card.title}` : ''}
+        {shown ? `Suggestions: ${shown.suggestions.title}` : ''}
       </p>
-      {suggestion && <SuggestionSheet key={suggestion.key} card={suggestion.card} onClose={close} />}
+      {shown && <SuggestionSheet key={shown.key} suggestions={shown.suggestions} onClose={close} />}
     </>
   )
 }
@@ -40,7 +40,7 @@ export function SuggestionCard({ returnFocusRef }: SuggestionCardProps) {
 /** One line on the card: an item, how many, and what they cost. */
 type SuggestedLine = Suggestions['lines'][number]
 
-function SuggestionSheet({ card, onClose }: { card: Suggestions; onClose: () => void }) {
+function SuggestionSheet({ suggestions, onClose }: { suggestions: Suggestions; onClose: () => void }) {
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
   const addItem = useShoppingCart((cart) => cart.addItem)
   const reportTap = useReportTap()
@@ -48,7 +48,8 @@ function SuggestionSheet({ card, onClose }: { card: Suggestions; onClose: () => 
   const titleId = useId()
 
   // Add and Add all check lines exactly as the add_items tool does: all or nothing,
-  // at most 20 per line counting the cart. Returns whether the lines went in.
+  // at most MAX_LINE_QUANTITY per line counting the cart. Returns whether the
+  // lines went in.
   function add(lines: SuggestedLine[]): boolean {
     const result = addLines({ addItem }, quantitiesOf(cartDetails), lines)
     if ('message' in result) {
@@ -62,21 +63,21 @@ function SuggestionSheet({ card, onClose }: { card: Suggestions; onClose: () => 
 
   // The card has done its job once everything on it is in the cart.
   function addAll() {
-    if (add(card.lines)) onClose()
+    if (add(suggestions.lines)) onClose()
   }
 
   return (
     <section className="suggestion-card" aria-labelledby={titleId}>
       <div className="suggestion-header">
-        <h2 id={titleId}>{card.title}</h2>
+        <h2 id={titleId}>{suggestions.title}</h2>
         <button type="button" className="icon-button" aria-label="Close suggestions" onClick={onClose}>
           ✕
         </button>
       </div>
-      {card.reason && <p className="suggestion-reason">{card.reason}</p>}
+      {suggestions.reason && <p className="suggestion-reason">{suggestions.reason}</p>}
 
       <ul className="suggestion-lines">
-        {card.lines.map((line) => (
+        {suggestions.lines.map((line) => (
           <li key={line.id} className="suggestion-line">
             <span className="suggestion-line-name">{describeLine(line)}</span>
             <span className="suggestion-line-total">{line.total}</span>
@@ -97,7 +98,7 @@ function SuggestionSheet({ card, onClose }: { card: Suggestions; onClose: () => 
       </p>
       <div className="suggestion-footer">
         <p className="suggestion-total">
-          <span>Total</span> <span>{card.total}</span>
+          <span>Total</span> <span>{suggestions.total}</span>
         </p>
         <button type="button" className="add-button" onClick={addAll}>
           Add all

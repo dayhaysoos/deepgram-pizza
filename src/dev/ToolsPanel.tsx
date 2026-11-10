@@ -255,7 +255,7 @@ export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
           <h3>Updates sent to the agent</h3>
           <p className="tools-panel-note">
             Would be sent to the agent with UpdatePrompt when a voice session is open (voice isn&apos;t built yet).
-            Tap Add on a menu card, − or + in the cart, or Add on the suggestion card.
+            Tap Add on a menu card, − or + or Remove in the cart, or Add or Add all on the suggestion card.
           </p>
           {updates.length === 0 ? (
             <p>None yet.</p>

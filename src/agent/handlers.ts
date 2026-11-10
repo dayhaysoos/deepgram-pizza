@@ -238,10 +238,10 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
 
 /**
  * Adds every line or none, to a cart that holds `inCart`. All lines are checked
- * first (on the menu, a size given, a good quantity, and at most 20 per line
- * counting what's in the cart), and lines with the same id are added up.
- * Returns the lines added and the cart after. add_items uses it, and so does
- * the suggestion card's Add all, so both behave the same.
+ * first (on the menu, a size given, a good quantity, and at most
+ * `MAX_LINE_QUANTITY` per line counting what's in the cart), and lines with the
+ * same id are added up. Returns the lines added and the cart after. add_items
+ * uses it, and so does the suggestion card's Add all, so both behave the same.
  */
 export function addLines(
   cart: Pick<CartPort, 'addItem'>,
