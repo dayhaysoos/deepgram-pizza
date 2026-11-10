@@ -55,10 +55,10 @@ Add a dependency outside this table only after asking.
 - The runtime is workerd, not Node. Before adding a package, check that it runs on Workers. `nodejs_compat` covers part of Node, not all of it.
 - Read secrets with `import { env } from "cloudflare:workers"` inside server functions.
 - Secrets: `DEEPGRAM_API_KEY` and `STRIPE_SECRET_KEY`. Locally they live in `.dev.vars`, which stays out of git. In production, set them with `wrangler secret put <KEY>`. Values go in neither `wrangler.jsonc` `vars` nor client code.
-- After changing bindings, run `wrangler types`. To check a deploy without publishing, run `pnpm build`, then `wrangler deploy --dry-run`. Leave out `--config`, because the plugin generates the deploy config.
+- To check a deploy without publishing, run `pnpm build`, then `wrangler deploy --dry-run`. Leave out `--config`, because the plugin generates the deploy config.
 - Before calling Stripe from a Worker, confirm how Stripe's current docs say to use their SDK on Workers.
 - `compatibility_date` can't be newer than what the workerd bundled with `@cloudflare/vite-plugin` supports; `pnpm dev` refuses to start otherwise. Bump it only together with the plugin.
-- `worker-configuration.d.ts` and `src/routeTree.gen.ts` are generated and committed, so `pnpm check` works on a fresh clone. After changing bindings or secrets in `wrangler.jsonc`, run `pnpm cf-typegen` and commit the result. Secret names are listed under `secrets.required` in `wrangler.jsonc` (names only).
+- `worker-configuration.d.ts` and `src/routeTree.gen.ts` are generated and committed, so `pnpm check` works on a fresh clone. After changing bindings or secrets in `wrangler.jsonc`, run `pnpm cf-typegen` (`wrangler types`) and commit the result. After adding or renaming a route, run `pnpm dev` or `pnpm build` once so the route tree regenerates, and commit it. Secret names are listed under `secrets.required` in `wrangler.jsonc` (names only).
 - `vite build` copies `.dev.vars` into `dist/server/`, so `dist/` must stay ignored.
 
 ## use-shopping-cart

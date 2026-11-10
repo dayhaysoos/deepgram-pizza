@@ -297,7 +297,7 @@ Record decisions made during the build here (voice settings, library choices, an
 - **Secret names are listed in `wrangler.jsonc` under `secrets.required`.** Names only, never values. `wrangler types` then gives the same output with or without `.dev.vars`, and deploy fails until both secrets are set.
 - **Generated files are committed** (`src/routeTree.gen.ts`, `worker-configuration.d.ts`), so `pnpm check` works on a fresh clone without running dev or `wrangler types` first.
 - **Vitest has its own `vitest.config.ts`** without the Cloudflare or Start plugins: tool handlers and other logic are tested as plain Node functions.
-- **Lint, typecheck and tests use ESLint, TypeScript and Vitest.** ESLint runs a flat config with `@eslint/js`, `typescript-eslint` and `eslint-plugin-react-hooks`. Step 1 requires all three checks and these are the TanStack and Vite defaults, but they sit outside the AGENTS.md stack table, so the owner should confirm them.
+- **Lint, typecheck and tests use ESLint, TypeScript and Vitest.** ESLint runs a flat config with `@eslint/js`, `typescript-eslint` and `eslint-plugin-react-hooks`. Step 1 requires all three checks and these are the TanStack and Vite defaults, but they sit outside the AGENTS.md stack table, so the owner should confirm them, together with `@types/node` (Node types for `nodejs_compat` code and config files) and `@vitejs/plugin-react` (required by TanStack Start's Vite setup).
 - **`observability.enabled: true` in `wrangler.jsonc`.** Workers logs are on so a deployed copy can be debugged from the dashboard; it's the Cloudflare template default.
 
 ## Open questions
