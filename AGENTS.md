@@ -83,6 +83,7 @@ The shop is fictional.
 - Once the app is scaffolded, `pnpm check` runs lint, typecheck and tests. Keep it passing, and wire every new kind of check into it.
 - Test tool handlers as plain functions: given a cart and arguments, assert the action called and the summary returned. That covers the logic voice can't exercise in a headless run.
 - Vitest runs in Node, which has no `cloudflare:workers`. A test that imports the route tree (or anything that reaches a server function) must `vi.mock('cloudflare:workers', () => ({ env: {} }))`, as `src/router.test.ts` does. Keep pure logic out of server-function files so most tests don't need the mock.
+- To check 360 px when the browser window can't be resized, load the page in a same-origin `<iframe src="/" style="width:360px;height:740px">`; media queries follow the frame's width. Stripe's hosted Checkout won't render inside a frame, so pay with the test card at desktop width and check our own pages (drawer, success, cancelled) in the frame.
 - Voice itself needs a human with a microphone. Run the golden path in a real browser, or say plainly that you couldn't and which steps are still unverified.
 
 ## Tooling
