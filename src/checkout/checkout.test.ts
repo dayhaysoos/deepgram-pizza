@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { products } from '../menu/menu'
+import { MAX_LINE_QUANTITY } from '../shop'
 import {
   CHECKOUT_UNAVAILABLE,
   checkoutCart,
@@ -112,19 +113,19 @@ describe('checkoutCart', () => {
     expect(stripe.calls).toEqual([])
   })
 
-  it.each([0, 21, 1.5, '2', -1, null, undefined])('names the product when its quantity is %j', async (quantity) => {
+  it.each([0, MAX_LINE_QUANTITY + 1, 1.5, '2', -1, null, undefined])('names the product when its quantity is %j', async (quantity) => {
     const stripe = fakeStripe()
 
     const result = await checkout({ cartDetails: { [first.id]: cartLine(first, quantity) } }, stripe)
 
     expect(result).toEqual({
-      message: `${first.name}: the quantity has to be a whole number from 1 to 20. Change it and try again.`,
+      message: `${first.name}: the quantity has to be a whole number from 1 to ${MAX_LINE_QUANTITY}. Change it and try again.`,
     })
     expect(stripe.calls).toEqual([])
   })
 
   it('accepts the largest quantity a line can hold', async () => {
-    const result = await checkout({ cartDetails: { [first.id]: cartLine(first, 20) } })
+    const result = await checkout({ cartDetails: { [first.id]: cartLine(first, MAX_LINE_QUANTITY) } })
 
     expect(result).toEqual({ url: SESSION_URL })
   })
@@ -133,7 +134,7 @@ describe('checkoutCart', () => {
     const result = await checkout({ cartDetails: { [first.id]: 3 } })
 
     expect(result).toEqual({
-      message: `${first.name}: the quantity has to be a whole number from 1 to 20. Change it and try again.`,
+      message: `${first.name}: the quantity has to be a whole number from 1 to ${MAX_LINE_QUANTITY}. Change it and try again.`,
     })
   })
 
