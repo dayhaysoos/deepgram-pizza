@@ -18,10 +18,20 @@ type ContextMessage = AgentSession['conversationHistory'][number]
 function fakeSession(state: AgentSession['state'] = 'connected') {
   const emitter = new EventEmitter()
   const conversationHistory: ContextMessage[] = []
+  // What the app sends through: the SDK's own methods, which go over the socket.
+  const updatePrompt = vi.fn<(prompt: string) => void>()
+  const sendFunctionCallResponse = vi.fn<(id: string | undefined, name: string, content: string) => void>()
   return {
     emitter,
     conversationHistory,
-    session: Object.assign(emitter, { state, conversationHistory }) as unknown as AgentSession,
+    updatePrompt,
+    sendFunctionCallResponse,
+    session: Object.assign(emitter, {
+      state,
+      conversationHistory,
+      updatePrompt,
+      sendFunctionCallResponse,
+    }) as unknown as AgentSession,
   }
 }
 
@@ -38,9 +48,9 @@ const firstSettings = {
 
 function setUp({ agentSpeaking = false } = {}) {
   const log = createSessionLog()
-  const { emitter, session, conversationHistory } = fakeSession()
-  const stop = recordSession(session, { config, page: '/dev/tools', agentSpeaking: () => agentSpeaking, log })
-  return { log, emitter, session, conversationHistory, stop }
+  const fake = fakeSession()
+  const stop = recordSession(fake.session, { config, page: '/dev/tools', agentSpeaking: () => agentSpeaking, log })
+  return { log, stop, ...fake }
 }
 
 afterEach(() => {
@@ -249,6 +259,70 @@ describe('recordSession', () => {
     expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted', 'Connecting'])
   })
 
+  it('records the prompt updates and tool results the app sends, as client entries, and still sends them', () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const { log, emitter, session, updatePrompt, sendFunctionCallResponse } = setUp()
+    emitter.emit('welcome', { type: 'Welcome', request_id: 'req-1' })
+    emitter.emit('settings-applied', { type: 'SettingsApplied' })
+
+    session.updatePrompt('Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.')
+    session.sendFunctionCallResponse('fc-1', 'view_cart', '{"count":1}')
+
+    expect(log.entries().slice(-2)).toMatchObject([
+      {
+        direction: 'client',
+        type: 'UpdatePrompt',
+        payload: { type: 'UpdatePrompt', prompt: 'Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.' },
+      },
+      {
+        direction: 'client',
+        type: 'FunctionCallResponse',
+        payload: { type: 'FunctionCallResponse', id: 'fc-1', name: 'view_cart', content: '{"count":1}' },
+      },
+    ])
+    expect(log.entries().at(-2)).not.toHaveProperty('afterSettings')
+    expect(updatePrompt).toHaveBeenCalledExactlyOnceWith(
+      'Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.',
+    )
+    expect(sendFunctionCallResponse).toHaveBeenCalledExactlyOnceWith('fc-1', 'view_cart', '{"count":1}')
+  })
+
+  it('records the newest prompt update where the SDK sends it: right after the settings are applied, on every connect', () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const { log, emitter, session } = setUp()
+    const updates = () =>
+      log
+        .entries()
+        .filter(({ type }) => type === 'UpdatePrompt' || type === 'SettingsApplied')
+        .map(({ type, payload, afterSettings }) =>
+          type === 'SettingsApplied' ? type : `${(payload as { prompt: string }).prompt}${afterSettings ? ' (after settings)' : ''}`,
+        )
+
+    // Before the settings are applied, the SDK keeps only the newest of each update, and sends it after them.
+    session.updatePrompt('first')
+    session.updatePrompt('second')
+    emitter.emit('welcome', { type: 'Welcome', request_id: 'req-1' })
+    emitter.emit('settings-applied', { type: 'SettingsApplied' })
+    session.updatePrompt('third')
+    // A reconnect sends the Settings again, then the newest update again.
+    emitter.emit('reconnecting', 1, 500)
+    emitter.emit('welcome', { type: 'Welcome', request_id: 'req-2' })
+    emitter.emit('settings-applied', { type: 'SettingsApplied' })
+
+    expect(updates()).toEqual(['SettingsApplied', 'second (after settings)', 'third', 'SettingsApplied', 'third (after settings)'])
+  })
+
+  it('puts the session\'s own methods back when stopped', () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const { log, session, stop, updatePrompt, sendFunctionCallResponse } = setUp()
+    stop()
+
+    expect(session.updatePrompt).toBe(updatePrompt)
+    expect(session.sendFunctionCallResponse).toBe(sendFunctionCallResponse)
+    session.updatePrompt('after')
+    expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted'])
+  })
+
   it('waits for no hang-up when the session is already closed', () => {
     const log = createSessionLog()
     const { emitter, session } = fakeSession('disconnected')
@@ -346,7 +420,17 @@ describe('recordSessionEnd', () => {
 
   it('has words for every end', () => {
     const log = createSessionLog()
-    const all: SessionEnd[] = ['pressed', 'pageHidden', 'idle', 'tokenFailed', 'sdkError', 'agentError', 'disconnected']
+    const all: SessionEnd[] = [
+      'pressed',
+      'pageHidden',
+      'idle',
+      'leaveRequested',
+      'leaveTimedOut',
+      'tokenFailed',
+      'sdkError',
+      'agentError',
+      'disconnected',
+    ]
     for (const endedBy of all) {
       log.startSession()
       recordSessionEnd({ status: 'error', sessionNumber: 1, endedBy, message: CONNECTION_LOST }, log)

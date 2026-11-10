@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { categories, products, tags } from '../menu/menu'
+import { categories, menu, products, tags } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
-import { MAX_LINES_PER_CALL, toolDefinitions, type ToolDefinition } from './tools'
+import { GROUP_MAINS, MAX_LINES_PER_CALL, toolDefinitions, type ToolDefinition } from './tools'
 
 function tool(name: string): ToolDefinition {
   const found = toolDefinitions.find((definition) => definition.name === name)
@@ -22,6 +22,7 @@ describe('toolDefinitions', () => {
     expect(toolDefinitions.map((definition) => definition.name)).toEqual([
       'find_menu_items',
       'show_suggestions',
+      'plan_group_order',
       'add_item',
       'add_items',
       'set_quantity',
@@ -88,6 +89,7 @@ describe('toolDefinitions', () => {
 
   it('requires what each tool needs', () => {
     expect(tool('show_suggestions').parameters.required).toEqual(['title', 'items'])
+    expect(tool('plan_group_order').parameters.required).toEqual(['people'])
     expect(tool('add_item').parameters.required).toEqual(['id', 'quantity'])
     expect(tool('add_items').parameters.required).toEqual(['items'])
     expect(tool('set_quantity').parameters.required).toEqual(['id', 'quantity'])
@@ -95,5 +97,18 @@ describe('toolDefinitions', () => {
     for (const name of ['view_cart', 'clear_cart', 'checkout']) {
       expect(tool(name).parameters).toEqual({ type: 'object', properties: {} })
     }
+  })
+
+  it('plans a group from how many people, how many are vegetarian, and only the preferences the customer gave', () => {
+    expect(property('plan_group_order', 'people')).toMatchObject({ type: 'integer', minimum: 1 })
+    expect(property('plan_group_order', 'vegetarians')).toMatchObject({ type: 'integer', minimum: 0 })
+    const preferences = property('plan_group_order', 'preferences')
+    expect(preferences.type).toBe('object')
+    expect(preferences.required).toBeUndefined()
+    expect(preferences.properties?.mains.enum).toEqual([...GROUP_MAINS])
+    expect(preferences.properties?.spicy.type).toBe('boolean')
+    expect(preferences.properties?.drinks.type).toBe('boolean')
+    // Items, not sizes: the planner picks the size.
+    expect(preferences.properties?.include.items?.enum).toEqual(menu.map((item) => item.id))
   })
 })

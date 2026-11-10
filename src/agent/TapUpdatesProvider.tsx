@@ -1,11 +1,13 @@
 // Telling the agent about cart changes the customer makes by tapping, so it
 // never answers from a stale cart (SPEC.md, "The agent always works from the
 // current cart"). Every tap that changes the cart calls `reportTap(change)`
-// right after its cart action. The update's text goes to the sink: nowhere by
-// default, to the agent while a voice session is open, or to a log in dev tools.
+// right after its cart action. The update's text goes to the agent while a
+// voice session is on (the session handle's `tell`, which does nothing
+// otherwise), and to the sink, which the dev tools panel provides to log it.
 
 import { createContext, useCallback, useContext, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
+import { useVoiceSession } from '../voice/VoiceSession'
 import { applyCartChange, quantitiesOf, summarizeCart, type CartChange } from './cartSummary'
 import { describeTapChange } from './tapUpdates'
 
@@ -13,8 +15,8 @@ import { describeTapChange } from './tapUpdates'
 export type TapUpdateSink = (text: string) => void
 
 /**
- * Where tap updates go. Provide one above `TapUpdatesProvider` to receive them;
- * with none, they go nowhere, since there's no agent to tell.
+ * Also hears each tap update, besides the voice session. Provide one above
+ * `TapUpdatesProvider` to see them; by default, nothing else hears them.
  */
 export const TapUpdateSinkContext = createContext<TapUpdateSink>(() => {})
 
@@ -23,11 +25,13 @@ type ReportTap = (change: CartChange) => void
 const ReportTapContext = createContext<ReportTap | null>(null)
 
 /**
- * Gives the components below `useReportTap()`. The cart is read here, once, so
- * menu cards that report a tap don't re-render on every cart change.
+ * Gives the components below `useReportTap()`. Goes inside
+ * `VoiceSessionProvider`. The cart is read here, once, so menu cards that
+ * report a tap don't re-render on every cart change.
  */
 export function TapUpdatesProvider({ children }: { children: ReactNode }) {
   const sink = useContext(TapUpdateSinkContext)
+  const voiceSession = useVoiceSession()
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
 
   const latest = useRef({ sink, cartDetails })
@@ -37,10 +41,16 @@ export function TapUpdatesProvider({ children }: { children: ReactNode }) {
 
   // The cart action that just ran shows up only after the next render, so the
   // cart here is the one from before the tap, and the change is applied to it.
-  const reportTap = useCallback<ReportTap>((change) => {
-    const { sink, cartDetails } = latest.current
-    sink(describeTapChange(change, summarizeCart(applyCartChange(quantitiesOf(cartDetails), change))))
-  }, [])
+  // Every update carries the whole cart: the SDK sends only the newest after a reconnect.
+  const reportTap = useCallback<ReportTap>(
+    (change) => {
+      const { sink, cartDetails } = latest.current
+      const text = describeTapChange(change, summarizeCart(applyCartChange(quantitiesOf(cartDetails), change)))
+      voiceSession.tell(text)
+      sink(text)
+    },
+    [voiceSession],
+  )
 
   return <ReportTapContext value={reportTap}>{children}</ReportTapContext>
 }

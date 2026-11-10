@@ -378,9 +378,26 @@ describe('the readable log', () => {
     }
   })
 
+  it('has words for every message the app sends', () => {
+    const log = createSessionLog({ now: clock() })
+    const client = (type: 'UpdatePrompt' | 'FunctionCallResponse', payload: Record<string, unknown>, afterSettings?: true) =>
+      log.append({ session: 1, direction: 'client', type, payload: { type, ...payload }, ...(afterSettings && { afterSettings }) })
+    client('FunctionCallResponse', { id: 'fc-1', name: 'add_item', content: '{"count":2,"total":"$41.98"}' })
+    client('UpdatePrompt', { prompt: 'Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.' })
+    client('UpdatePrompt', { prompt: 'Customer removed Fries by tapping. Cart is empty.' }, true)
+
+    expect(formatText(log.entries()).split('\n').slice(1)).toEqual([
+      '13:52:17.204  tool add_item → {"count":2,"total":"$41.98"}',
+      '13:52:17.205  told the agent: Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.',
+      '13:52:17.206  told the agent once the settings were applied: Customer removed Fries by tapping. Cart is empty.',
+    ])
+  })
+
   it('takes only the app entry types it has words for, so a typo fails typecheck', () => {
     expectTypeOf<{ session: 1; direction: 'app'; type: 'Connected'; payload: object }>().toExtend<NewEntry>()
     expectTypeOf<{ session: 1; direction: 'app'; type: 'Conected'; payload: object }>().not.toExtend<NewEntry>()
+    expectTypeOf<{ session: 1; direction: 'client'; type: 'UpdatePrompt'; payload: object }>().toExtend<NewEntry>()
+    expectTypeOf<{ session: 1; direction: 'client'; type: 'InjectUserMessage'; payload: object }>().not.toExtend<NewEntry>()
     // Deepgram's messages keep whatever type they came with.
     expectTypeOf<{ session: 1; direction: 'server'; type: 'Mystery'; payload: object }>().toExtend<NewEntry>()
   })

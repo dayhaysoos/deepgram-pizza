@@ -205,6 +205,63 @@ describe('updateSession', () => {
     })
   })
 
+  describe('leaving once the agent has spoken', () => {
+    const leave: LiveEvent = { type: 'leaveRequested' }
+    const timedOut: LiveEvent = { type: 'leaveTimedOut' }
+    const left: SessionState = { status: 'idle', sessionNumber: 1, endedBy: 'leaveRequested' }
+    // The checkout tool asks to leave while the agent waits for its result, before it says "Taking you to checkout".
+    const asked = [...started, customerFinishedSpeaking, { type: 'toolsRequested', names: ['checkout'] } as LiveEvent]
+
+    it('stays on while the agent works out its reply', () => {
+      expect(live(...asked, leave)).toMatchObject({ status: 'thinking', leaving: true })
+    })
+
+    it('ends once the reply after the request has finished playing', () => {
+      expect(live(...asked, leave, speaking)).toMatchObject({ status: 'speaking', leaving: true })
+      expect(live(...asked, leave, speaking, listening)).toEqual(left)
+    })
+
+    it('ends once the speech already playing has finished, when the agent was speaking', () => {
+      expect(live(...started, speaking, leave, listening)).toEqual(left)
+    })
+
+    it('ends when the customer cuts the reply off', () => {
+      expect(live(...asked, leave, speaking, customerStartedSpeaking)).toEqual(left)
+    })
+
+    it('waits for a reply when the customer speaks before the agent does', () => {
+      expect(live(...asked, leave, customerStartedSpeaking)).toMatchObject({ status: 'listening', leaving: true })
+    })
+
+    it('ends when the wait runs out, whatever the agent is doing', () => {
+      expect(live(...asked, leave, timedOut)).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'leaveTimedOut' })
+      expect(live(...asked, leave, speaking, timedOut)).toMatchObject({ status: 'idle', endedBy: 'leaveTimedOut' })
+    })
+
+    it("doesn't end a session that wasn't asked to leave", () => {
+      const on = live(...started, speaking)
+      expect(updateSession(on, fromSession1(listening))).toMatchObject({ status: 'listening' })
+      expect(updateSession(on, fromSession1(timedOut))).toBe(on)
+    })
+
+    it('keeps the same state when asked twice', () => {
+      const leaving = live(...asked, leave)
+      expect(updateSession(leaving, fromSession1(leave))).toBe(leaving)
+    })
+
+    it('changes nothing without a session, or for a session that was replaced', () => {
+      expect(updateSession(NO_SESSION, { type: 'leaveRequested', sessionNumber: 0 })).toBe(NO_SESSION)
+      const second = after(press, press, press, ...started.map((event) => ({ ...event, sessionNumber: 2 })))
+      expect(updateSession(second, fromSession1(leave))).toBe(second)
+      expect(updateSession(second, fromSession1(timedOut))).toBe(second)
+    })
+
+    it('starts the next session without the request', () => {
+      const next = updateSession(live(...asked, leave, speaking, listening), press)
+      expect(next).not.toHaveProperty('leaving')
+    })
+  })
+
   describe('ending a session', () => {
     it('ends without a message when the customer leaves the page', () => {
       expect(live(...started, { type: 'pageHidden' })).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'pageHidden' })

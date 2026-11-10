@@ -53,6 +53,8 @@ Add a dependency outside this table only after asking.
 - Deepgram doesn't send `AgentStartedSpeaking` any more, and sent no `AgentThinking` in our sessions, though `@deepgram/agents` still lists both events. Know the agent is speaking from the SDK's mode (it follows the audio), and check the session log on `/dev/tools` for which messages actually arrive before relying on one.
 - In development every session is recorded in the session log on `/dev/tools` (`src/dev/`): what was said, and every Deepgram message but the audio. Read it, or copy it as text or JSON, when checking or reporting voice behaviour. Code that records it loads only behind `import.meta.env.DEV`.
 - In development TanStack Start renders the app inside `<StrictMode>`, so effects mount, unmount and mount again. An effect that starts something once (a connection, a log section) has to survive that.
+- In `pnpm dev`, saving a file the page's providers import (`src/agent/` handlers or tools, say) can hot-update a provider before the components that read its context, so React throws "useToolHandlers needs a <ToolHandlersProvider> above it" and rebuilds the page from scratch, which ends any voice session. Press the talk button again after editing; if a fake microphone's stream was stopped with the old session, hand the new session a fresh one.
+- Taps reach the agent through `useVoiceSession().tell(text)` (an `UpdatePrompt`), and voice checkout leaves through `leaveAfterSpeaking()`; both are safe without a session. The agent's tools are registered generically from `toolDefinitions` (`src/voice/ClientTools.tsx`), so a new tool needs its definition, its handler and an activity label (`TOOL_ACTIVITY`), nothing in the voice wiring.
 
 ## Cloudflare Workers
 

@@ -78,13 +78,17 @@ const SPEC_DRAFT_RULES = [
   '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.',
   '- When you suggest specific items, call show_suggestions so they appear on screen, and keep your spoken answer short: the screen shows the details.',
   '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.',
-  "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. Show the plan with show_suggestions, say the total, and add it with add_items only after they agree.",
+  '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. To change the plan ("swap a pepperoni for a margherita"), call show_suggestions with the changed lines. Add it with add_items only after they agree.',
   '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.',
   "- If asked about something not on the menu, say you don't have it and offer the closest thing you do have.",
   '- If the conversation goes off topic, answer in one friendly line and steer back to the order.',
   "- The customer can also change the cart by tapping. Before answering anything about what's in the cart or the total, call view_cart and answer from its result.",
   '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm.',
 ]
+
+// The group rule for a session without plan_group_order: the agent plans from serves itself.
+const GROUP_RULE_WITHOUT_PLANNER =
+  "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. Show the plan with show_suggestions, say the total, and add it with add_items only after they agree."
 
 const NO_STALLS_WITH_TOOLS =
   '- Never end a reply by promising to do something later ("give me a sec", "let me check"). Either do it now with a tool, or answer now.'
@@ -150,7 +154,14 @@ Conversation started. Cart: empty.`)
   })
 
   it('names exactly the tools the SPEC draft names when it has them all', () => {
-    expect(toolsNamedIn(fullPrompt)).toEqual(['find_menu_items', 'show_suggestions', 'add_items', 'view_cart', 'checkout'])
+    expect(toolsNamedIn(fullPrompt)).toEqual([
+      'find_menu_items',
+      'show_suggestions',
+      'plan_group_order',
+      'add_items',
+      'view_cart',
+      'checkout',
+    ])
   })
 
   it.each(toolNames)('mentions %s only when the session has it', (name) => {
@@ -165,7 +176,8 @@ Conversation started. Cart: empty.`)
     expect(rulesOf(agentInstructions(emptyCart, allBut('find_menu_items')))).not.toContain(rule(3))
     expect(rulesOf(agentInstructions(emptyCart, only('show_suggestions')))).toContain(rule(4))
     expect(rulesOf(agentInstructions(emptyCart, allBut('show_suggestions')))).not.toContain(rule(4))
-    expect(rulesOf(agentInstructions(emptyCart, only('show_suggestions', 'add_items')))).toContain(rule(6))
+    expect(rulesOf(agentInstructions(emptyCart, only('plan_group_order', 'show_suggestions', 'add_items')))).toContain(rule(6))
+    expect(rulesOf(agentInstructions(emptyCart, allBut('plan_group_order')))).not.toContain(rule(6))
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart')))).toContain(rule(10))
     expect(rulesOf(agentInstructions(emptyCart, allBut('view_cart')))).not.toContain(rule(10))
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart', 'checkout')))).toContain(rule(11))
@@ -184,7 +196,22 @@ Conversation started. Cart: empty.`)
       "- You can't add, change or remove anything in the cart right now. If the customer asks, start by saying you can't do that yet, then tell them they can tap Add on the menu, all in one sentence. Never say you're adding, or that you did.",
     )
     expect(rules).toContain(
+      '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. To change the plan ("swap a pepperoni for a margherita"), call show_suggestions with the changed lines. Tell them they can add it by tapping Add all on the card.',
+    )
+    expect(rulesOf(agentInstructions(emptyCart, allBut('plan_group_order', ...CART_TOOLS)))).toContain(
       "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. Show the plan with show_suggestions, say the total, and tell them they can add it by tapping Add on the menu.",
+    )
+  })
+
+  it('with plan_group_order, leaves the math to the tool and asks for one short sentence; without it, keeps the rule from before', () => {
+    const groupRule = (tools: ToolDefinition[]) => rulesOf(agentInstructions(emptyCart, tools)).find((rule) => rule.startsWith('- For a group'))
+    expect(groupRule(toolDefinitions)).toBe(SPEC_DRAFT_RULES[6])
+    expect(groupRule(allBut('plan_group_order'))).toBe(GROUP_RULE_WITHOUT_PLANNER)
+    // The rest of the prompt doesn't change with it.
+    expect(agentInstructions(emptyCart, allBut('plan_group_order')).replace(GROUP_RULE_WITHOUT_PLANNER, SPEC_DRAFT_RULES[6])).toBe(fullPrompt)
+    // Each part follows its own tool.
+    expect(groupRule(only('plan_group_order'))).toBe(
+      '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. Tell them they can add it by tapping Add all on the card.',
     )
   })
 

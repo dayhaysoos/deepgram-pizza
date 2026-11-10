@@ -13,7 +13,9 @@
 //
 // Each entry is one of:
 // - server: a message from Deepgram, as it came (Welcome, ConversationText, …)
-// - client: a message the app sent (the Settings, on every connect)
+// - client: a message the app sent: the Settings on every connect, each prompt
+//   update (a tap update telling the agent about the cart), and each tool's
+//   answer (FunctionCallResponse)
 // - app: something the app saw happen: the session started or ended, and the
 //   SDK's connection events and errors
 //
@@ -33,6 +35,9 @@ export type AppEntryType =
   | 'SdkError'
   | 'SessionEnded'
 
+/** A message the app sends: a `client` entry's type. */
+export type ClientEntryType = 'Settings' | 'UpdatePrompt' | 'FunctionCallResponse'
+
 /** What a recorder passes in: the log adds `seq` and `ts`. */
 export type NewEntry = {
   /** The session it belongs to: 1 for the first since the log was cleared. */
@@ -43,11 +48,14 @@ export type NewEntry = {
   interruptsAgent?: true
   /** Settings only, when a reconnect sent them again: how many earlier messages they restored. */
   restoredMessages?: number
+  /**
+   * UpdatePrompt only: the SDK sent it right after the settings were applied,
+   * where it sends the newest prompt update on every connect, not when the app gave it.
+   */
+  afterSettings?: true
 } & (
   | { direction: 'server'; /** Deepgram's own `type` for the message. */ type: string }
-  // The only message the app records sending, for now. Step 5 adds the client
-  // tools' FunctionCallResponses.
-  | { direction: 'client'; type: 'Settings' }
+  | { direction: 'client'; type: ClientEntryType }
   | { direction: 'app'; type: AppEntryType }
 )
 
@@ -308,7 +316,7 @@ export function describeEntry(entry: LogEntry): Description {
     case 'app':
       return describeAppEntry(entry.type, get)
     case 'client':
-      return event(describeSettings(entry))
+      return event(describeClientMessage(entry, get))
     case 'server':
       return describeServerMessage(entry, get)
   }
@@ -387,6 +395,18 @@ function describeServerMessage({ type, payload, interruptsAgent }: LogEntry, get
       return problem(`warning: ${get('description')} (${get('code')})`)
     default:
       return event(`${type} ${JSON.stringify(payload)}`)
+  }
+}
+
+/** A message the app sent, in words. */
+function describeClientMessage(entry: LogEntry & { direction: 'client' }, get: (key: string) => string): string {
+  switch (entry.type) {
+    case 'Settings':
+      return describeSettings(entry)
+    case 'UpdatePrompt':
+      return `told the agent${entry.afterSettings ? ' once the settings were applied' : ''}: ${get('prompt')}`
+    case 'FunctionCallResponse':
+      return `tool ${get('name')} → ${get('content')}`
   }
 }
 

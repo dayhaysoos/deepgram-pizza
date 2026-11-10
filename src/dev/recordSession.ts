@@ -14,12 +14,17 @@
 //
 // What the SDK sends raises no event. It sends the Settings on every connect,
 // reconnects included, just before it passes Welcome on, so they're recorded
-// then, rebuilt the way it builds them (settingsPayload). A message the app
-// sends itself (UpdatePrompt, a FunctionCallResponse) needs recording where
-// it's sent, as a 'client' entry.
+// then, rebuilt the way it builds them (settingsPayload). The messages the app
+// sends go through two of the session's methods, updatePrompt (tap updates)
+// and sendFunctionCallResponse (AgentProvider answering a tool call), so the
+// recorder wraps them while it records, and puts them back after. A prompt
+// update goes over the wire only once the settings are applied; before that,
+// and after every reconnect, the SDK sends the newest one right after the
+// settings, so it's recorded there again.
 
 import type { AgentSessionConfig, AgentSessionEvents, ServerMessage, useAgentSession } from '@deepgram/react'
 import { IDLE_TIMEOUT_MS } from '../voice/idleTimer'
+import { LEAVE_CAP_MS } from '../voice/sessionHandle'
 import { isLive, type ErrorSummary, type SessionEnd, type SessionState } from '../voice/sessionStatus'
 import {
   describeEntry,
@@ -67,8 +72,36 @@ export function recordSession(
     record({ session: sessionNumber, direction: 'server', type: message.type, payload: message })
   const recordApp = (type: AppEntryType, payload: Record<string, unknown> = {}) =>
     record({ session: sessionNumber, direction: 'app', type, payload })
+  const recordPrompt = (prompt: string, afterSettings?: true) =>
+    record({
+      session: sessionNumber,
+      direction: 'client',
+      type: 'UpdatePrompt',
+      payload: { type: 'UpdatePrompt', prompt },
+      ...(afterSettings && { afterSettings }),
+    })
   /** Deepgram sends one Welcome per connection, so any after the first follow a reconnect. */
   let welcomes = 0
+  /** Whether this connection has its settings, so a prompt update goes out at once. */
+  let settingsApplied = false
+  /** The newest prompt update, which the SDK sends again right after the settings on every connect. */
+  let latestPrompt: string | undefined
+
+  const sends = { updatePrompt: session.updatePrompt, sendFunctionCallResponse: session.sendFunctionCallResponse }
+  session.updatePrompt = (prompt) => {
+    latestPrompt = prompt
+    if (settingsApplied) recordPrompt(prompt)
+    sends.updatePrompt.call(session, prompt)
+  }
+  session.sendFunctionCallResponse = (id, name, content) => {
+    record({
+      session: sessionNumber,
+      direction: 'client',
+      type: 'FunctionCallResponse',
+      payload: { type: 'FunctionCallResponse', id, name, content },
+    })
+    sends.sendFunctionCallResponse.call(session, id, name, content)
+  }
 
   /** Whether this session's end is in the log yet. */
   const ended = () => log.entries().some((entry) => entry.session === sessionNumber && entry.type === 'SessionEnded')
@@ -97,6 +130,7 @@ export function recordSession(
   const listeners: { [Event in RecordedEvent]: (...args: AgentSessionEvents[Event]) => void } = {
     welcome(message) {
       recordServer(message)
+      settingsApplied = false
       welcomes += 1
       const history = session.conversationHistory
       record({
@@ -117,7 +151,11 @@ export function recordSession(
         ...(agentSpeaking() && { interruptsAgent: true }),
       })
     },
-    'settings-applied': recordServer,
+    'settings-applied'(message) {
+      recordServer(message)
+      settingsApplied = true
+      if (latestPrompt !== undefined) recordPrompt(latestPrompt, true)
+    },
     'conversation-text': recordServer,
     // Deepgram no longer sends AgentStartedSpeaking, and has sent no
     // AgentThinking in any session of ours. They're kept so the log shows
@@ -139,8 +177,14 @@ export function recordSession(
     // The SDK's own connection events.
     connecting: () => recordApp('Connecting'),
     connected: () => recordApp('Connected'),
-    reconnecting: (attempt, delayMs) => recordApp('Reconnecting', { attempt, delayMs }),
-    disconnected: recordDisconnect,
+    reconnecting: (attempt, delayMs) => {
+      settingsApplied = false
+      recordApp('Reconnecting', { attempt, delayMs })
+    },
+    disconnected: (reason) => {
+      settingsApplied = false
+      recordDisconnect(reason)
+    },
     'sdk-error': (error) => recordApp('SdkError', { name: error.name, message: error.message }),
   }
 
@@ -152,6 +196,7 @@ export function recordSession(
   if (known === undefined && session.state === 'connecting') recordApp('Connecting')
 
   return () => {
+    Object.assign(session, sends)
     for (const event of events) session.off(event, listeners[event] as never)
     // A disconnect still waiting has no end coming (the page changed, say), so it goes in as it is.
     recordWaitingDisconnect()
@@ -197,6 +242,8 @@ const END_REASONS: Record<SessionEnd, string> = {
   pressed: 'talk button pressed again',
   pageHidden: 'left the page',
   idle: `no speech for ${IDLE_TIMEOUT_MS / 1000} s`,
+  leaveRequested: 'left once the agent finished speaking',
+  leaveTimedOut: `left after waiting ${LEAVE_CAP_MS / 1000} s for the agent to finish speaking`,
   tokenFailed: 'the token server function failed',
   sdkError: 'microphone or connection error',
   agentError: 'Deepgram sent an Error',

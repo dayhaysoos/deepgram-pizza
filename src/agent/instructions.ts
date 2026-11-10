@@ -52,9 +52,7 @@ export function agentInstructions(cart: CartSummary, tools: readonly ToolDefinit
     has('show_suggestions') &&
       '- When you suggest specific items, call show_suggestions so they appear on screen, and keep your spoken answer short: the screen shows the details.',
     '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.',
-    "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. " +
-      (has('show_suggestions') ? 'Show the plan with show_suggestions, say the total, and ' : 'Describe the plan out loud, then ') +
-      (has('add_items') ? 'add it with add_items only after they agree.' : 'tell them they can add it by tapping Add on the menu.'),
+    groupRule(has),
     '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.',
     "- If asked about something not on the menu, say you don't have it and offer the closest thing you do have.",
     '- If the conversation goes off topic, answer in one friendly line and steer back to the order.',
@@ -81,6 +79,27 @@ ${rules.join('\n')}
 Conversation started. ${describeCart(cart)}`
 }
 
+// For a group. With plan_group_order the code works out the plan and the agent
+// only sums it up: in the owner's run the agent did the math itself, proposed
+// about twice the food for thirty people, and took three long sentences to say
+// so. Without it, the agent plans from each item's serves, as SPEC's draft said.
+function groupRule(has: HasTool): string {
+  if (!has('plan_group_order')) {
+    return (
+      "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. " +
+      (has('show_suggestions') ? 'Show the plan with show_suggestions, say the total, and ' : 'Describe the plan out loud, then ') +
+      (has('add_items') ? 'add it with add_items only after they agree.' : 'tell them they can add it by tapping Add on the menu.')
+    )
+  }
+  return compact([
+    '- For a group, ask at most one short question about preferences, then call plan_group_order.',
+    `Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it's on screen.`,
+    'Never read out every line or do the math out loud.',
+    has('show_suggestions') && 'To change the plan ("swap a pepperoni for a margherita"), call show_suggestions with the changed lines.',
+    has('add_items') ? 'Add it with add_items only after they agree.' : 'Tell them they can add it by tapping Add all on the card.',
+  ]).join(' ')
+}
+
 // What the agent can't do without its tools, so it says so instead of
 // pretending: in the owner's step 4 run, with no tools, the agent said
 // "Adding 5 large pepperoni pizzas now" while nothing was added, and in a
@@ -88,7 +107,7 @@ Conversation started. ${describeCart(cart)}`
 // leads with what it can't do, and may not claim it did it either. Undefined
 // when it can change the cart, show items and check the customer out.
 function safeguardRule(has: HasTool, changesCart: boolean): string | undefined {
-  const showsItems = has('find_menu_items') || has('show_suggestions')
+  const showsItems = has('find_menu_items') || has('show_suggestions') || has('plan_group_order')
   const cant = compact([
     !changesCart && 'add, change or remove anything in the cart',
     !showsItems && 'show items on screen',

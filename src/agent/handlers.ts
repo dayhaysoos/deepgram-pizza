@@ -29,6 +29,7 @@ import {
   type Quantities,
 } from './cartSummary'
 import { closeMatches, searchMenu, type MenuFilters } from './menuSearch'
+import { planGroupOrder, type GroupOrderRequest } from './planGroupOrder'
 import { MAX_LINES_PER_CALL, type ToolName } from './tools'
 
 /** A short message the agent can act on, returned instead of throwing. */
@@ -90,7 +91,26 @@ export type FoundItems = {
   message?: string
 }
 
-export type ToolResult = CartSummary | Recovery | FoundItems | { shown: true; total: string } | { ok: true }
+/**
+ * What plan_group_order returns once the plan is on the card: enough for the
+ * agent to sum it up in a sentence and to change it with show_suggestions.
+ */
+export type PlanShown = {
+  shown: true
+  /** "8 large pizzas, 3 of them vegetarian, plus garlic knots and a drink each" */
+  summary: string
+  /** What the whole plan costs. */
+  total: string
+  lines: Array<{ id: string; name: string; quantity: number }>
+}
+
+export type ToolResult =
+  | CartSummary
+  | Recovery
+  | FoundItems
+  | { shown: true; total: string }
+  | PlanShown
+  | { ok: true }
 
 /**
  * Runs one tool. Takes the arguments the agent sent, as an object or as the
@@ -141,6 +161,21 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
   // all, so tapping Add all can't add the whole set a second time.
   let suggested: ItemQuantity[] | null = null
 
+  /** Opens the suggestion card with these lines: show_suggestions and plan_group_order both use it. */
+  function suggest(title: unknown, reason: unknown, items: unknown): Suggestions | Recovery {
+    // Not checked against the cart: it can change before the customer taps
+    // Add all, and Add all checks again then.
+    const checked = checkLines(items, {})
+    if ('message' in checked) return { message: `Nothing was shown. ${checked.message}` }
+    // Priced as a cart holding only these lines, so summarizeCart is the one place that prices lines.
+    const { lines, total } = summarizeCart(applyCartChange({}, { type: 'add', lines: checked.lines }))
+    const reasonText = nonBlankText(reason)
+    const suggestions = { title: nonBlankText(title) ?? 'Suggestions', ...(reasonText ? { reason: reasonText } : {}), lines, total }
+    ui.showSuggestions(suggestions)
+    suggested = checked.lines
+    return suggestions
+  }
+
   return {
     find_menu_items: recovering((args) => {
       const filters = readFilters(args)
@@ -165,16 +200,20 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
     }),
 
     show_suggestions: recovering((args) => {
-      // Not checked against the cart: it can change before the customer taps
-      // Add all, and Add all checks again then.
-      const checked = checkLines(args.items, {})
-      if ('message' in checked) return { message: `Nothing was shown. ${checked.message}` }
-      // Priced as a cart holding only these lines, so summarizeCart is the one place that prices lines.
-      const { lines, total } = summarizeCart(applyCartChange({}, { type: 'add', lines: checked.lines }))
-      const reason = nonBlankText(args.reason)
-      ui.showSuggestions({ title: nonBlankText(args.title) ?? 'Suggestions', ...(reason ? { reason } : {}), lines, total })
-      suggested = checked.lines
-      return { shown: true, total }
+      const shown = suggest(args.title, args.reason, args.items)
+      return 'message' in shown ? shown : { shown: true, total: shown.total }
+    }),
+
+    // The code works out the plan (planGroupOrder.ts) and the card shows it, as
+    // show_suggestions would; the agent only sums it up. It doesn't change the cart.
+    plan_group_order: recovering((args) => {
+      // A cast, not a check: planGroupOrder checks every field at run time, since the agent can send anything.
+      const plan = planGroupOrder(args as GroupOrderRequest)
+      if ('message' in plan) return { message: `Nothing was shown. ${plan.message}` }
+      const shown = suggest(plan.title, plan.reason, plan.lines)
+      if ('message' in shown) return shown
+      const lines = shown.lines.map(({ id, name, quantity }) => ({ id, name, quantity }))
+      return { shown: true, summary: plan.summary, total: shown.total, lines }
     }),
 
     add_item: recovering((args) => {

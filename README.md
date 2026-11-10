@@ -4,7 +4,7 @@ Talk to a pizza shop. A voice agent answers questions about the menu, suggests w
 
 Clone it to put voice ordering on your own shop: swap the menu, the photos and the agent's instructions.
 
-> Work in progress: the app is being built step by step. The menu, the cart and test mode checkout work by clicking today, and you can talk to the voice agent about the menu. The agent's tools are built and can be tried without a microphone (see below); wiring them to voice, so the agent can change your cart, lands next.
+> Work in progress: the app is being built step by step. The menu, the cart and test mode checkout work by clicking, and by voice: the agent finds items on the menu, changes your cart and checks you out.
 
 ## Stack
 
@@ -43,19 +43,23 @@ The server accepts only Stripe test keys (`sk_test_…`), so no real payment can
 
 Press **Talk to order** at the bottom of the screen and allow the microphone when the browser asks. The agent greets you; ask it about the menu, such as "What's vegetarian?" The button shows what the agent is doing (connecting, listening, thinking, speaking), and captions above it show what it heard and its reply. **Show conversation** above the captions opens the whole conversation, which stays until you press the button again.
 
-While it works out a reply, "Thinking…" shows under your line. The agent can't change the cart yet, and says so if you ask, pointing you to Add and Checkout: its tools are wired to voice in the next step. The session ends when you press the button again, when you leave the page, or after 60 seconds without speech from either side.
+Then order by voice. "What's vegetarian?" lights up the matching menu cards. "Add two large margheritas" adds them, opens the cart the first time, and the agent confirms the change and the new total; "Actually, make that one" changes the quantity. Ask what goes with something, or for a recommendation, and the suggestions appear on a card you can add from. When you're done, say so: the agent reads back your order and total, and once you confirm and it has said it's taking you to checkout, the session ends and the browser goes to Stripe's test checkout.
 
-For a log of every session, talk from http://localhost:3000/dev/tools: its **Session log** shows what you and the agent said, with times, and every message from Deepgram but the audio, for every session until you press **Clear**. **Copy as text** or **Copy as JSON** to share it, for example in a bug report. It's for development only; the browser console also prints each line as `[voice] you: …` and `[voice] agent: …`.
+You can tap while you talk. Each change you make by tapping (Add, − or +, Remove, Add all) goes to the agent as a note with the whole cart, so "What's my total?" counts it.
+
+While it works out a reply, the captions say what it's doing under your line: "Thinking…", or what the tool it called is doing, such as "Searching the menu…" or "Adding to your cart…". The session ends when you press the button again, when you leave the page, after 60 seconds without speech from either side, or when it takes you to checkout.
+
+For a log of every session, talk from http://localhost:3000/dev/tools: its **Session log** shows what you and the agent said, with times, every message from Deepgram but the audio, each tool's answer (`tool add_item → {…}`) and each tap update the agent was told (`told the agent: Customer added 1 × Fries by tapping…`), for every session until you press **Clear**. **Copy as text** or **Copy as JSON** to share it, for example in a bug report. It's for development only; the browser console also prints each line as `[voice] you: …` and `[voice] agent: …`.
 
 ### Try the tools without a microphone
 
 Run `pnpm dev` and open http://localhost:3000/dev/tools. It's the menu page with a panel that runs the voice agent's tools through the same handlers the agent uses, so the page changes exactly as it will for a voice tool call. Pick a tool, edit its JSON arguments and press **Run** to see the result the agent would get back. Or use a preset, which fills in a call and runs it:
 
-- **Golden path:** find the vegetarian items, add two large margheritas, make that one, read the total, check out. Check out goes straight to Stripe's test checkout.
-- **Suggestions:** what goes with the cheeseburger, a plan for a party of 20 on the suggestion card, then add all of that.
+- **Golden path:** find the vegetarian items, add two large margheritas, make that one, read the total, check out. Check out goes straight to Stripe's test checkout, unless a voice session is on: then it waits for the agent to finish speaking first.
+- **Suggestions:** what goes with the cheeseburger, then a party of 30 with 10 vegetarians planned by `plan_group_order` (the code works out how much food, from each item's `serves`, and puts it on the suggestion card), then add all of that.
 - **Recovery:** calls the agent can get wrong, such as an item that isn't on the menu or a pizza without a size. Each answers with a message the agent can act on.
 
-When you change the cart by tapping (Add on a menu card, − or + or Remove in the cart, Add or Add all on the suggestion card), the panel logs the update a voice session would send the agent.
+When you change the cart by tapping (Add on a menu card, − or + or Remove in the cart, Add or Add all on the suggestion card), the panel logs the update it sends the agent while a voice session is on.
 
 The page is for development only. A production build leaves the panel out, and `/dev/tools` answers 404.
 

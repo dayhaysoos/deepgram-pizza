@@ -6,15 +6,20 @@
 // The enums come from menu.json, so editing the menu updates them. This module
 // imports nothing from React or the server, so evals can load it on its own.
 
-import { categories, products, tags } from '../menu/menu'
+import { categories, menu, products, tags } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
 
-/** The most lines add_items and show_suggestions take in one call. */
+/** The most lines add_items and show_suggestions take in one call, and a group plan holds. */
 export const MAX_LINES_PER_CALL = 15
+
+/** What plan_group_order can plan a group's mains from. planGroupOrder.ts maps each to menu categories. */
+export const GROUP_MAINS = ['pizza', 'subs', 'mix'] as const
+
+export type GroupMains = (typeof GROUP_MAINS)[number]
 
 /** The part of JSON Schema these tools use. */
 export type JsonSchema = {
-  type: 'object' | 'array' | 'string' | 'integer' | 'number'
+  type: 'object' | 'array' | 'string' | 'integer' | 'number' | 'boolean'
   description?: string
   properties?: Record<string, JsonSchema>
   required?: string[]
@@ -81,7 +86,7 @@ export const toolDefinitions = [
   tool({
     name: 'show_suggestions',
     description:
-      "Show suggested items on a card on screen: pairings, recommendations or a plan for a group. It doesn't add anything to the cart.",
+      "Show suggested items on a card on screen: pairings, recommendations, or a group plan with the customer's changes. It doesn't add anything to the cart.",
     parameters: {
       type: 'object',
       properties: {
@@ -90,6 +95,33 @@ export const toolDefinitions = [
         reason: { type: 'string', description: 'One short line on why these, such as "Two veggie pies for the vegetarians".' },
       },
       required: ['title', 'items'],
+    },
+  }),
+  tool({
+    name: 'plan_group_order',
+    description:
+      "Plan food for a group and show it on the card on screen: mains for about one serving per person, sides to share and a drink each, worked out from the menu. Call it once you know how many people are eating. It doesn't add anything to the cart.",
+    parameters: {
+      type: 'object',
+      properties: {
+        people: { type: 'integer', minimum: 1, description: 'How many people are eating.' },
+        vegetarians: { type: 'integer', minimum: 0, description: 'How many of them are vegetarian. Leave out if none.' },
+        preferences: {
+          type: 'object',
+          description: 'Only what the customer said. Leave out the rest.',
+          properties: {
+            mains: { type: 'string', enum: [...GROUP_MAINS], description: 'Pizza (the default), subs, or a mix of both.' },
+            spicy: { type: 'boolean', description: 'True when someone likes it spicy.' },
+            drinks: { type: 'boolean', description: "False when they don't want drinks." },
+            include: {
+              type: 'array',
+              items: { type: 'string', enum: menu.map((item) => item.id) },
+              description: 'Items the customer asked for by name, by item id without the size: "white-pizza".',
+            },
+          },
+        },
+      },
+      required: ['people'],
     },
   }),
   tool({

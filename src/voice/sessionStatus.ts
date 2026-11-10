@@ -20,6 +20,14 @@
 //   reconnecting. Before that, a disconnect is AgentProvider hanging up after a
 //   failed start, and the error it reports next says why.
 //
+// Page code can also ask a session to leave once the agent has spoken
+// (sessionHandle.ts, for checkout by voice: SPEC.md, "Checkout"). The request
+// comes from the checkout tool, before the agent has its result, so the reply
+// ("Taking you to checkout now") is still to come: the session ends the next
+// time the agent's voice stops, whether it finished or the customer cut it
+// off. If the agent was already speaking, that's when this speech ends. The
+// handle ends it anyway when its wait runs out.
+//
 // An ended session's state keeps what ended it (`endedBy`), and an SDK
 // error's name and message (`sdkError`), for the session log on /dev/tools.
 
@@ -58,10 +66,25 @@ export type LiveSession = {
    * connection drops.
    */
   toolCalls?: string[]
+  /** Page code asked the session to leave: it ends the next time the agent's voice stops. */
+  leaving?: true
 }
 
-/** What ended a session: the type of the event that ended it. */
-export type SessionEnd = 'pressed' | 'pageHidden' | 'idle' | 'tokenFailed' | 'sdkError' | 'agentError' | 'disconnected'
+/**
+ * What ended a session: the type of the event that ended it. A session asked
+ * to leave ends with `leaveRequested` once the agent's voice stops, or
+ * `leaveTimedOut` when the handle stops waiting.
+ */
+export type SessionEnd =
+  | 'pressed'
+  | 'pageHidden'
+  | 'idle'
+  | 'leaveRequested'
+  | 'leaveTimedOut'
+  | 'tokenFailed'
+  | 'sdkError'
+  | 'agentError'
+  | 'disconnected'
 
 /** An error the SDK reported, as plain data: `NotAllowedError: Permission denied`. */
 export type ErrorSummary = { name: string; message: string }
@@ -110,6 +133,10 @@ export type LiveEvent =
   | { type: 'idle' }
   /** The customer is leaving the page. */
   | { type: 'pageHidden' }
+  /** Page code asked the session to leave once the agent has spoken (sessionHandle.ts). */
+  | { type: 'leaveRequested' }
+  /** The handle stopped waiting for the agent to finish speaking. */
+  | { type: 'leaveTimedOut' }
 
 export type SessionEvent =
   /** The customer pressed the talk button. */
@@ -123,6 +150,15 @@ export function isLive(state: SessionState): state is LiveSession {
 
 /** The session after `event`. Returns `state` itself when the event changes nothing. */
 export function updateSession(state: SessionState, event: SessionEvent): SessionState {
+  const next = nextState(state, event)
+  // A session asked to leave ends when the agent's voice stops (see the top of this file).
+  if (isLive(state) && state.leaving && state.status === 'speaking' && isLive(next) && next.status !== 'speaking') {
+    return { status: 'idle', sessionNumber: state.sessionNumber, endedBy: 'leaveRequested' }
+  }
+  return next
+}
+
+function nextState(state: SessionState, event: SessionEvent): SessionState {
   if (event.type === 'pressed') {
     if (isLive(state)) return { status: 'idle', sessionNumber: state.sessionNumber, endedBy: 'pressed' }
     return { status: 'connecting', sessionNumber: state.sessionNumber + 1, settingsApplied: false, microphoneOn: false }
@@ -163,6 +199,10 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
     case 'idle':
     case 'pageHidden':
       return { status: 'idle', sessionNumber: state.sessionNumber, endedBy: event.type }
+    case 'leaveRequested':
+      return state.leaving ? state : { ...state, leaving: true }
+    case 'leaveTimedOut':
+      return state.leaving ? { status: 'idle', sessionNumber: state.sessionNumber, endedBy: event.type } : state
     case 'tokenFailed':
       return failed(state, event.type, event.message)
     case 'agentError':

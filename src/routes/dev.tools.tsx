@@ -25,8 +25,9 @@ export const Route = createFileRoute('/dev/tools')({
 })
 
 function DevTools() {
-  // The updates a tap would send the agent, newest first. A voice session
-  // will provide a sink that sends them; this one keeps them for the panel.
+  // The updates a tap sends the agent while a voice session is on, newest
+  // first. They go to the agent through the voice session; this sink keeps
+  // them for the panel, with a session or without.
   const [updates, setUpdates] = useState<LoggedUpdate[]>([])
   const logUpdate = useCallback<TapUpdateSink>((text) => {
     setUpdates((logged) => [{ id: (logged[0]?.id ?? 0) + 1, time: new Date(), text }, ...logged])

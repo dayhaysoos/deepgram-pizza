@@ -17,6 +17,7 @@ export const THINKING = 'Thinking…'
 export const TOOL_ACTIVITY: Record<ToolName, string> = {
   find_menu_items: 'Searching the menu…',
   show_suggestions: 'Putting suggestions together…',
+  plan_group_order: 'Planning your order…',
   add_item: 'Adding to your cart…',
   add_items: 'Adding to your cart…',
   set_quantity: 'Updating your cart…',

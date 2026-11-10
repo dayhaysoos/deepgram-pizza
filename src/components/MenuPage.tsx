@@ -2,7 +2,7 @@ import { useRef, type ReactNode } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
 import { MenuUiProvider } from '../agent/MenuUiProvider'
 import { TapUpdatesProvider } from '../agent/TapUpdatesProvider'
-import { ToolHandlersProvider } from '../agent/ToolHandlersProvider'
+import { ToolHandlersProvider, useToolHandlers } from '../agent/ToolHandlersProvider'
 import { categories, menu } from '../menu/menu'
 import { VoiceSession, VoiceSessionProvider } from '../voice/VoiceSession'
 import { CartDrawer } from './CartDrawer'
@@ -47,6 +47,7 @@ export function MenuPage(props: MenuPageProps) {
 
 function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: MenuPageProps) {
   const cartOpen = useShoppingCart((cart) => cart.shouldDisplayCart)
+  const toolHandlers = useToolHandlers()
   const cartButtonRef = useRef<HTMLButtonElement>(null)
   const cartCloseButtonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLElement>(null)
@@ -93,8 +94,9 @@ function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: Me
       <SuggestionCard returnFocusRef={cartOpen ? cartCloseButtonRef : cartButtonRef} />
       <CartDrawer returnFocusRef={cartButtonRef} closeButtonRef={cartCloseButtonRef} />
       {/* Outside the page too, so the conversation goes on while the cart is open.
-          The session's state lives in VoiceSessionProvider, above. */}
-      <VoiceSession />
+          The session's state lives in VoiceSessionProvider, above. Its sessions
+          answer the agent's tool calls with the page's one set of handlers. */}
+      <VoiceSession handlers={toolHandlers} />
       {children}
     </>
   )

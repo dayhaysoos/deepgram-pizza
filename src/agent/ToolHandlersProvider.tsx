@@ -6,16 +6,21 @@
 // they remember what they did (whether a voice add has opened the drawer, the
 // suggestions shown last, a change React hasn't rendered yet), so everything
 // that calls a tool (the talk button, the dev tools panel) must use the same set.
+//
+// Checkout waits for the voice agent: with a session on, the browser leaves
+// once the agent has said it's taking the customer to checkout, and the
+// session has ended (SPEC.md, "Checkout"). With none, it leaves at once.
 
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { redirectToCheckout, useShoppingCart } from 'use-shopping-cart'
 import { startCheckout } from '../checkout/startCheckout'
+import { useVoiceSession } from '../voice/VoiceSession'
 import { createToolHandlers, type ToolHandlers } from './handlers'
 import { useMenuUi } from './MenuUiProvider'
 
 const ToolHandlersContext = createContext<ToolHandlers | null>(null)
 
-/** Creates the page's tool handlers. Goes inside `CartProvider` and `MenuUiProvider`. */
+/** Creates the page's tool handlers. Goes inside `CartProvider`, `VoiceSessionProvider` and `MenuUiProvider`. */
 export function ToolHandlersProvider({ children }: { children: ReactNode }) {
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
   // Selected one by one: the cart library keeps its actions the same for the cart's lifetime.
@@ -26,6 +31,7 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
   // The cart library's only action that just opens the drawer (handleCartClick toggles).
   const openCart = useShoppingCart((cart) => cart.handleCartHover)
   const { highlight, showSuggestions, closeSuggestions } = useMenuUi()
+  const voiceSession = useVoiceSession()
 
   // The handlers are created once, so they read the cart through a ref that
   // always holds the cart as of the last render.
@@ -45,8 +51,9 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
         showSuggestions,
         closeSuggestions,
         openCart,
-        // With voice, this will first wait for the agent to finish speaking and close the session (SPEC.md, "Checkout").
-        goToCheckout: (url) => redirectToCheckout(url),
+        // Doesn't wait itself: the checkout tool answers `{ ok: true }` now, so
+        // the agent can say it's taking the customer to checkout.
+        goToCheckout: (url) => void voiceSession.leaveAfterSpeaking().then(() => redirectToCheckout(url)),
       },
       checkout: startCheckout,
     }),

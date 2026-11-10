@@ -5,6 +5,7 @@ import { findVariant, menu, products } from '../menu/menu'
 import { CURRENCY, LOCALE } from '../shop'
 import { quantitiesOf, summarizeCart } from './cartSummary'
 import { addLines, createToolHandlers, type CartPort, type ToolPorts } from './handlers'
+import { planGroupOrder } from './planGroupOrder'
 import type { ToolName } from './tools'
 
 const SESSION_URL = 'https://checkout.stripe.com/c/pay/cs_test_fake'
@@ -790,6 +791,57 @@ describe('show_suggestions', () => {
       shown: true,
       total: '$9.98',
     })
+  })
+})
+
+describe('plan_group_order', () => {
+  it('shows the plan for the group on the card, and returns its summary, total and lines, without touching the cart', async () => {
+    const { call, ui, noCartChanges } = setup()
+
+    const result = await call('plan_group_order', JSON.stringify({ people: 30, vegetarians: 10 }))
+
+    const plan = planGroupOrder({ people: 30, vegetarians: 10 })
+    if ('message' in plan) throw new Error(plan.message)
+    const priced = summarizeCart(Object.fromEntries(plan.lines.map(({ id, quantity }) => [id, quantity])))
+    expect(ui.showSuggestions).toHaveBeenCalledWith({
+      title: 'Party of 30',
+      reason: 'Mains for 32 (12 vegetarian), sides to share and a drink each.',
+      lines: priced.lines,
+      total: priced.total,
+    })
+    expect(result).toEqual({
+      shown: true,
+      summary: '8 large pizzas, 3 of them vegetarian, plus garlic knots and a drink each',
+      total: priced.total,
+      lines: priced.lines.map(({ id, name, quantity }) => ({ id, name, quantity })),
+    })
+    expect(result).toMatchObject({ lines: expect.arrayContaining([{ id: 'pepperoni-pizza-large', name: 'Large Pepperoni Pizza', quantity: 3 }]) })
+    noCartChanges()
+  })
+
+  it("passes on the planner's message, and shows nothing, when it can't plan", async () => {
+    const { call, ui } = setup()
+
+    expect(await call('plan_group_order', { people: 10, vegetarians: 12 })).toEqual({
+      message:
+        "Nothing was shown. That's 12 vegetarians in a group of 10. Ask how many people in all, and how many of them are vegetarian.",
+    })
+    expect(await call('plan_group_order', 'not json')).toEqual({
+      message: 'Nothing was shown. people has to be how many are eating: a whole number, 1 or more.',
+    })
+    expect(ui.showSuggestions).not.toHaveBeenCalled()
+  })
+
+  it('closes the card when "add all of that" adds the plan, as for show_suggestions', async () => {
+    const { call, ui, storeSummary } = setup()
+    const shown = await call('plan_group_order', { people: 8, vegetarians: 2 })
+    if (!('lines' in shown) || !('summary' in shown)) throw new Error('No plan shown')
+
+    const added = await call('add_items', { items: shown.lines.map(({ id, quantity }) => ({ id, quantity })) })
+
+    expect(ui.closeSuggestions).toHaveBeenCalledTimes(1)
+    expect(added).toEqual(storeSummary())
+    expect(added).toMatchObject({ total: shown.total })
   })
 })
 

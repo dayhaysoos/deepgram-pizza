@@ -12,9 +12,10 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
 import type { ItemQuantity } from '../agent/cartSummary'
 import type { ToolResult } from '../agent/handlers'
+import { planGroupOrder, type GroupOrderRequest } from '../agent/planGroupOrder'
 import { toolDefinitions, type ToolName } from '../agent/tools'
 import { useToolHandlers } from '../agent/ToolHandlersProvider'
-import { defaultVariant, findVariant, menu } from '../menu/menu'
+import { defaultVariant, menu } from '../menu/menu'
 import { SessionLogSection } from './SessionLogSection'
 import './ToolsPanel.css'
 
@@ -40,24 +41,12 @@ const pairings: ItemQuantity[] = (cheeseburger?.pairsWith ?? []).flatMap((id) =>
 })
 const pairingsTitle = `Goes great with the ${cheeseburger?.name ?? 'cheeseburger'}`
 
-// A plan for a party of 20, built the way the agent's instructions say: mains
-// that feed about one serving per person (by `serves`), plus sides and drinks.
-const partyMains: ItemQuantity[] = [
-  { id: 'pepperoni-pizza-large', quantity: 3 },
-  { id: 'cheese-pizza-large', quantity: 1 },
-  { id: 'veggie-supreme-pizza-large', quantity: 1 },
-]
-const partyPlan: ItemQuantity[] = [
-  ...partyMains,
-  { id: 'garlic-knots', quantity: 2 },
-  { id: 'soda', quantity: 12 },
-  { id: 'lemonade', quantity: 8 },
-]
-/** How many people the mains feed, from menu.json. */
-const partyServes = partyMains.reduce(
-  (sum, { id, quantity }) => sum + (findVariant(id)?.variant.serves ?? 0) * quantity,
-  0,
-)
+// The owner's group from their voice run, where the agent planned about twice
+// the food: plan_group_order works it out from menu.json. Add all of that adds
+// the same plan, so the card closes as it does for "add all of that" by voice.
+const party: GroupOrderRequest = { people: 30, vegetarians: 10 }
+const partyPlan = planGroupOrder(party)
+const partyLines: ItemQuantity[] = 'lines' in partyPlan ? partyPlan.lines : []
 
 const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = [
   {
@@ -80,16 +69,8 @@ const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = 
         tool: 'show_suggestions',
         args: { title: pairingsTitle, items: pairings },
       },
-      {
-        label: `Party of 20 (mains serve ${partyServes})`,
-        tool: 'show_suggestions',
-        args: {
-          title: 'Party of 20',
-          items: partyPlan,
-          reason: 'Five large pies with one veggie, garlic knots, and a drink each.',
-        },
-      },
-      { label: 'Add all of that', tool: 'add_items', args: { items: partyPlan } },
+      { label: 'Party of 30, 10 vegetarian', tool: 'plan_group_order', args: party },
+      { label: 'Add all of that', tool: 'add_items', args: { items: partyLines } },
     ],
   },
   {
@@ -109,6 +90,7 @@ const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = 
 const examples: Record<ToolName, Args> = {
   find_menu_items: { tags: ['vegetarian'] },
   show_suggestions: { title: pairingsTitle, items: pairings },
+  plan_group_order: { people: 12, vegetarians: 3, preferences: { mains: 'mix', spicy: true } },
   add_item: { id: 'margherita-pizza-large', quantity: 2 },
   add_items: { items: [{ id: 'fries', quantity: 1 }, { id: 'soda', quantity: 2 }] },
   set_quantity: { id: 'margherita-pizza-large', quantity: 1 },
