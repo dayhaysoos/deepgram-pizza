@@ -20,6 +20,9 @@ importers:
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
+      use-shopping-cart:
+        specifier: 4.0.0-rc.2
+        version: 4.0.0-rc.2(react@19.3.1)
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.67.0
@@ -1659,6 +1662,12 @@ packages:
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
+
+  use-shopping-cart@4.0.0-rc.2:
+    resolution: {integrity: sha512-+vlkoOYA2qmle/cI29iAch/9t56hvnKqR/JIoxmub/iJu/SgCiRX0n+x1tDg6pPKCfDCuLtPh+RqRjnOdPGzig==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      react: ^19.2.3
 
   use-sync-external-store@1.7.0:
     resolution: {integrity: sha512-6L+EeigHMQhdaIPNIFUKwfWJSwWFQ8gJbJ2DLOs5sDIegTwR9fRxvnM3uciHKjIZhFz+KAv2emhWMRvDmMcY8A==}
@@ -3319,6 +3328,10 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
+
+  use-shopping-cart@4.0.0-rc.2(react@19.3.1):
+    dependencies:
+      react: 19.3.1
 
   use-sync-external-store@1.7.0(react@19.3.1):
     dependencies:

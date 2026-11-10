@@ -1,0 +1,699 @@
+/* Every style in the app. Change the look from the tokens on :root. */
+
+:root {
+  color-scheme: light;
+
+  /* Colours */
+  --cream: #fbf3e4;
+  --cream-dark: #f0e1c4;
+  --red: #c62828;
+  --red-dark: #9f1d1d;
+  --white: #ffffff;
+  --ink: #2b1d14;
+  --ink-soft: #5e4b3d;
+  --ink-faint: #b3a598;
+  --line: #e8dac0;
+  --focus: #1f5fbf;
+  --backdrop: rgb(43 29 20 / 0.55);
+
+  /* Tag chips: background, border, text */
+  --vegetarian-bg: #e6f2e2;
+  --vegetarian-border: #b5d6ab;
+  --vegetarian-text: #2b5e2b;
+  --vegan-bg: var(--white);
+  --vegan-border: #2b5e2b;
+  --vegan-text: #2b5e2b;
+  --spicy-bg: #fde3dc;
+  --spicy-border: #f0ae9f;
+  --spicy-text: #9a2412;
+  --popular-bg: #fdf0c4;
+  --popular-border: #e8cd72;
+  --popular-text: #6e4b00;
+
+  /* Type: system fonts only, no downloads */
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Shape and depth */
+  --radius: 12px;
+  --radius-small: 8px;
+  --pill: 999px;
+  --shadow: 0 1px 2px rgb(43 29 20 / 0.08), 0 6px 16px rgb(43 29 20 / 0.08);
+  --shadow-drawer: -8px 0 32px rgb(43 29 20 / 0.25);
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+
+  /* Layout */
+  --max-width: 75rem;
+  --tap: 44px; /* smallest tap target */
+  --header-offset: 8rem; /* about the sticky header height, so anchor jumps land below it */
+  --drawer-width: 26rem;
+  --drawer-speed: 250ms;
+
+  /* The red-and-white tablecloth band */
+  --check: 8px;
+  --checkered: repeating-conic-gradient(var(--red) 0 25%, var(--white) 0 50%) 0 0 / calc(var(--check) * 2)
+    calc(var(--check) * 2);
+}
+
+/* Base */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scrollbar-gutter: stable;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+/* The page behind an open cart doesn't scroll. */
+body:has(.drawer[data-open]) {
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  line-height: 1.15;
+}
+
+p {
+  margin: 0;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Header */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--white);
+}
+
+.site-header::after {
+  content: '';
+  display: block;
+  height: calc(var(--check) * 2);
+  background: var(--checkered);
+}
+
+.site-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4) var(--space-1);
+}
+
+.brand {
+  min-width: 0;
+  color: var(--red);
+  font-size: clamp(1.25rem, 0.8rem + 2.5vw, 2.25rem);
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cart-button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border: 2px solid var(--red);
+  border-radius: var(--pill);
+  background: var(--white);
+  color: var(--red);
+  font-weight: 700;
+}
+
+.cart-button:hover {
+  background: var(--red);
+  color: var(--white);
+}
+
+.cart-badge {
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.4rem;
+  border-radius: var(--pill);
+  background: var(--red);
+  color: var(--white);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.cart-button:hover .cart-badge {
+  background: var(--white);
+  color: var(--red);
+}
+
+/* On phones the links don't fit, so the row scrolls sideways. */
+.category-links {
+  display: flex;
+  gap: var(--space-1);
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-2) var(--space-1);
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.category-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border-radius: var(--pill);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.category-links a:hover {
+  background: var(--cream);
+  color: var(--red);
+}
+
+/* Menu */
+
+.menu {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) var(--space-12);
+}
+
+.menu-section {
+  padding-block: var(--space-6);
+  scroll-margin-top: var(--header-offset);
+}
+
+.menu-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-2);
+  border-bottom: 4px double var(--red);
+}
+
+.menu-section-heading h2 {
+  font-size: clamp(1.75rem, 1.4rem + 1.5vw, 2.5rem);
+  font-weight: 900;
+}
+
+.menu-section-note {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* 4 columns on a wide screen, 1 on a phone. */
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-grid > li {
+  display: flex;
+}
+
+.menu-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--white);
+  box-shadow: var(--shadow);
+}
+
+/* The background shows while a photo loads, or if it's missing. */
+.menu-card-photo {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--cream-dark);
+  color: var(--ink-soft);
+}
+
+.menu-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.menu-card-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.menu-card-description {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.menu-card-order {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
+.menu-card-buy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.price {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.add-button {
+  min-width: 7rem;
+  min-height: var(--tap);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--pill);
+  background: var(--red);
+  color: var(--white);
+  font-weight: 700;
+}
+
+.add-button:hover:not(:disabled) {
+  background: var(--red-dark);
+}
+
+.add-button:disabled {
+  background: var(--ink-faint);
+}
+
+/* Tag chips. The word is always shown, so colour is never the only signal. */
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag {
+  padding: 0.05rem 0.55rem;
+  border: 1px solid;
+  border-radius: var(--pill);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tag-vegetarian {
+  border-color: var(--vegetarian-border);
+  background: var(--vegetarian-bg);
+  color: var(--vegetarian-text);
+}
+
+.tag-vegan {
+  border-color: var(--vegan-border);
+  background: var(--vegan-bg);
+  color: var(--vegan-text);
+}
+
+.tag-spicy {
+  border-color: var(--spicy-border);
+  background: var(--spicy-bg);
+  color: var(--spicy-text);
+}
+
+.tag-popular {
+  border-color: var(--popular-border);
+  background: var(--popular-bg);
+  color: var(--popular-text);
+}
+
+/* Size picker: a radio group drawn as a segmented control. */
+
+.size-picker {
+  display: flex;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.size-option {
+  position: relative;
+  flex: 1;
+}
+
+.size-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.size-option span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: 2px solid var(--red);
+  color: var(--red);
+  font-weight: 700;
+}
+
+.size-option + .size-option span {
+  border-left-width: 0;
+}
+
+.size-option:first-of-type span {
+  border-radius: var(--radius-small) 0 0 var(--radius-small);
+}
+
+.size-option:last-of-type span {
+  border-radius: 0 var(--radius-small) var(--radius-small) 0;
+}
+
+.size-option input:checked + span {
+  background: var(--red);
+  color: var(--white);
+}
+
+.size-option input:focus-visible + span {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Cart drawer: slides in from the right over a dimmed page. */
+
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  visibility: hidden;
+  /* Stay visible while the panel slides out, then hide. */
+  transition: visibility 0s linear var(--drawer-speed);
+}
+
+.drawer[data-open] {
+  visibility: visible;
+  transition: none;
+}
+
+.drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+  opacity: 0;
+  transition: opacity var(--drawer-speed) ease;
+}
+
+.drawer[data-open] .drawer-backdrop {
+  opacity: 1;
+}
+
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  width: var(--drawer-width);
+  max-width: 100%;
+  background: var(--cream);
+  box-shadow: var(--shadow-drawer);
+  transform: translateX(100%);
+  transition: transform var(--drawer-speed) ease;
+}
+
+.drawer[data-open] .drawer-panel {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .drawer-backdrop,
+  .drawer-panel {
+    transition: none;
+  }
+}
+
+/* On phones the drawer is a full-screen sheet. */
+@media (max-width: 30rem) {
+  .drawer-panel {
+    width: 100%;
+  }
+}
+
+.drawer-panel::before {
+  content: '';
+  display: block;
+  flex-shrink: 0;
+  height: calc(var(--check) * 2);
+  background: var(--checkered);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--white);
+}
+
+.drawer-header h2 {
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: var(--pill);
+  background: transparent;
+  font-size: 1.25rem;
+}
+
+.icon-button:hover {
+  background: var(--cream);
+}
+
+.drawer-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-8) var(--space-4);
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.drawer-empty-title {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  font-weight: 700;
+}
+
+.cart-lines {
+  flex: 1;
+  margin: 0;
+  padding: var(--space-1) var(--space-4);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.cart-line {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.cart-line-photo {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-small);
+  background: var(--cream-dark);
+  object-fit: cover;
+}
+
+.cart-line-name {
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.cart-line-price {
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.cart-line-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.quantity {
+  display: inline-flex;
+  align-items: center;
+  border: 2px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--white);
+}
+
+.quantity button {
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: var(--pill);
+  background: transparent;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.quantity button:hover:not(:disabled) {
+  background: var(--cream);
+}
+
+.quantity button:disabled {
+  color: var(--ink-faint);
+}
+
+.quantity-value {
+  min-width: 2ch;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.remove-button {
+  min-height: var(--tap);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--red);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.cart-line-total {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Room for the Checkout button (step 3) under the total. */
+.drawer-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--white);
+}
+
+.drawer-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
