@@ -24,8 +24,8 @@ importers:
         specifier: ^23.1.0
         version: 23.1.0(@types/node@26.6.6)
       use-shopping-cart:
-        specifier: 4.0.0-rc.2
-        version: 4.0.0-rc.2(react@19.3.1)
+        specifier: 4.0.0-rc.3
+        version: 4.0.0-rc.3(react@19.3.1)
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.67.0
@@ -1675,8 +1675,8 @@ packages:
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
-  use-shopping-cart@4.0.0-rc.2:
-    resolution: {integrity: sha512-+vlkoOYA2qmle/cI29iAch/9t56hvnKqR/JIoxmub/iJu/SgCiRX0n+x1tDg6pPKCfDCuLtPh+RqRjnOdPGzig==}
+  use-shopping-cart@4.0.0-rc.3:
+    resolution: {integrity: sha512-EvheFtxpAiPyetygpafsJLMFjIX/IS1j8B2iPeHH9odrL3dygs9JG9jtrt4pEtW2BlmpdauPtf1vcj+/urSIuA==}
     engines: {node: '>=22'}
     peerDependencies:
       react: ^19.2.3
@@ -3345,7 +3345,7 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  use-shopping-cart@4.0.0-rc.2(react@19.3.1):
+  use-shopping-cart@4.0.0-rc.3(react@19.3.1):
     dependencies:
       react: 19.3.1
 

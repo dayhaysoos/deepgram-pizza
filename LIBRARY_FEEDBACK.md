@@ -1,6 +1,6 @@
 # use-shopping-cart feedback
 
-Surprises we hit with use-shopping-cart v4 (release candidate) while building this template, written so they can be reported upstream. Version used: `4.0.0-rc.2`.
+Surprises we hit with use-shopping-cart v4 (release candidate) while building this template, written so they can be reported upstream. Written against `4.0.0-rc.2`; every entry still applies to `4.0.0-rc.3`, which changed only how a saved cart loads from storage.
 
 ## The migration guide's install tag doesn't exist
 
@@ -29,7 +29,7 @@ Surprises we hit with use-shopping-cart v4 (release candidate) while building th
 ## `validateCartItems` copies the browser's metadata into the Stripe line items
 
 - **What I expected:** Getting Started says never to price the session from the `cartDetails` the browser sends, "because anyone can edit it", and to pass the cart to `validateCartItems`, which takes prices from your inventory. So I expected nothing from the browser except ids and quantities to reach Stripe.
-- **What happened:** prices and names do come from the inventory, but `validateCartItems` (rc.2 source, `dist/utilities.mjs`) merges the browser entry's `product_data.metadata` into each line item's `price_data.product_data.metadata`. Whatever the browser posts there ends up on the Stripe product. Nothing in the docs mentions it.
+- **What happened:** prices and names do come from the inventory, but `validateCartItems` (rc.2 and rc.3 source, `dist/utilities.mjs`) merges the browser entry's `product_data.metadata` into each line item's `price_data.product_data.metadata`. Whatever the browser posts there ends up on the Stripe product. Nothing in the docs mentions it.
 - **Workaround:** before calling it, reduce the posted cart to `{ [id]: { quantity } }`. `src/checkout/checkout.ts` does this and its tests check that posted metadata doesn't reach the line items.
 
 ## `validateCartItems` wants full cart entries, and its cart type isn't exported from `/utilities`

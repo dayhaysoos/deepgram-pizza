@@ -26,7 +26,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "stripe": "^23.1.0",
-    "use-shopping-cart": "4.0.0-rc.2"
+    "use-shopping-cart": "4.0.0-rc.3"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.67.0",

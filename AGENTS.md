@@ -90,6 +90,7 @@ The shop is fictional.
 ## Tooling
 
 - pnpm runs install scripts only for packages allowed in `pnpm-workspace.yaml` `allowBuilds`. When a new dependency needs a build script, add it there with `pnpm approve-builds <pkg>`.
+- pnpm 12 normally waits 24 hours before installing a newly published version. That wait is off here (`minimumReleaseAge: 0` in `pnpm-workspace.yaml`) so use-shopping-cart release candidates install the day they ship. Pin exact versions, and look at what a fresh release changed before you install it.
 
 ## Licensing
 
