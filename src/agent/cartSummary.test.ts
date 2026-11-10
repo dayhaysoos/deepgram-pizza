@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ShoppingCart } from 'use-shopping-cart/core'
 import { findVariant } from '../menu/menu'
 import { CURRENCY, LOCALE } from '../shop'
-import { applyCartChange, describeLine, quantitiesOf, summarizeCart, type CartChange, type Quantities } from './cartSummary'
+import { applyCartChange, describeCart, describeLine, quantitiesOf, summarizeCart, type CartChange, type Quantities } from './cartSummary'
 
 describe('summarizeCart', () => {
   it('lists each line with its name, quantity and total, in cart order, plus the count and the total', () => {
@@ -32,6 +32,18 @@ describe('summarizeCart', () => {
 describe('describeLine', () => {
   it('names a line by quantity and name', () => {
     expect(describeLine({ name: 'Large Margherita Pizza', quantity: 2 })).toBe('2 × Large Margherita Pizza')
+  })
+})
+
+describe('describeCart', () => {
+  it('names every line and the total', () => {
+    expect(describeCart(summarizeCart({ 'margherita-pizza-large': 2, fries: 1 }))).toBe(
+      'Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97.',
+    )
+  })
+
+  it('says an empty cart is empty', () => {
+    expect(describeCart(summarizeCart({}))).toBe('Cart: empty.')
   })
 })
 

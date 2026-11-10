@@ -26,7 +26,7 @@ cp .dev.vars.example .dev.vars
 
 Fill in both keys in `.dev.vars`, which stays out of git:
 
-- `DEEPGRAM_API_KEY`: create an API key in the [Deepgram console](https://console.deepgram.com).
+- `DEEPGRAM_API_KEY`: create an API key in the [Deepgram console](https://console.deepgram.com) with **Member** permissions or higher (Create Key → Advanced → Member). The server uses it to mint short-lived tokens, and Deepgram refuses that with a 403 for keys below Member.
 - `STRIPE_SECRET_KEY`: a Stripe test mode secret key (`sk_test_…`) from the [Stripe dashboard](https://dashboard.stripe.com/test/apikeys).
 
 Then run `pnpm dev` and open http://localhost:3000.

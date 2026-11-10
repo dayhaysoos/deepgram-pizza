@@ -35,6 +35,15 @@ export function describeLine({ name, quantity }: { name: string; quantity: numbe
   return `${quantity} × ${name}`
 }
 
+/**
+ * "Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97." or "Cart: empty.":
+ * how the tap updates and the agent's instructions give the whole cart.
+ */
+export function describeCart(cart: CartSummary): string {
+  if (cart.lines.length === 0) return 'Cart: empty.'
+  return `Cart: ${cart.lines.map(describeLine).join(', ')}. Total ${cart.total}.`
+}
+
 /** Reads id → quantity from use-shopping-cart's `cartDetails`. Nothing else in an entry is trusted. */
 export function quantitiesOf(cartDetails: Readonly<Record<string, { quantity: number }>>): Quantities {
   // Object.fromEntries, not assignment, so an id like "__proto__" stays a plain key.

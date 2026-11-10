@@ -46,7 +46,7 @@ Add a dependency outside this table only after asking.
 
 - Open the Deepgram connection only when the customer presses the button, and close it when they stop or leave the page. A connection that stays open costs money every second.
 - Show every agent state on the button: idle, connecting, listening, thinking, speaking, error. A voice UI that looks frozen reads as broken.
-- The browser gets a token from our server function on every connect. The server mints it through Deepgram's `/v1/auth/grant`. The API key stays on the server.
+- The browser gets a token from our server function on every connect. The server mints it through Deepgram's `/v1/auth/grant`. The API key stays on the server. The grant needs a key with Member permissions or higher; a lesser key gets `403 FORBIDDEN "Insufficient permissions."`, and the talk button shows "Voice isn't available right now".
 - Agent instructions: a friendly counter worker at a fictional shop. Keep answers to one or two sentences. Confirm each change out loud with quantity, size and name. Ask when a request is ambiguous ("Large or medium?"). Talk about this menu and nothing else.
 - Ask for the microphone on the first press, not on page load, and handle a denied permission with a visible message.
 

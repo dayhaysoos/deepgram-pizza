@@ -56,6 +56,13 @@
   text-transform: uppercase;
 }
 
+/* On phones the talk button reaches into the corner, so the tab sits above it. */
+@media (max-width: 30rem) {
+  .tools-panel:not([data-open]) {
+    bottom: calc(var(--voice-space) + env(safe-area-inset-bottom));
+  }
+}
+
 .tools-panel:not([data-open]) .tools-panel-heading button {
   border-radius: var(--pill);
 }

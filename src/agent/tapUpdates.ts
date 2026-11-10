@@ -4,7 +4,7 @@
 // context update.
 
 import { findVariant } from '../menu/menu'
-import { describeLine, type CartChange, type CartSummary } from './cartSummary'
+import { describeCart, describeLine, type CartChange, type CartSummary } from './cartSummary'
 
 /**
  * "Customer added 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza,
@@ -29,12 +29,6 @@ function describeChange(change: CartChange): string {
     case 'clear':
       return 'emptied the cart'
   }
-}
-
-function describeCart(cart: CartSummary): string {
-  if (cart.lines.length === 0) return 'Cart: empty.'
-  const lines = cart.lines.map(describeLine).join(', ')
-  return `Cart: ${lines}. Total ${cart.total}.`
 }
 
 // A product that's no longer on the menu is named by its id.

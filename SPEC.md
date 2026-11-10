@@ -272,7 +272,7 @@ DEEPGRAM_API_KEY=
 STRIPE_SECRET_KEY=sk_test_
 ```
 
-- Deepgram: create an API key in the Deepgram console. The server uses it only to mint short-lived tokens.
+- Deepgram: create an API key in the Deepgram console with Member permissions or higher (`/v1/auth/grant` refuses lesser keys with a 403). The server uses it only to mint short-lived tokens.
 - Stripe: use a test mode secret key (`sk_test_…`). The server rejects any key that doesn't start with `sk_test_`.
 - `README.md` covers what the template does, a screenshot or GIF, the stack, setup (clone, `pnpm install`, copy `.dev.vars.example` to `.dev.vars`, `pnpm dev`), how to make it your own shop (edit `menu.json`, swap images, adjust the agent's instructions), and deploying (`wrangler secret put` for both keys, then `pnpm run deploy`). Keep it accurate as each build step lands.
 - The README's deploy section warns that the token server function has no rate limit or authentication, so anyone hosting it publicly should add one first.
@@ -339,6 +339,8 @@ Record decisions made during the build here (voice settings, library choices, an
 - **The panel's styles live next to it, in `src/dev/ToolsPanel.css`,** not in `src/styles.css`, so production builds carry none of them. On phones it's a bottom sheet; from 64rem it's docked on the left and the page moves over. Open, it sits above the cart and the suggestion card (z-index 30); collapsed, it's a corner tab under the cart (15), so it never covers the Checkout button.
 - **The panel's pairings preset reads the cheeseburger's `pairsWith`, and the party preset's label adds up its mains' `serves`** from `menu.json` (3 large pepperoni, 1 large cheese, 1 large veggie supreme: 20), so the presets show what the menu says rather than numbers typed by hand.
 - **Tap updates go to `TapUpdateSinkContext`, which does nothing by default.** The voice session will provide a sink that sends each update to the agent; the dev tools panel can provide one that logs them. `TapUpdatesProvider` reads the cart once for the whole page and works out the cart after the tap with `applyCartChange`, so menu cards don't re-render on every cart change.
+- **The agent's instructions and greeting live in `src/agent/instructions.ts`** (`GREETING`, `agentInstructions(cart)`, `describeMenu()`), free of React and Deepgram so evals can import them. `{{MENU}}` is one plain-text line per item under a heading per category, each size as `Large: id cheese-pizza-large, $18.99, serves 4.`, all read from `menu.json`; the prompt is about 8,900 characters. It ends with `Conversation started. Cart: …`, in the words of `describeCart` (`cartSummary.ts`), which the tap updates also use, so the updates sent mid-session read as what happened next.
+- **Voice tokens live 30 seconds** (`TOKEN_TTL_SECONDS` in `src/voice/deepgramToken.ts`, sent as `ttl_seconds`). Deepgram's docs (checked 2026-11-10, https://developers.deepgram.com/reference/auth/tokens/grant) make 30 the default and say a token only has to be valid while the socket opens. `@deepgram/agents` asks for a new token before every connect and reconnect, and gives up on opening after 10 seconds, so 30 covers it. The token server function (`getDeepgramToken`) is a POST, so nothing caches a token, and it answers `{ token }` or `{ message }` the way checkout does.
 
 ## Open questions
 
