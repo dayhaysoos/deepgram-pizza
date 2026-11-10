@@ -1,0 +1,12 @@
+{
+  "name": "deepgram-pizza",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Talk to a pizza shop: a voice agent answers menu questions, edits the cart through tool calls and sends you to Stripe Checkout",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=22"
+  }
+}
