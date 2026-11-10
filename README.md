@@ -61,6 +61,7 @@ Run `pnpm check` after editing. The structural tests in `src/menu/menu.test.ts` 
 The rest:
 
 - **Categories:** their order, labels and size notes are in `categories` in `src/menu/menu.ts`. An item's `category` must be one of their ids.
+- **Tags:** add the tag to `tags` in `src/menu/menu.ts`, then give it colours as `.tag-<name>` in `src/styles.css`, like `.tag-vegetarian`.
 - **Shop name, currency and locale:** `src/shop.ts`.
 - **Photos:** `public/images/<item-id>.jpg`, about 800 px wide and compressed. Use photos from Unsplash or Pexels, or your own, and add a row for each to `CREDITS.md`.
 - **Colours and fonts:** the tokens at the top of `src/styles.css`.

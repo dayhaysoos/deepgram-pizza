@@ -1,7 +1,7 @@
 // The menu, typed, plus the helpers the rest of the app reads it through.
 // menu.json holds the items: it's the source of truth for what's sold and its
-// prices. The category order, labels and notes are display only, and live in
-// `categories` below.
+// prices. `categories` below defines which category ids exist and how they're
+// shown (order, label, note).
 
 import { CURRENCY, LOCALE } from '../shop'
 import menuJson from './menu.json'

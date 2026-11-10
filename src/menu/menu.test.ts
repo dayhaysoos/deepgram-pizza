@@ -12,6 +12,7 @@ import {
   tags,
   type MenuItem,
 } from './menu'
+import { CURRENCY } from '../shop'
 
 // These rules hold for any shop's menu. If you edit menu.json and one fails,
 // the failure lists the item or variant ids that break the rule.
@@ -164,7 +165,7 @@ describe('productFor', () => {
       id: 'calzone-big',
       name: 'Big Calzone',
       price: 1500,
-      currency: 'USD',
+      currency: CURRENCY,
     })
   })
 
@@ -175,7 +176,7 @@ describe('productFor', () => {
       id: 'water',
       name: 'Water',
       price: 150,
-      currency: 'USD',
+      currency: CURRENCY,
     })
   })
 })
@@ -183,9 +184,9 @@ describe('productFor', () => {
 describe('menuToProducts', () => {
   it('makes one product per variant, with the size in the name of sized items', () => {
     expect(menuToProducts(fixture)).toStrictEqual([
-      { id: 'calzone-small', name: 'Small Calzone', price: 900, currency: 'USD' },
-      { id: 'calzone-big', name: 'Big Calzone', price: 1500, currency: 'USD' },
-      { id: 'water', name: 'Water', price: 150, currency: 'USD' },
+      { id: 'calzone-small', name: 'Small Calzone', price: 900, currency: CURRENCY },
+      { id: 'calzone-big', name: 'Big Calzone', price: 1500, currency: CURRENCY },
+      { id: 'water', name: 'Water', price: 150, currency: CURRENCY },
     ])
   })
 
@@ -259,6 +260,7 @@ describe('imagePath', () => {
 })
 
 describe('formatPrice', () => {
+  // These examples assume the shipped USD / en-US settings in src/shop.ts. Update them if you change those.
   it('formats cents as US dollars', () => {
     expect(formatPrice(2099)).toBe('$20.99')
     expect(formatPrice(249)).toBe('$2.49')
