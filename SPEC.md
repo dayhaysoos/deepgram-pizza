@@ -299,6 +299,7 @@ Record decisions made during the build here (voice settings, library choices, an
 - **Vitest has its own `vitest.config.ts`** without the Cloudflare or Start plugins: tool handlers and other logic are tested as plain Node functions.
 - **Lint, typecheck and tests use ESLint, TypeScript and Vitest.** ESLint runs a flat config with `@eslint/js`, `typescript-eslint` and `eslint-plugin-react-hooks`. Step 1 requires all three checks and these are the TanStack and Vite defaults, but they sit outside the AGENTS.md stack table, so the owner should confirm them, together with `@types/node` (Node types for `nodejs_compat` code and config files) and `@vitejs/plugin-react` (required by TanStack Start's Vite setup).
 - **`observability.enabled: true` in `wrangler.jsonc`.** Workers logs are on so a deployed copy can be debugged from the dashboard; it's the Cloudflare template default.
+- **No formatter in `pnpm check`.** Step 1 asks for lint, typecheck and tests only, and Prettier or Biome would be another dependency outside the stack table. Add one if the owner wants it.
 
 ## Open questions
 
