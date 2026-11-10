@@ -91,7 +91,7 @@ const NO_STALLS_WITH_TOOLS =
 const NO_STALLS_WITHOUT_TOOLS = '- Never end a reply by promising to do something later ("give me a sec", "let me check"). Answer now.'
 
 const STEP_4_SAFEGUARD =
-  "- You can't add, change or remove anything in the cart, show items on screen or check the customer out right now. If the customer asks for any of that, say so plainly in one sentence and tell them they can tap Add on the menu and Checkout in the cart. Never say you're adding, showing, checking or looking something up."
+  "- You can't add, change or remove anything in the cart, show items on screen or check the customer out right now. If the customer asks, start by saying you can't do that yet, then tell them they can tap Add on the menu and Checkout in the cart, all in one sentence. Never say you're adding, showing, checking or looking something up, or that you did."
 
 const CART_TOOLS: ToolName[] = ['add_item', 'add_items', 'set_quantity', 'remove_item', 'clear_cart']
 const toolNames = toolDefinitions.map((tool) => tool.name)
@@ -181,7 +181,7 @@ Conversation started. Cart: empty.`)
     const rules = rulesOf(agentInstructions(emptyCart, allBut(...CART_TOOLS)))
     for (const rule of SPEC_DRAFT_RULES.slice(0, 3)) expect(rules).not.toContain(rule)
     expect(rules[0]).toBe(
-      "- You can't add, change or remove anything in the cart right now. If the customer asks for any of that, say so plainly in one sentence and tell them they can tap Add on the menu. Never say you're adding.",
+      "- You can't add, change or remove anything in the cart right now. If the customer asks, start by saying you can't do that yet, then tell them they can tap Add on the menu, all in one sentence. Never say you're adding, or that you did.",
     )
     expect(rules).toContain(
       "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. Show the plan with show_suggestions, say the total, and tell them they can add it by tapping Add on the menu.",
@@ -191,7 +191,7 @@ Conversation started. Cart: empty.`)
   it('without checkout, points to the Checkout button instead', () => {
     const rules = rulesOf(agentInstructions(emptyCart, allBut('checkout')))
     expect(rules[0]).toBe(
-      "- You can't check the customer out right now. If the customer asks for any of that, say so plainly in one sentence and tell them they can tap Checkout in the cart.",
+      "- You can't check the customer out right now. If the customer asks, start by saying you can't do that yet, then tell them they can tap Checkout in the cart, all in one sentence.",
     )
     expect(rules).toContain('- When the customer is done, read back the order and total from view_cart, then tell them to tap Checkout in the cart.')
   })

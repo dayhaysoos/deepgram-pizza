@@ -189,7 +189,7 @@ export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
           <section key={group.title} className="tools-panel-section">
             <h3>{group.title}</h3>
             <p className="tools-panel-note">{group.note}</p>
-            <div className="tools-panel-presets">
+            <div className="tools-panel-buttons">
               {group.presets.map((preset) => (
                 <button
                   key={preset.label}

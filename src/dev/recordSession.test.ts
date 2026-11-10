@@ -6,7 +6,7 @@ import { GREETING } from '../agent/instructions'
 import { agentSettings } from '../voice/agentSettings'
 import { CONNECTION_LOST, MIC_BLOCKED, NO_SESSION, type SessionEnd } from '../voice/sessionStatus'
 import { recordEnd, recordSession, recordSessionEnd, settingsPayload } from './recordSession'
-import { createSessionLog } from './sessionLog'
+import { createSessionLog, describeEntry } from './sessionLog'
 
 type AgentSession = ReturnType<typeof useAgentSession>
 type ContextMessage = AgentSession['conversationHistory'][number]
@@ -62,7 +62,6 @@ describe('recordSession', () => {
     emitter.emit('latency-report', { type: 'LatencyReport', total_latency: 0.5 })
     emitter.emit('reconnecting', 1, 500)
     emitter.emit('sdk-error', new Error('socket closed: 1006'))
-    emitter.emit('disconnected', 'socket closed: 1006')
 
     expect(log.entries().map(({ direction, type }) => `${direction} ${type}`)).toEqual([
       'app SessionStarted',
@@ -75,7 +74,6 @@ describe('recordSession', () => {
       'server LatencyReport',
       'app Reconnecting',
       'app SdkError',
-      'app Disconnected',
     ])
     expect(log.entries()[0]?.payload).toEqual({ page: '/dev/tools' })
     expect(log.entries()[4]?.payload).toEqual(firstSettings)
@@ -171,6 +169,44 @@ describe('recordSession', () => {
 
     expect(logged.mock.calls).toEqual([["[voice] you: What's vegetarian?"], ['[voice] agent: The margherita.']])
     expect(debugged).toHaveBeenLastCalledWith('[voice] settings applied')
+  })
+
+  // AgentProvider hangs up first when the microphone can't start, and reports
+  // why a microtask later. The end, which says why, goes first.
+  it('records a disconnect after the end that says why', () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const { log, emitter } = setUp()
+    emitter.emit('settings-applied', { type: 'SettingsApplied' })
+    emitter.emit('disconnected', 'user requested disconnect')
+    expect(log.entries().at(-1)?.type).toBe('SettingsApplied')
+
+    const sdkError = { name: 'NotAllowedError', message: 'Permission denied' }
+    recordSessionEnd({ status: 'error', sessionNumber: 1, endedBy: 'sdkError', message: MIC_BLOCKED, sdkError }, log)
+    log.startSession()
+
+    const types = log.entries().map(({ type }) => type)
+    expect(types).toEqual(['SessionStarted', 'SettingsApplied', 'SessionEnded', 'Disconnected', 'SessionStarted'])
+    expect(log.entries()[3]?.payload).toEqual({ reason: 'user requested disconnect' })
+  })
+
+  it('records a disconnect right away once the session has ended', () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const { log, emitter } = setUp()
+    // Leaving the page records the end before the session hangs up.
+    recordEnd('pageHidden', {}, log)
+    emitter.emit('disconnected', 'user requested disconnect')
+
+    expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted', 'SessionEnded', 'Disconnected'])
+  })
+
+  it('records a waiting disconnect when stopped before an end comes', () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const { log, emitter, stop } = setUp()
+    emitter.emit('disconnected', 'user requested disconnect')
+    stop()
+    recordEnd('pressed', {}, log)
+
+    expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted', 'Disconnected', 'SessionEnded'])
   })
 
   it("stops recording when stopped, but for the hang-up that follows", () => {
@@ -280,13 +316,32 @@ describe('recordSessionEnd', () => {
   it('adds the message the talk button shows after a failure', () => {
     const log = createSessionLog()
     log.startSession()
-    recordSessionEnd({ status: 'error', sessionNumber: 1, endedBy: 'sdkError', message: MIC_BLOCKED }, log)
+    recordSessionEnd({ status: 'error', sessionNumber: 1, endedBy: 'tokenFailed', message: CONNECTION_LOST }, log)
 
     expect(log.entries().at(-1)?.payload).toEqual({
-      endedBy: 'sdkError',
-      reason: 'microphone or connection error',
-      message: MIC_BLOCKED,
+      endedBy: 'tokenFailed',
+      reason: 'the token server function failed',
+      message: CONNECTION_LOST,
     })
+  })
+
+  it("adds the SDK error's name and message, in the reason too", () => {
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const log = createSessionLog()
+    log.startSession()
+    const sdkError = { name: 'NotAllowedError', message: 'Permission denied' }
+    recordSessionEnd({ status: 'error', sessionNumber: 1, endedBy: 'sdkError', message: MIC_BLOCKED, sdkError }, log)
+
+    const end = log.entries().at(-1)
+    expect(end?.payload).toEqual({
+      endedBy: 'sdkError',
+      reason: 'microphone or connection error (NotAllowedError: Permission denied)',
+      message: MIC_BLOCKED,
+      sdkError,
+    })
+    expect(end && describeEntry(end).text).toBe(
+      `session ended: microphone or connection error (NotAllowedError: Permission denied) (“${MIC_BLOCKED}”)`,
+    )
   })
 
   it('has words for every end', () => {
@@ -303,7 +358,7 @@ describe('recordSessionEnd', () => {
     const log = createSessionLog()
     log.startSession()
     // Leaving the page is recorded on pagehide; the voice session's state says so again later.
-    recordEnd('pageHidden', undefined, log)
+    recordEnd('pageHidden', {}, log)
     recordSessionEnd({ status: 'idle', sessionNumber: 1, endedBy: 'pageHidden' }, log)
 
     expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted', 'SessionEnded'])

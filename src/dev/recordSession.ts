@@ -8,6 +8,10 @@
 // when import.meta.env.DEV is true. No React here, so tests drive it with a
 // plain event emitter.
 //
+// A session's section ends "session ended: why", then "disconnected", in that
+// order. A failed start (a blocked microphone) disconnects before the app hears
+// why, so a disconnect that comes before the end waits for it.
+//
 // What the SDK sends raises no event. It sends the Settings on every connect,
 // reconnects included, just before it passes Welcome on, so they're recorded
 // then, rebuilt the way it builds them (settingsPayload). A message the app
@@ -16,7 +20,7 @@
 
 import type { AgentSessionConfig, AgentSessionEvents, ServerMessage, useAgentSession } from '@deepgram/react'
 import { IDLE_TIMEOUT_MS } from '../voice/idleTimer'
-import { isLive, type SessionEnd, type SessionState } from '../voice/sessionStatus'
+import { isLive, type ErrorSummary, type SessionEnd, type SessionState } from '../voice/sessionStatus'
 import {
   describeEntry,
   sessionLog,
@@ -66,6 +70,29 @@ export function recordSession(
   /** Deepgram sends one Welcome per connection, so any after the first follow a reconnect. */
   let welcomes = 0
 
+  /** Whether this session's end is in the log yet. */
+  const ended = () => log.entries().some((entry) => entry.session === sessionNumber && entry.type === 'SessionEnded')
+  /** A disconnect that came before the end, waiting for it. */
+  let waiting: { reason: string; unsubscribe: () => void } | undefined
+
+  function recordWaitingDisconnect() {
+    if (!waiting) return
+    const { reason, unsubscribe } = waiting
+    waiting = undefined
+    unsubscribe()
+    recordApp('Disconnected', { reason })
+  }
+
+  /** Records the disconnect after the session's end, waiting for the end if it hasn't come yet. */
+  function recordDisconnect(reason: string) {
+    if (ended()) return recordApp('Disconnected', { reason })
+    // SessionRecorder records the end once React renders it, a moment later.
+    const unsubscribe = log.subscribe(() => {
+      if (ended()) recordWaitingDisconnect()
+    })
+    waiting = { reason, unsubscribe }
+  }
+
   // One listener per event. TypeScript checks that every event the SDK has, but the audio, is here.
   const listeners: { [Event in RecordedEvent]: (...args: AgentSessionEvents[Event]) => void } = {
     welcome(message) {
@@ -92,6 +119,9 @@ export function recordSession(
     },
     'settings-applied': recordServer,
     'conversation-text': recordServer,
+    // Deepgram no longer sends AgentStartedSpeaking, and has sent no
+    // AgentThinking in any session of ours. They're kept so the log shows
+    // them if they come.
     'agent-thinking': recordServer,
     'function-call-request': recordServer,
     'agent-started-speaking': recordServer,
@@ -110,7 +140,7 @@ export function recordSession(
     connecting: () => recordApp('Connecting'),
     connected: () => recordApp('Connected'),
     reconnecting: (attempt, delayMs) => recordApp('Reconnecting', { attempt, delayMs }),
-    disconnected: (reason) => recordApp('Disconnected', { reason }),
+    disconnected: recordDisconnect,
     'sdk-error': (error) => recordApp('SdkError', { name: error.name, message: error.message }),
   }
 
@@ -123,9 +153,11 @@ export function recordSession(
 
   return () => {
     for (const event of events) session.off(event, listeners[event] as never)
+    // A disconnect still waiting has no end coming (the page changed, say), so it goes in as it is.
+    recordWaitingDisconnect()
     // AgentProvider hangs up a moment after it unmounts: record that too.
     if (session.state !== 'idle' && session.state !== 'disconnected') {
-      session.once('disconnected', listeners.disconnected)
+      session.once('disconnected', (reason) => recordApp('Disconnected', { reason }))
     }
   }
 }
@@ -178,16 +210,36 @@ const END_REASONS: Record<SessionEnd, string> = {
  */
 export function recordSessionEnd(state: SessionState, log: SessionLog = sessionLog): void {
   if (isLive(state) || !state.endedBy) return
-  recordEnd(state.endedBy, state.status === 'error' ? state.message : undefined, log)
+  const details = state.status === 'error' ? { message: state.message, sdkError: state.sdkError } : {}
+  recordEnd(state.endedBy, details, log)
+}
+
+type EndDetails = {
+  /** The message the talk button shows. */
+  message?: string
+  /** The SDK's error, when one ended the session. */
+  sdkError?: ErrorSummary
 }
 
 /**
- * Ends the open session's section of the log with why it ended, and the
- * message the talk button shows, if any. Only the first end of a session counts.
+ * Ends the open session's section of the log with why it ended: the reason in
+ * words, with the SDK's error if there was one (`… (NotAllowedError: Permission
+ * denied)`), and the message the talk button shows, if any. Only the first end
+ * of a session counts.
  */
-export function recordEnd(endedBy: SessionEnd, message?: string, log: SessionLog = sessionLog): void {
-  const entry = log.endSession({ endedBy, reason: END_REASONS[endedBy], ...(message && { message }) })
+export function recordEnd(
+  endedBy: SessionEnd,
+  { message, sdkError }: EndDetails = {},
+  log: SessionLog = sessionLog,
+): void {
+  const reason = sdkError ? `${END_REASONS[endedBy]} (${describeError(sdkError)})` : END_REASONS[endedBy]
+  const entry = log.endSession({ endedBy, reason, ...(message && { message }), ...(sdkError && { sdkError }) })
   if (entry) print(entry)
+}
+
+/** `NotAllowedError: Permission denied`, or just the name when there's no message. */
+function describeError({ name, message }: ErrorSummary): string {
+  return message ? `${name}: ${message}` : name
 }
 
 function print(entry: LogEntry) {

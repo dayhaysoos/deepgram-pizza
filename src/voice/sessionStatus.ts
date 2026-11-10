@@ -20,8 +20,8 @@
 //   reconnecting. Before that, a disconnect is AgentProvider hanging up after a
 //   failed start, and the error it reports next says why.
 //
-// An ended session's state keeps what ended it (`endedBy`), for the session
-// log on /dev/tools.
+// An ended session's state keeps what ended it (`endedBy`), and an SDK
+// error's name and message (`sdkError`), for the session log on /dev/tools.
 
 import type { AgentMode, AgentState } from '@deepgram/react'
 import { VOICE_UNAVAILABLE } from './deepgramToken'
@@ -53,8 +53,9 @@ export type LiveSession = {
   /**
    * The tools the agent asked the browser to run, by name, in its last
    * FunctionCallRequest. The SDK sends no event when the browser answers, so
-   * they're kept until what comes next: the agent starts speaking or sends a
-   * line, the customer starts speaking, or the connection drops.
+   * they're kept until what comes next: the agent starts speaking (its audio
+   * starts playing) or sends a line, the customer starts speaking, or the
+   * connection drops.
    */
   toolCalls?: string[]
 }
@@ -62,14 +63,20 @@ export type LiveSession = {
 /** What ended a session: the type of the event that ended it. */
 export type SessionEnd = 'pressed' | 'pageHidden' | 'idle' | 'tokenFailed' | 'sdkError' | 'agentError' | 'disconnected'
 
+/** An error the SDK reported, as plain data: `NotAllowedError: Permission denied`. */
+export type ErrorSummary = { name: string; message: string }
+
 export type SessionState =
   /**
    * No session. `sessionNumber` is the last one's, and `endedBy` what ended
    * it (0 and nothing before the first press).
    */
   | { status: 'idle'; sessionNumber: number; endedBy?: SessionEnd }
-  /** The last session failed. The button shows why until the next press. */
-  | { status: 'error'; sessionNumber: number; message: string; endedBy: SessionEnd }
+  /**
+   * The last session failed. The button shows why until the next press.
+   * `sdkError` is the SDK's error, when one ended it.
+   */
+  | { status: 'error'; sessionNumber: number; message: string; endedBy: SessionEnd; sdkError?: ErrorSummary }
   | LiveSession
 
 /** The page's first render: no session yet. */
@@ -132,12 +139,14 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
       const toolCallsOver = status === 'speaking' || status === 'connecting'
       return withStatus(toolCallsOver ? withoutToolCalls(state) : state, status)
     }
-    // Deepgram doesn't send AgentThinking every turn, so the SDK's mode can go
-    // straight from listening to speaking. The customer's line ends their
-    // turn: the agent is thinking until it starts speaking (agentChanged) or
-    // the customer starts speaking again. A line that comes after the agent
-    // started speaking changes nothing. As in the SDK, the customer speaking
-    // means listening, even over the agent (the SDK stops its audio).
+    // The SDK's mode shows thinking only on Deepgram's AgentThinking, which
+    // its docs still list but no session of ours has received, so the mode
+    // goes straight from listening to speaking. The customer's line ends their
+    // turn: the agent is thinking until it starts speaking (agentChanged, from
+    // its audio) or the customer starts speaking again. A line that comes
+    // after the agent started speaking changes nothing. As in the SDK, the
+    // customer speaking means listening, even over the agent (the SDK stops
+    // its audio).
     case 'customerFinishedSpeaking':
       return state.status === 'listening' ? withStatus(state, 'thinking') : state
     case 'customerStartedSpeaking':
@@ -160,8 +169,9 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
       return failed(state, event.type, VOICE_UNAVAILABLE)
     case 'sdkError': {
       const message = microphoneMessage(event.error)
-      if (message) return failed(state, event.type, message)
-      return state.settingsApplied ? state : failed(state, event.type, VOICE_UNAVAILABLE)
+      // Once the agent has its settings, the SDK reconnects by itself, but a microphone won't fix itself.
+      if (!message && state.settingsApplied) return state
+      return failed(state, event.type, message ?? VOICE_UNAVAILABLE, summarize(event.error))
     }
     case 'disconnected':
       // The microphone starts after the connection opens, often while the
@@ -180,8 +190,13 @@ function withoutToolCalls(state: LiveSession): LiveSession {
   return state.toolCalls ? { ...state, toolCalls: undefined } : state
 }
 
-function failed(state: LiveSession, endedBy: SessionEnd, message: string): SessionState {
-  return { status: 'error', sessionNumber: state.sessionNumber, message, endedBy }
+function failed(state: LiveSession, endedBy: SessionEnd, message: string, sdkError?: ErrorSummary): SessionState {
+  return { status: 'error', sessionNumber: state.sessionNumber, message, endedBy, ...(sdkError && { sdkError }) }
+}
+
+/** `error` as plain data. The SDK reports Errors (the microphone's are DOMExceptions), but anything can be thrown. */
+function summarize(error: unknown): ErrorSummary {
+  return error instanceof Error ? { name: error.name, message: error.message } : { name: 'Error', message: String(error) }
 }
 
 /**

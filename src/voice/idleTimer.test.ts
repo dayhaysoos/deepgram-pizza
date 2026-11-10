@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createIdleTimer, IDLE_TIMEOUT_MS, SPEECH_EVENTS } from './idleTimer'
+import { createIdleTimer, IDLE_TIMEOUT_MS } from './idleTimer'
 
 describe('createIdleTimer', () => {
   beforeEach(() => {
@@ -28,12 +28,12 @@ describe('createIdleTimer', () => {
     expect(onIdle).toHaveBeenCalledTimes(1)
   })
 
-  it.each(SPEECH_EVENTS.filter((event) => event !== 'agent-started-speaking'))('starts counting again on %s', (event) => {
+  it('starts counting again on speech, or a reconnect', () => {
     const onIdle = vi.fn()
     const timer = createIdleTimer(onIdle)
 
     vi.advanceTimersByTime(IDLE_TIMEOUT_MS - 1000)
-    timer.heard(event)
+    timer.restart()
     vi.advanceTimersByTime(IDLE_TIMEOUT_MS - 1)
     expect(onIdle).not.toHaveBeenCalled()
 
@@ -41,47 +41,48 @@ describe('createIdleTimer', () => {
     expect(onIdle).toHaveBeenCalledTimes(1)
   })
 
-  it("doesn't count while the agent speaks, and starts again when its audio is done", () => {
+  it("doesn't end the session while the agent speaks, however long", () => {
     const onIdle = vi.fn()
     const timer = createIdleTimer(onIdle)
 
-    timer.heard('agent-started-speaking')
-    vi.advanceTimersByTime(IDLE_TIMEOUT_MS * 2)
+    vi.advanceTimersByTime(30_000)
+    timer.setAgentSpeaking(true)
+    vi.advanceTimersByTime(90_000)
     expect(onIdle).not.toHaveBeenCalled()
-
-    // Its words arriving as text doesn't mean it stopped speaking.
-    timer.heard('conversation-text')
-    vi.advanceTimersByTime(IDLE_TIMEOUT_MS * 2)
-    expect(onIdle).not.toHaveBeenCalled()
-
-    timer.heard('agent-audio-done')
-    vi.advanceTimersByTime(IDLE_TIMEOUT_MS)
-    expect(onIdle).toHaveBeenCalledTimes(1)
   })
 
-  it('counts again when the customer cuts the agent off', () => {
+  it('ends the session a minute after the agent stops speaking, with no speech since', () => {
     const onIdle = vi.fn()
     const timer = createIdleTimer(onIdle)
 
-    timer.heard('agent-started-speaking')
-    timer.heard('user-started-speaking')
-    vi.advanceTimersByTime(IDLE_TIMEOUT_MS)
-    expect(onIdle).toHaveBeenCalledTimes(1)
-  })
-
-  // A reconnect resends the settings without the greeting, so no
-  // agent-audio-done ends the reply the drop cut off.
-  it('counts again after a reconnect cuts the agent off', () => {
-    const onIdle = vi.fn()
-    const timer = createIdleTimer(onIdle)
-
-    timer.heard('agent-started-speaking')
-    vi.advanceTimersByTime(IDLE_TIMEOUT_MS * 2)
-    timer.reset()
+    timer.setAgentSpeaking(true)
+    vi.advanceTimersByTime(90_000)
+    timer.setAgentSpeaking(false)
     vi.advanceTimersByTime(IDLE_TIMEOUT_MS - 1)
     expect(onIdle).not.toHaveBeenCalled()
 
     vi.advanceTimersByTime(1)
+    expect(onIdle).toHaveBeenCalledTimes(1)
+  })
+
+  it("doesn't start counting on speech while the agent speaks", () => {
+    const onIdle = vi.fn()
+    const timer = createIdleTimer(onIdle)
+
+    // Its words arriving as text don't mean it stopped speaking.
+    timer.setAgentSpeaking(true)
+    timer.restart()
+    vi.advanceTimersByTime(IDLE_TIMEOUT_MS * 2)
+    expect(onIdle).not.toHaveBeenCalled()
+  })
+
+  it('keeps counting when told the agent is still not speaking', () => {
+    const onIdle = vi.fn()
+    const timer = createIdleTimer(onIdle)
+
+    vi.advanceTimersByTime(IDLE_TIMEOUT_MS - 1000)
+    timer.setAgentSpeaking(false)
+    vi.advanceTimersByTime(1000)
     expect(onIdle).toHaveBeenCalledTimes(1)
   })
 
@@ -90,7 +91,9 @@ describe('createIdleTimer', () => {
     const timer = createIdleTimer(onIdle)
 
     timer.stop()
-    timer.heard('user-started-speaking')
+    timer.restart()
+    timer.setAgentSpeaking(true)
+    timer.setAgentSpeaking(false)
     vi.advanceTimersByTime(IDLE_TIMEOUT_MS * 2)
     expect(onIdle).not.toHaveBeenCalled()
   })

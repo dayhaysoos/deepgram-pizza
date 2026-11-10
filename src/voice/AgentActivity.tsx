@@ -27,7 +27,7 @@ export const TOOL_ACTIVITY: Record<ToolName, string> = {
 }
 
 /** How long the agent has to be busy before the line shows. */
-export const ACTIVITY_DELAY_MS = 300
+const ACTIVITY_DELAY_MS = 300
 
 /**
  * What the line says for `state`, or `undefined` when there's nothing to say:

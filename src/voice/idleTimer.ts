@@ -1,39 +1,48 @@
 // Ends a voice session nobody is using. An open connection costs money every
 // second, so after a minute with no speech from either side the session
-// closes on its own. Time while the agent is speaking doesn't count. A
-// reconnect cuts the agent off, so the count starts again from there.
+// closes on its own. Time while the agent is speaking doesn't count: the count
+// pauses, and starts again from zero when the agent stops. A reconnect starts
+// it again too.
 //
-// The timer only counts. VoiceSession.tsx feeds it the session's events, and
-// sends sessionStatus.ts an `idle` event when it fires.
+// Whether the agent is speaking comes from the session's status
+// (sessionStatus.ts), which follows the SDK's mode: speaking from the first
+// chunk of the agent's audio until it has finished playing, or until the
+// customer cuts it off. Deepgram no longer sends AgentStartedSpeaking, so no
+// server message says when the agent starts.
+//
+// The timer only counts. VoiceSession.tsx feeds it the session's events and
+// the status, and sends sessionStatus.ts an `idle` event when it fires.
+
+import type { AgentSessionEvents } from '@deepgram/react'
 
 /** How long a session may go with no speech from either side. */
 export const IDLE_TIMEOUT_MS = 60_000
 
-/** The Deepgram session events that count as speech. */
-export const SPEECH_EVENTS = [
-  'user-started-speaking',
-  'agent-started-speaking',
-  'agent-audio-done',
-  'conversation-text',
-] as const
-
-export type SpeechEvent = (typeof SPEECH_EVENTS)[number]
+/**
+ * The Deepgram session events that count as speech: the customer starting to
+ * speak, and either side's line arriving as text. The agent's voice counts
+ * through `setAgentSpeaking`.
+ */
+export const SPEECH_EVENTS = ['user-started-speaking', 'conversation-text'] as const satisfies ReadonlyArray<
+  keyof AgentSessionEvents
+>
 
 /**
  * The Deepgram session events that mean the connection dropped or came back.
- * A reconnect resends the settings but not the greeting, so if the drop came
- * while the agent was speaking, no agent-audio-done would end the pause.
+ * The time it was down isn't the customer's silence, so the count starts again.
  */
-export const RESET_EVENTS = ['reconnecting', 'settings-applied'] as const
+export const RESET_EVENTS = ['reconnecting', 'settings-applied'] as const satisfies ReadonlyArray<
+  keyof AgentSessionEvents
+>
 
 export type IdleTimer = {
-  /** Something was said: the count starts again, and pauses while the agent speaks. */
-  heard: (event: SpeechEvent) => void
+  /** Someone spoke, or the connection came back: the count starts again, unless the agent is speaking. */
+  restart: () => void
   /**
-   * The connection dropped or came back: whatever the agent was saying is cut
-   * off, and its agent-audio-done won't come. The count starts again.
+   * Whether the agent is speaking: the count pauses while it is, and starts
+   * again when it stops. Saying the same thing twice changes nothing.
    */
-  reset: () => void
+  setAgentSpeaking: (speaking: boolean) => void
   /** Stops counting for good. */
   stop: () => void
 }
@@ -56,14 +65,10 @@ export function createIdleTimer(onIdle: () => void, timeoutMs = IDLE_TIMEOUT_MS)
 
   restart()
   return {
-    heard(event) {
-      if (event === 'agent-started-speaking') agentSpeaking = true
-      // The customer can cut the agent off, and then no agent-audio-done may come.
-      if (event === 'agent-audio-done' || event === 'user-started-speaking') agentSpeaking = false
-      restart()
-    },
-    reset() {
-      agentSpeaking = false
+    restart,
+    setAgentSpeaking(speaking) {
+      if (speaking === agentSpeaking) return
+      agentSpeaking = speaking
       restart()
     },
     stop() {

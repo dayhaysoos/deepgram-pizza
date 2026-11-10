@@ -42,7 +42,7 @@ export function agentInstructions(cart: CartSummary, tools: readonly ToolDefinit
   // SPEC.md's draft, in its order. A rule that names a tool is kept only when
   // the session has that tool; some have a version for a session without it.
   const rules = compact([
-    safeguardRule(has),
+    safeguardRule(has, changesCart),
     changesCart && '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.',
     changesCart && '- After each change, confirm it with the quantity, size and name, then the new total from the tool result.',
     changesCart && '- If a sized item has no size, ask which size before adding it.',
@@ -83,10 +83,11 @@ Conversation started. ${describeCart(cart)}`
 
 // What the agent can't do without its tools, so it says so instead of
 // pretending: in the owner's step 4 run, with no tools, the agent said
-// "Adding 5 large pepperoni pizzas now" while nothing was added. Undefined
+// "Adding 5 large pepperoni pizzas now" while nothing was added, and in a
+// later run answered "add two margheritas" with only "You can tap Add". So it
+// leads with what it can't do, and may not claim it did it either. Undefined
 // when it can change the cart, show items and check the customer out.
-function safeguardRule(has: HasTool): string | undefined {
-  const changesCart = CART_TOOLS.some(has)
+function safeguardRule(has: HasTool, changesCart: boolean): string | undefined {
   const showsItems = has('find_menu_items') || has('show_suggestions')
   const cant = compact([
     !changesCart && 'add, change or remove anything in the cart',
@@ -102,10 +103,11 @@ function safeguardRule(has: HasTool): string | undefined {
     !has('view_cart') && 'checking',
     !has('find_menu_items') && 'looking something up',
   ])
+  const tapInstead = taps.length > 0 ? `, then tell them they can tap ${taps.join(' and ')}, all in one sentence` : ', in one sentence'
   return compact([
     `- You can't ${orList(cant)} right now.`,
-    `If the customer asks for any of that, say so plainly in one sentence${taps.length > 0 ? ` and tell them they can tap ${taps.join(' and ')}` : ''}.`,
-    pretending.length > 0 && `Never say you're ${orList(pretending)}.`,
+    `If the customer asks, start by saying you can't do that yet${tapInstead}.`,
+    pretending.length > 0 && `Never say you're ${orList(pretending)}, or that you did.`,
   ]).join(' ')
 }
 

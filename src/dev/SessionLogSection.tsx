@@ -68,7 +68,7 @@ export function SessionLogSection({ open }: { open: boolean }) {
         Every voice session since the log was cleared: what you and the agent said, and every message from Deepgram
         but the audio. It&apos;s kept in this browser, so it survives a reload.
       </p>
-      <div className="tools-panel-presets">
+      <div className="tools-panel-buttons">
         <button type="button" onClick={() => copy('text')}>
           Copy as text
         </button>

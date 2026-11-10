@@ -17,7 +17,8 @@
 // In development, every session is also recorded in the session log that
 // /dev/tools shows. Its recorder (src/dev/SessionRecorder.tsx) sits next to the
 // talk button, where it sees each session start and end, and gets the live
-// session's AgentSession handed up from inside its provider.
+// session's AgentSession handed up from inside its provider. Production builds
+// have no recorder, so nothing is handed up.
 
 import {
   createContext,
@@ -27,6 +28,7 @@ import {
   useContext,
   useEffect,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -46,7 +48,7 @@ import { activityLabel } from './AgentActivity'
 import { agentSettings } from './agentSettings'
 import { Captions } from './Captions'
 import { getDeepgramToken } from './getDeepgramToken'
-import { createIdleTimer, RESET_EVENTS, SPEECH_EVENTS } from './idleTimer'
+import { createIdleTimer, RESET_EVENTS, SPEECH_EVENTS, type IdleTimer } from './idleTimer'
 import {
   isLive,
   NO_SESSION,
@@ -96,7 +98,8 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
  */
 export function VoiceSession() {
   const voice = useContext(VoiceSessionContext)
-  // The live session's AgentSession, for code outside its provider: the session log, in development.
+  // The live session's AgentSession, for the session log's recorder. Only the
+  // recorder sets it, so production doesn't re-render as sessions come and go.
   const [live, setLive] = useState<LiveAgent | null>(null)
   if (!voice) throw new Error('VoiceSession needs a <VoiceSessionProvider> above it.')
   const { state, send } = voice
@@ -108,8 +111,9 @@ export function VoiceSession() {
           key={state.sessionNumber}
           sessionNumber={state.sessionNumber}
           activity={activityLabel(state)}
+          agentSpeaking={state.status === 'speaking'}
           send={send}
-          onLive={setLive}
+          onLive={SessionRecorder ? setLive : undefined}
         />
       )}
       {/* After the session, so it keeps its place (and its focus) as sessions come and go. */}
@@ -131,13 +135,15 @@ type DeepgramSessionProps = {
   sessionNumber: number
   /** What the captions say the agent is doing, if anything (activityLabel). */
   activity?: string
+  /** The talk button says Speaking: the agent's voice is playing. */
+  agentSpeaking: boolean
   send: (event: SessionEvent) => void
   /** Hears about the session's AgentSession once its provider has made it, and `null` once it's gone. */
-  onLive: (live: LiveAgent | null) => void
+  onLive?: (live: LiveAgent | null) => void
 }
 
 /** One session's Deepgram connection: connects on mount, hangs up on unmount. */
-function DeepgramSession({ sessionNumber, activity, send: sendToPage, onLive }: DeepgramSessionProps) {
+function DeepgramSession({ sessionNumber, activity, agentSpeaking, send: sendToPage, onLive }: DeepgramSessionProps) {
   const send = useCallback(
     (event: LiveEvent) => sendToPage({ ...event, sessionNumber }),
     [sendToPage, sessionNumber],
@@ -164,7 +170,7 @@ function DeepgramSession({ sessionNumber, activity, send: sendToPage, onLive }: 
       }}
       onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
     >
-      <SessionEvents config={config} send={send} onLive={onLive} />
+      <SessionEvents config={config} agentSpeaking={agentSpeaking} send={send} onLive={onLive} />
       <Captions activity={activity} />
     </AgentProvider>
   )
@@ -184,24 +190,27 @@ async function fetchToken(send: (event: LiveEvent) => void): Promise<string> {
 
 type SessionEventsProps = {
   config: AgentSessionConfig
+  agentSpeaking: boolean
   send: (event: LiveEvent) => void
-  onLive: (live: LiveAgent | null) => void
+  onLive?: (live: LiveAgent | null) => void
 }
 
 /**
- * Hands the live session up to VoiceSession (`onLive`), and sends its changes
- * as events: the connection and the agent's mode, the settings, the
- * microphone, the customer starting and finishing a turn, the agent's lines
- * and tool requests, a disconnect, the customer leaving the page, and a
- * minute with no speech.
+ * Hands the live session up to VoiceSession (`onLive`, when it's given), and
+ * sends its changes as events: the connection and the agent's mode, the
+ * settings, the microphone, the customer starting and finishing a turn, the
+ * agent's lines and tool requests, a disconnect, the customer leaving the
+ * page, and a minute with no speech.
  */
-function SessionEvents({ config, send, onLive }: SessionEventsProps) {
+function SessionEvents({ config, agentSpeaking, send, onLive }: SessionEventsProps) {
   const agentSession = useAgentSession()
   const { state, stop } = useAgentState()
   const { mode } = useAgentMode()
   const { micActive } = useAgentMicrophone()
+  const idleTimer = useRef<IdleTimer | null>(null)
 
   useEffect(() => {
+    if (!onLive) return
     onLive({ session: agentSession, config })
     return () => onLive(null)
   }, [agentSession, config, onLive])
@@ -248,18 +257,21 @@ function SessionEvents({ config, send, onLive }: SessionEventsProps) {
     return () => window.removeEventListener('pagehide', onPageHide)
   }, [send, stop])
 
+  // A minute with no speech ends the session (idleTimer.ts).
   useEffect(() => {
     const timer = createIdleTimer(() => send({ type: 'idle' }))
-    const listeners = [
-      ...SPEECH_EVENTS.map((event) => [event, () => timer.heard(event)] as const),
-      ...RESET_EVENTS.map((event) => [event, timer.reset] as const),
-    ]
-    for (const [event, listener] of listeners) agentSession.on(event, listener)
+    idleTimer.current = timer
+    const events = [...SPEECH_EVENTS, ...RESET_EVENTS]
+    for (const event of events) agentSession.on(event, timer.restart)
     return () => {
       timer.stop()
-      for (const [event, listener] of listeners) agentSession.off(event, listener)
+      for (const event of events) agentSession.off(event, timer.restart)
     }
   }, [agentSession, send])
+
+  // The count pauses while the agent speaks. This runs again whenever the
+  // effect above makes a new timer, so the new one hears it too.
+  useEffect(() => idleTimer.current?.setAgentSpeaking(agentSpeaking), [agentSpeaking, agentSession, send])
 
   return null
 }

@@ -89,9 +89,10 @@ describe('updateSession', () => {
     })
   })
 
-  // Deepgram doesn't send AgentThinking every turn, so the SDK's mode can go
-  // straight from listening to speaking. The customer's line, which arrives
-  // at the end of their turn, shows thinking in between.
+  // The SDK's mode shows thinking only on Deepgram's AgentThinking, which no
+  // session of ours has received, so it goes straight from listening to
+  // speaking. The customer's line, which arrives at the end of their turn,
+  // shows thinking in between.
   describe('thinking after the customer speaks', () => {
     it("shows thinking once the customer's line arrives", () => {
       expect(live(...started, customerFinishedSpeaking).status).toBe('thinking')
@@ -226,6 +227,21 @@ describe('updateSession', () => {
       expect(live(micBlocked)).toMatchObject({ status: 'error', message: MIC_BLOCKED, endedBy: 'sdkError' })
       const insecure = new DOMException('Insecure context', 'SecurityError')
       expect(live({ type: 'sdkError', error: insecure })).toMatchObject({ status: 'error', message: MIC_BLOCKED })
+    })
+
+    it("keeps the SDK error's name and message, for the session log", () => {
+      expect(live(micBlocked)).toEqual({
+        status: 'error',
+        sessionNumber: 1,
+        message: MIC_BLOCKED,
+        endedBy: 'sdkError',
+        sdkError: { name: 'NotAllowedError', message: 'Permission denied' },
+      })
+      expect(live({ type: 'sdkError', error: 'socket closed' })).toMatchObject({
+        sdkError: { name: 'Error', message: 'socket closed' },
+      })
+      // Only an SDK error has one.
+      expect(live({ type: 'agentError' })).not.toHaveProperty('sdkError')
     })
 
     it("says when there's no microphone it can use", () => {
