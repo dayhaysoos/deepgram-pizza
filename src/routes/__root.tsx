@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import type { ReactNode } from 'react'
-import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router'
+import { createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -10,16 +10,8 @@ export const Route = createRootRoute({
       { title: "Nick's Pizza" },
     ],
   }),
-  component: RootComponent,
+  shellComponent: RootDocument,
 })
-
-function RootComponent() {
-  return (
-    <RootDocument>
-      <Outlet />
-    </RootDocument>
-  )
-}
 
 function RootDocument({ children }: { children: ReactNode }) {
   return (

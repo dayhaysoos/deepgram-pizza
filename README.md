@@ -4,7 +4,7 @@ Talk to a pizza shop. A voice agent answers questions about the menu, suggests w
 
 Clone it to put voice ordering on your own shop: swap the menu, the photos and the agent's instructions.
 
-> Work in progress. Setup steps and a screenshot land as the app is built.
+> Work in progress: the app is being built step by step. The menu, cart and checkout land next.
 
 ## Stack
 
@@ -12,6 +12,40 @@ Clone it to put voice ordering on your own shop: swap the menu, the photos and t
 - [Deepgram Voice Agent](https://developers.deepgram.com/docs/voice-agent) for listening, thinking and speaking
 - [use-shopping-cart](https://useshoppingcart.com) for the cart
 - [Stripe Checkout](https://docs.stripe.com/checkout/quickstart) in test mode
+
+## Setup
+
+You need Node 22 or newer and [pnpm](https://pnpm.io).
+
+```sh
+git clone <repo-url> deepgram-pizza
+cd deepgram-pizza
+pnpm install
+cp .dev.vars.example .dev.vars
+```
+
+Fill in both keys in `.dev.vars`, which stays out of git:
+
+- `DEEPGRAM_API_KEY`: create an API key in the [Deepgram console](https://console.deepgram.com).
+- `STRIPE_SECRET_KEY`: a Stripe test mode secret key (`sk_test_…`) from the [Stripe dashboard](https://dashboard.stripe.com/test/apikeys).
+
+Then run `pnpm dev` and open http://localhost:3000.
+
+## Checks
+
+`pnpm check` runs lint, typecheck and tests. To check a deploy without publishing, run `pnpm build`, then `pnpm exec wrangler deploy --dry-run`.
+
+## Deploy
+
+Set both secrets on Cloudflare, then deploy:
+
+```sh
+pnpm exec wrangler secret put DEEPGRAM_API_KEY
+pnpm exec wrangler secret put STRIPE_SECRET_KEY
+pnpm run deploy
+```
+
+Deploy fails until both secrets are set: they're listed under `secrets.required` in `wrangler.jsonc`.
 
 ## How it works
 
