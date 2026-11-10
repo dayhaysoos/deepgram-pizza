@@ -29,7 +29,7 @@ import { quantitiesOf, summarizeCart } from '../agent/cartSummary'
 import { agentSettings } from './agentSettings'
 import { Captions } from './Captions'
 import { getDeepgramToken } from './getDeepgramToken'
-import { createIdleTimer, SPEECH_EVENTS } from './idleTimer'
+import { createIdleTimer, RESET_EVENTS, SPEECH_EVENTS } from './idleTimer'
 import {
   isLive,
   NO_SESSION,
@@ -184,20 +184,14 @@ function SessionEvents({ send }: { send: (event: LiveEvent) => void }) {
 
   useEffect(() => {
     const timer = createIdleTimer(() => send({ type: 'idle' }))
-    const listeners = SPEECH_EVENTS.map((event) => {
-      const listener = () => timer.heard(event)
-      agentSession.on(event, listener)
-      return () => void agentSession.off(event, listener)
-    })
-    // A reconnect resends the settings but not the greeting, so nothing else
-    // would end the pause if the drop came while the agent was speaking.
-    agentSession.on('reconnecting', timer.reset)
-    agentSession.on('settings-applied', timer.reset)
+    const listeners = [
+      ...SPEECH_EVENTS.map((event) => [event, () => timer.heard(event)] as const),
+      ...RESET_EVENTS.map((event) => [event, timer.reset] as const),
+    ]
+    for (const [event, listener] of listeners) agentSession.on(event, listener)
     return () => {
       timer.stop()
-      for (const removeListener of listeners) removeListener()
-      agentSession.off('reconnecting', timer.reset)
-      agentSession.off('settings-applied', timer.reset)
+      for (const [event, listener] of listeners) agentSession.off(event, listener)
     }
   }, [agentSession, send])
 

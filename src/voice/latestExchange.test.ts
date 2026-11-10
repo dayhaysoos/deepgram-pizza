@@ -17,7 +17,7 @@ describe('latestExchange', () => {
   })
 
   it('shows every greeting line before the customer says anything', () => {
-    const menuHint = { id: '2', role: 'assistant', content: 'Ask me about the menu.' } as const
+    const menuHint = { id: '6', role: 'assistant', content: 'Ask me about the menu.' } as const
     expect(latestExchange([greeting, menuHint])).toEqual({ customer: '', agent: [greeting, menuHint] })
   })
 

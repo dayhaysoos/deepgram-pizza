@@ -19,6 +19,13 @@ export const SPEECH_EVENTS = [
 
 export type SpeechEvent = (typeof SPEECH_EVENTS)[number]
 
+/**
+ * The Deepgram session events that mean the connection dropped or came back.
+ * A reconnect resends the settings but not the greeting, so if the drop came
+ * while the agent was speaking, no agent-audio-done would end the pause.
+ */
+export const RESET_EVENTS = ['reconnecting', 'settings-applied'] as const
+
 export type IdleTimer = {
   /** Something was said: the count starts again, and pauses while the agent speaks. */
   heard: (event: SpeechEvent) => void
