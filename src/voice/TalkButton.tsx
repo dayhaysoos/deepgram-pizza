@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { TALK_LABELS, type TalkStatus } from './talkStatus'
+import { TALK_LABELS, type TalkStatus } from './sessionStatus'
 
 type TalkButtonProps = {
   status: TalkStatus

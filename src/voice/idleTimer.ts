@@ -2,8 +2,8 @@
 // second, so after a minute with no speech from either side the session
 // closes on its own. Time while the agent is speaking doesn't count.
 //
-// The timer only counts. VoiceSession.tsx feeds it the session's events and
-// ends the session when it fires.
+// The timer only counts. VoiceSession.tsx feeds it the session's events, and
+// sends sessionStatus.ts an `idle` event when it fires.
 
 /** How long a session may go with no speech from either side. */
 export const IDLE_TIMEOUT_MS = 60_000

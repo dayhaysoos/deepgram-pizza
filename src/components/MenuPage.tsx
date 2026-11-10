@@ -4,8 +4,8 @@ import { MenuUiProvider } from '../agent/MenuUiProvider'
 import { TapUpdatesProvider } from '../agent/TapUpdatesProvider'
 import { ToolHandlersProvider } from '../agent/ToolHandlersProvider'
 import { categories, menu } from '../menu/menu'
+import { VoiceSession, VoiceSessionProvider } from '../voice/VoiceSession'
 import { CartDrawer } from './CartDrawer'
-import { VoiceSession } from '../voice/VoiceSession'
 import { MenuSection } from './MenuSection'
 import { SiteHeader } from './SiteHeader'
 import { SuggestionCard } from './SuggestionCard'
@@ -29,16 +29,19 @@ type MenuPageProps = {
  * tool panel as a child.
  */
 export function MenuPage(props: MenuPageProps) {
-  // What the voice tools change on screen, the tool handlers that change it,
-  // and the updates the agent gets when the customer taps.
+  // The voice session, first, so everything below can reach it; what the
+  // voice tools change on screen, the tool handlers that change it, and the
+  // updates the agent gets when the customer taps.
   return (
-    <MenuUiProvider>
-      <ToolHandlersProvider>
-        <TapUpdatesProvider>
-          <MenuLayout {...props} />
-        </TapUpdatesProvider>
-      </ToolHandlersProvider>
-    </MenuUiProvider>
+    <VoiceSessionProvider>
+      <MenuUiProvider>
+        <ToolHandlersProvider>
+          <TapUpdatesProvider>
+            <MenuLayout {...props} />
+          </TapUpdatesProvider>
+        </ToolHandlersProvider>
+      </MenuUiProvider>
+    </VoiceSessionProvider>
   )
 }
 
@@ -89,7 +92,8 @@ function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: Me
           When it closes, focus goes into the open cart, since the page behind it is inert. */}
       <SuggestionCard returnFocusRef={cartOpen ? cartCloseButtonRef : cartButtonRef} />
       <CartDrawer returnFocusRef={cartButtonRef} closeButtonRef={cartCloseButtonRef} />
-      {/* Outside the page too, so the conversation goes on while the cart is open. */}
+      {/* Outside the page too, so the conversation goes on while the cart is open.
+          The session's state lives in VoiceSessionProvider, above. */}
       <VoiceSession />
       {children}
     </>

@@ -1,5 +1,10 @@
-// The voice conversation: the talk button, and while a session is on, a
-// Deepgram AgentProvider with the captions.
+// The voice conversation, wired to React and Deepgram. The rules (what the
+// button shows, and when a session ends) live in sessionStatus.ts; this file
+// only turns the SDK's callbacks into its events and renders from its state.
+//
+// VoiceSessionProvider holds the session's state for the page's lifetime, at
+// the top of MenuPage. VoiceSession renders the talk button and, while a
+// session is on, a Deepgram AgentProvider with the captions.
 //
 // One session per press. AgentProvider creates its AgentSession once, from the
 // `config` of its first render, and ignores later changes. The agent's
@@ -9,9 +14,10 @@
 // stops the microphone and the speaker. Without a session there's no provider
 // at all: nothing connects, and nothing asks for the microphone, until a press.
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useReducer, useState, type ReactNode } from 'react'
 import {
   AgentProvider,
+  useAgentMicrophone,
   useAgentMode,
   useAgentSession,
   useAgentState,
@@ -21,75 +27,91 @@ import { useShoppingCart } from 'use-shopping-cart'
 import { quantitiesOf, summarizeCart } from '../agent/cartSummary'
 import { agentSettings } from './agentSettings'
 import { Captions } from './Captions'
-import { VOICE_UNAVAILABLE } from './deepgramToken'
 import { getDeepgramToken } from './getDeepgramToken'
 import { createIdleTimer, SPEECH_EVENTS } from './idleTimer'
+import {
+  isLive,
+  NO_SESSION,
+  updateSession,
+  type LiveEvent,
+  type SessionEvent,
+  type SessionState,
+} from './sessionStatus'
 import { TalkButton } from './TalkButton'
-import { CONNECTION_LOST, explainError, talkStatus, VoiceTokenError, type LiveStatus } from './talkStatus'
 
-type Session =
-  | { status: 'idle' }
-  | { status: 'live'; id: number; config: AgentSessionConfig }
-  /** The last session failed. The button shows why until the next press. */
-  | { status: 'error'; message: string }
+type VoiceSessionContextValue = { state: SessionState; send: (event: SessionEvent) => void }
 
-/** Ends session `id`, with a message to show if it failed. */
-type EndSession = (id: number, message?: string) => void
+const VoiceSessionContext = createContext<VoiceSessionContextValue | null>(null)
 
-type VoiceSessionProps = {
-  /**
-   * Rendered inside the live session's provider, so it mounts and unmounts
-   * with each session: the place for tool registrations (`useAgentClientTool`)
-   * and anything else that talks to the agent.
-   */
-  children?: ReactNode
+/**
+ * Holds the voice session for the page's lifetime. It goes at the top of
+ * MenuPage, above the tool handlers and the tap updates, so code that lives as
+ * long as the page can reach the live session.
+ */
+export function VoiceSessionProvider({ children }: { children: ReactNode }) {
+  const [state, send] = useReducer(updateSession, NO_SESSION)
+  // Step 5 adds what the page needs from a live session here, safe to call
+  // when none is on: `tell(text)` for tap updates, and `leaveAfterSpeaking()`
+  // for checkout.
+  return <VoiceSessionContext value={{ state, send }}>{children}</VoiceSessionContext>
 }
 
-export function VoiceSession({ children }: VoiceSessionProps) {
-  const cartDetails = useShoppingCart((cart) => cart.cartDetails)
-  const [session, setSession] = useState<Session>({ status: 'idle' })
-  const [liveStatus, setLiveStatus] = useState<LiveStatus>('connecting')
-  const lastId = useRef(0)
-
-  // Only the first end of a session counts: a later one, for a session that
-  // has already ended or been replaced, changes nothing.
-  const end = useCallback<EndSession>((id, message) => {
-    setSession((current) => {
-      if (current.status !== 'live' || current.id !== id) return current
-      return message ? { status: 'error', message } : { status: 'idle' }
-    })
-  }, [])
-
-  function press() {
-    if (session.status === 'live') return end(session.id)
-    lastId.current += 1
-    setLiveStatus('connecting')
-    setSession({
-      status: 'live',
-      id: lastId.current,
-      config: {
-        auth: { tokenFactory: fetchToken },
-        // The cart as it is now, at the press.
-        agent: agentSettings(summarizeCart(quantitiesOf(cartDetails))),
-      },
-    })
-  }
+/**
+ * The talk button, and while a session is on, the live Deepgram session with
+ * its captions. MenuPage renders it outside the page wrapper an open cart
+ * makes inert, so the conversation goes on while the cart is open.
+ */
+export function VoiceSession() {
+  const voice = useContext(VoiceSessionContext)
+  if (!voice) throw new Error('VoiceSession needs a <VoiceSessionProvider> above it.')
+  const { state, send } = voice
 
   return (
     <div className="voice">
-      {session.status === 'live' && (
-        <LiveSession key={session.id} id={session.id} config={session.config} onStatus={setLiveStatus} onEnd={end}>
-          <Captions />
-          {children}
-        </LiveSession>
-      )}
+      {isLive(state) && <LiveSession key={state.session} session={state.session} send={send} />}
       {/* After the session, so it keeps its place (and its focus) as sessions come and go. */}
       <TalkButton
-        status={session.status === 'live' ? liveStatus : session.status}
-        message={session.status === 'error' ? session.message : undefined}
-        onPress={press}
+        status={state.status}
+        message={state.status === 'error' ? state.message : undefined}
+        onPress={() => send({ type: 'pressed' })}
       />
     </div>
+  )
+}
+
+type LiveSessionProps = {
+  session: number
+  send: (event: SessionEvent) => void
+}
+
+/** One session: connects on mount, hangs up on unmount. */
+function LiveSession({ session, send: sendToPage }: LiveSessionProps) {
+  const send = useCallback((event: LiveEvent) => sendToPage({ ...event, session }), [sendToPage, session])
+  const cartDetails = useShoppingCart((cart) => cart.cartDetails)
+  // Built once. This session mounts right after the press, so the agent
+  // starts with the cart as it is at the press.
+  const [config] = useState<AgentSessionConfig>(() => ({
+    auth: { tokenFactory: () => fetchToken(send) },
+    agent: agentSettings(summarizeCart(quantitiesOf(cartDetails))),
+  }))
+
+  return (
+    <AgentProvider
+      config={config}
+      autoStart
+      onSdkError={(error) => {
+        console.warn('Deepgram voice SDK error:', error)
+        send({ type: 'sdkError', error })
+      }}
+      onError={({ code, description }) => {
+        console.error(`Deepgram voice agent error ${code}: ${description}`)
+        send({ type: 'agentError' })
+      }}
+      onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
+    >
+      <SessionEvents send={send} />
+      <Captions />
+    </AgentProvider>
   )
 }
 
@@ -97,115 +119,65 @@ export function VoiceSession({ children }: VoiceSessionProps) {
  * The provider's token factory, called before every connect and reconnect: a
  * fresh short-lived token from our server function, which keeps the API key.
  */
-async function fetchToken(): Promise<string> {
+async function fetchToken(send: (event: LiveEvent) => void): Promise<string> {
   const result = await getDeepgramToken()
-  if ('message' in result) throw new VoiceTokenError(result.message)
-  return result.token
-}
-
-type LiveSessionProps = {
-  id: number
-  config: AgentSessionConfig
-  onStatus: (status: LiveStatus) => void
-  onEnd: EndSession
-  children: ReactNode
-}
-
-/** One session: connects on mount, hangs up on unmount. */
-function LiveSession({ id, config, onStatus, onEnd, children }: LiveSessionProps) {
-  const endSession = useCallback((message?: string) => onEnd(id, message), [onEnd, id])
-  // Whether the agent has had its settings applied. Until then, any SDK error
-  // ends the session: retrying a refused token or a broken connection would
-  // only repeat it. Afterwards, the SDK reconnects a dropped socket by itself.
-  const ready = useRef(false)
-  const markReady = useCallback(() => {
-    ready.current = true
-  }, [])
-
-  function onSdkError(error: Error) {
-    const message = explainError(error)
-    if (message) {
-      endSession(message)
-    } else if (ready.current) {
-      console.warn('Voice connection problem, reconnecting:', error)
-    } else {
-      console.error('Voice session failed to start:', error)
-      endSession(VOICE_UNAVAILABLE)
-    }
-  }
-
-  return (
-    <AgentProvider
-      config={config}
-      autoStart
-      onSdkError={onSdkError}
-      // Deepgram's docs: treat every Error as the end of the session.
-      onError={({ code, description }) => {
-        console.error(`Deepgram voice agent error ${code}: ${description}`)
-        endSession(VOICE_UNAVAILABLE)
-      }}
-      onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
-    >
-      <SessionWatcher onReady={markReady} onStatus={onStatus} onEnd={endSession} />
-      {children}
-    </AgentProvider>
-  )
-}
-
-type SessionWatcherProps = {
-  onReady: () => void
-  onStatus: (status: LiveStatus) => void
-  onEnd: (message?: string) => void
+  if ('token' in result) return result.token
+  send({ type: 'tokenFailed', message: result.message })
+  // Stops the SDK from connecting. The session has already ended, with the message.
+  throw new Error(`No voice token: ${result.message}`)
 }
 
 /**
- * Reports the live session's status to the button, and ends the session when
- * the connection is lost for good, nobody speaks for a minute, or the
- * customer leaves the page.
+ * Sends the live session's changes as events: the connection and the agent's
+ * mode, the settings, the microphone, a disconnect, the customer leaving the
+ * page, and a minute with no speech.
  */
-function SessionWatcher({ onReady, onStatus, onEnd }: SessionWatcherProps) {
-  const session = useAgentSession()
+function SessionEvents({ send }: { send: (event: LiveEvent) => void }) {
+  const agentSession = useAgentSession()
   const { state, stop } = useAgentState()
   const { mode } = useAgentMode()
+  const { micActive } = useAgentMicrophone()
 
-  const status = talkStatus(state, mode)
-  useEffect(() => onStatus(status), [status, onStatus])
+  useEffect(() => send({ type: 'agentChanged', state, mode }), [state, mode, send])
 
   useEffect(() => {
-    session.on('settings-applied', onReady)
-    return () => void session.off('settings-applied', onReady)
-  }, [session, onReady])
+    if (micActive) send({ type: 'microphoneOn' })
+  }, [micActive, send])
 
-  // 'disconnected' means the SDK gave up reconnecting. This runs after a
-  // render, so a microphone or token error, which the provider reports just
-  // after it disconnects, has already ended the session with its own message.
+  // Straight from the session, so they arrive in the order they happen.
   useEffect(() => {
-    if (state === 'disconnected') onEnd(CONNECTION_LOST)
-  }, [state, onEnd])
+    const onSettingsApplied = () => send({ type: 'settingsApplied' })
+    const onDisconnected = () => send({ type: 'disconnected' })
+    agentSession.on('settings-applied', onSettingsApplied)
+    agentSession.on('disconnected', onDisconnected)
+    return () => {
+      agentSession.off('settings-applied', onSettingsApplied)
+      agentSession.off('disconnected', onDisconnected)
+    }
+  }, [agentSession, send])
 
   // Leaving the page: hang up right away, since no unmount may come.
   useEffect(() => {
     function onPageHide() {
-      onEnd()
+      send({ type: 'pageHidden' })
       stop()
     }
     window.addEventListener('pagehide', onPageHide)
     return () => window.removeEventListener('pagehide', onPageHide)
-  }, [onEnd, stop])
+  }, [send, stop])
 
-  // A minute with no speech from either side ends the session (idleTimer.ts).
   useEffect(() => {
-    const timer = createIdleTimer(() => onEnd())
+    const timer = createIdleTimer(() => send({ type: 'idle' }))
     const listeners = SPEECH_EVENTS.map((event) => {
       const listener = () => timer.heard(event)
-      session.on(event, listener)
-      return () => void session.off(event, listener)
+      agentSession.on(event, listener)
+      return () => void agentSession.off(event, listener)
     })
     return () => {
       timer.stop()
       for (const removeListener of listeners) removeListener()
     }
-  }, [session, onEnd])
+  }, [agentSession, send])
 
   return null
 }
