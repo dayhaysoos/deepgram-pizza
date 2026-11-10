@@ -2,7 +2,8 @@
 // can be built and tested without a microphone. It calls the page's own tool
 // handlers (useToolHandlers), the set the talk button will use, so a run here
 // changes the page exactly as the agent's tool call would, and shows the result
-// the agent would get back.
+// the agent would get back. Its first section is the voice session log
+// (SessionLogSection.tsx), to read and copy while you talk.
 //
 // Dev only: src/routes/dev.tools.tsx loads this module only when
 // import.meta.env.DEV is true, so production builds leave it, and its styles, out.
@@ -14,6 +15,7 @@ import type { ToolResult } from '../agent/handlers'
 import { toolDefinitions, type ToolName } from '../agent/tools'
 import { useToolHandlers } from '../agent/ToolHandlersProvider'
 import { defaultVariant, findVariant, menu } from '../menu/menu'
+import { SessionLogSection } from './SessionLogSection'
 import './ToolsPanel.css'
 
 /** An update a tap would send the agent, as the panel logs it. */
@@ -176,6 +178,8 @@ export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
       </h2>
 
       <div className="tools-panel-body" id={bodyId} hidden={!open}>
+        <SessionLogSection />
+
         <p className="tools-panel-note">
           Runs the voice agent&apos;s tools through the page&apos;s own handlers, exactly as the agent&apos;s tool calls
           would.

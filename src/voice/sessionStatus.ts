@@ -17,6 +17,9 @@
 // - a disconnect once the session has started, which means the SDK gave up
 //   reconnecting. Before that, a disconnect is AgentProvider hanging up after a
 //   failed start, and the error it reports next says why.
+//
+// An ended session's state keeps what ended it (`endedBy`), for the session
+// log on /dev/tools.
 
 import type { AgentMode, AgentState } from '@deepgram/react'
 import { VOICE_UNAVAILABLE } from './deepgramToken'
@@ -47,11 +50,17 @@ export type LiveSession = {
   microphoneOn: boolean
 }
 
+/** What ended a session: the type of the event that ended it. */
+export type SessionEnd = 'pressed' | 'pageHidden' | 'idle' | 'tokenFailed' | 'sdkError' | 'agentError' | 'disconnected'
+
 export type SessionState =
-  /** No session. `sessionNumber` is the last one's (0 before the first press). */
-  | { status: 'idle'; sessionNumber: number }
+  /**
+   * No session. `sessionNumber` is the last one's, and `endedBy` what ended
+   * it (0 and nothing before the first press).
+   */
+  | { status: 'idle'; sessionNumber: number; endedBy?: SessionEnd }
   /** The last session failed. The button shows why until the next press. */
-  | { status: 'error'; sessionNumber: number; message: string }
+  | { status: 'error'; sessionNumber: number; message: string; endedBy: SessionEnd }
   | LiveSession
 
 /** The page's first render: no session yet. */
@@ -95,7 +104,7 @@ export function isLive(state: SessionState): state is LiveSession {
 /** The session after `event`. Returns `state` itself when the event changes nothing. */
 export function updateSession(state: SessionState, event: SessionEvent): SessionState {
   if (event.type === 'pressed') {
-    if (isLive(state)) return { status: 'idle', sessionNumber: state.sessionNumber }
+    if (isLive(state)) return { status: 'idle', sessionNumber: state.sessionNumber, endedBy: 'pressed' }
     return { status: 'connecting', sessionNumber: state.sessionNumber + 1, settingsApplied: false, microphoneOn: false }
   }
 
@@ -122,20 +131,20 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
       return state.microphoneOn ? state : { ...state, microphoneOn: true }
     case 'idle':
     case 'pageHidden':
-      return { status: 'idle', sessionNumber: state.sessionNumber }
+      return { status: 'idle', sessionNumber: state.sessionNumber, endedBy: event.type }
     case 'tokenFailed':
-      return failed(state, event.message)
+      return failed(state, event.type, event.message)
     case 'agentError':
-      return failed(state, VOICE_UNAVAILABLE)
+      return failed(state, event.type, VOICE_UNAVAILABLE)
     case 'sdkError': {
       const message = microphoneMessage(event.error)
-      if (message) return failed(state, message)
-      return state.settingsApplied ? state : failed(state, VOICE_UNAVAILABLE)
+      if (message) return failed(state, event.type, message)
+      return state.settingsApplied ? state : failed(state, event.type, VOICE_UNAVAILABLE)
     }
     case 'disconnected':
       // The microphone starts after the connection opens, often while the
       // browser is still asking for it, after the settings have arrived.
-      return state.settingsApplied && state.microphoneOn ? failed(state, CONNECTION_LOST) : state
+      return state.settingsApplied && state.microphoneOn ? failed(state, event.type, CONNECTION_LOST) : state
   }
 }
 
@@ -144,8 +153,8 @@ function withStatus(state: LiveSession, status: LiveStatus): LiveSession {
   return status === state.status ? state : { ...state, status }
 }
 
-function failed(state: LiveSession, message: string): SessionState {
-  return { status: 'error', sessionNumber: state.sessionNumber, message }
+function failed(state: LiveSession, endedBy: SessionEnd, message: string): SessionState {
+  return { status: 'error', sessionNumber: state.sessionNumber, message, endedBy }
 }
 
 /**

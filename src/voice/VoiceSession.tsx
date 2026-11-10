@@ -13,8 +13,21 @@
 // built at that moment, and ending the session unmounts it, which hangs up and
 // stops the microphone and the speaker. Without a session there's no provider
 // at all: nothing connects, and nothing asks for the microphone, until a press.
+//
+// In development, every session is also recorded in the session log that
+// /dev/tools shows (src/dev/SessionRecorder.tsx and recordSession.ts).
 
-import { createContext, useCallback, useContext, useEffect, useReducer, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  lazy,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useReducer,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   AgentProvider,
   useAgentMicrophone,
@@ -39,6 +52,13 @@ import {
   type SessionState,
 } from './sessionStatus'
 import { TalkButton } from './TalkButton'
+
+// Dev only: the session log's recorder. `import.meta.env.DEV` is `false` in a
+// production build, so Vite drops both branches, and the log's code with them.
+const SessionRecorder = import.meta.env.DEV ? lazy(() => import('../dev/SessionRecorder')) : null
+const recordSessionEnd = import.meta.env.DEV
+  ? (state: SessionState) => void import('../dev/recordSession').then((recorder) => recorder.recordSessionEnd(state))
+  : null
 
 type VoiceSessionContextValue = { state: SessionState; send: (event: SessionEvent) => void }
 
@@ -66,6 +86,11 @@ export function VoiceSession() {
   const voice = useContext(VoiceSessionContext)
   if (!voice) throw new Error('VoiceSession needs a <VoiceSessionProvider> above it.')
   const { state, send } = voice
+
+  // Dev only: notes in the session log how each session ended.
+  useEffect(() => {
+    recordSessionEnd?.(state)
+  }, [state])
 
   return (
     <div className="voice">
@@ -102,22 +127,27 @@ function DeepgramSession({ sessionNumber, send: sendToPage }: DeepgramSessionPro
   }))
 
   return (
-    <AgentProvider
-      config={config}
-      autoStart
-      onSdkError={(error) => {
-        console.warn('Deepgram voice SDK error:', error)
-        send({ type: 'sdkError', error })
-      }}
-      onError={({ code, description }) => {
-        console.error(`Deepgram voice agent error ${code}: ${description}`)
-        send({ type: 'agentError' })
-      }}
-      onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
-    >
-      <SessionEvents send={send} />
-      <Captions />
-    </AgentProvider>
+    // In development, holds the session back until the recorder's code has
+    // loaded, so the log has the session from its first event.
+    <Suspense fallback={null}>
+      <AgentProvider
+        config={config}
+        autoStart
+        onSdkError={(error) => {
+          console.warn('Deepgram voice SDK error:', error)
+          send({ type: 'sdkError', error })
+        }}
+        onError={({ code, description }) => {
+          console.error(`Deepgram voice agent error ${code}: ${description}`)
+          send({ type: 'agentError' })
+        }}
+        onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
+      >
+        <SessionEvents send={send} />
+        {SessionRecorder && <SessionRecorder settings={config.agent} />}
+        <Captions />
+      </AgentProvider>
+    </Suspense>
   )
 }
 

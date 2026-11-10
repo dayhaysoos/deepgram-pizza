@@ -2,11 +2,13 @@
    styles live here with it rather than in src/styles.css: production builds
    leave the panel out, and these styles with it.
 
-   On phones it's a bottom sheet. From 64rem wide it's docked on the left, and
-   the page moves over to make room. Open, it sits above the cart and the
-   suggestion card, so tools can run with either one open. Collapsed, it's a
-   small tab in the bottom-left corner, under the cart, so it never covers the
-   Checkout button, and the bottom centre stays free for the talk button. */
+   On phones it's a sheet resting on the talk button's strip, so you can talk
+   with it open and watch the session log. From 64rem wide it's docked on the
+   left, and the page and the talk button move over to make room. Open, it
+   sits above the cart and the suggestion card, so tools can run with either
+   one open. Collapsed, it's a small tab in the bottom-left corner, under the
+   cart, so it never covers the Checkout button, and the bottom centre stays
+   free for the talk button. */
 
 :root {
   --tools-panel-width: 24rem;
@@ -198,8 +200,70 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Phones: the menu can scroll clear of the open sheet. */
+/* The session log (SessionLogSection.tsx): a scrolling transcript, newest at
+   the bottom, short enough on a phone's sheet to leave the buttons in view. */
+.session-log {
+  max-height: min(24rem, 40dvh);
+  padding: var(--space-1) var(--space-3) var(--space-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-small);
+  background: var(--cream);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.session-log h4 {
+  margin-top: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.session-log ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-log li {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.session-log li span {
+  overflow-wrap: anywhere;
+}
+
+.session-log time {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-log [data-kind='you'],
+.session-log [data-kind='agent'] {
+  font-weight: 700;
+}
+
+.session-log [data-kind='event'] span {
+  color: var(--ink-soft);
+}
+
+.session-log [data-kind='problem'] span {
+  color: var(--red-dark);
+  font-weight: 700;
+}
+
+/* Phones: the open sheet sits above the talk button and its captions, and
+   the menu can scroll clear of it. */
 @media (width < 64rem) {
+  .tools-panel[data-open] {
+    bottom: calc(var(--voice-space) + env(safe-area-inset-bottom));
+  }
+
   body:has(.tools-panel[data-open]) {
     padding-bottom: var(--tools-sheet-height);
   }
@@ -222,5 +286,11 @@
 
   body:has(.tools-panel[data-open]) .suggestion-card {
     left: calc(var(--tools-panel-width) + var(--space-4));
+  }
+
+  /* The talk button and its captions centre on the page, clear of the panel.
+     With the cart open they're in the cart's column already. */
+  body:has(.tools-panel[data-open]):not(:has(.drawer[data-open])) .voice {
+    left: var(--tools-panel-width);
   }
 }

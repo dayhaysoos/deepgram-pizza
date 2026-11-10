@@ -49,12 +49,12 @@ describe('updateSession', () => {
     })
 
     it('ends the session while it connects', () => {
-      expect(after(press, press)).toEqual({ status: 'idle', sessionNumber: 1 })
+      expect(after(press, press)).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'pressed' })
     })
 
     it('ends the session once it is on', () => {
       const on = live(...started)
-      expect(updateSession(on, press)).toEqual({ status: 'idle', sessionNumber: 1 })
+      expect(updateSession(on, press)).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'pressed' })
     })
 
     it('starts again from an error, without the message', () => {
@@ -131,11 +131,11 @@ describe('updateSession', () => {
 
   describe('ending a session', () => {
     it('ends without a message when the customer leaves the page', () => {
-      expect(live(...started, { type: 'pageHidden' })).toEqual({ status: 'idle', sessionNumber: 1 })
+      expect(live(...started, { type: 'pageHidden' })).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'pageHidden' })
     })
 
     it('ends without a message after a minute with no speech', () => {
-      expect(live(...started, { type: 'idle' })).toEqual({ status: 'idle', sessionNumber: 1 })
+      expect(live(...started, { type: 'idle' })).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'idle' })
     })
 
     it("shows the token server function's message as it is", () => {
@@ -143,11 +143,12 @@ describe('updateSession', () => {
         status: 'error',
         sessionNumber: 1,
         message: VOICE_NOT_SET_UP,
+        endedBy: 'tokenFailed',
       })
     })
 
     it('asks for the microphone when it was blocked', () => {
-      expect(live(micBlocked)).toMatchObject({ status: 'error', message: MIC_BLOCKED })
+      expect(live(micBlocked)).toMatchObject({ status: 'error', message: MIC_BLOCKED, endedBy: 'sdkError' })
       const insecure = new DOMException('Insecure context', 'SecurityError')
       expect(live({ type: 'sdkError', error: insecure })).toMatchObject({ status: 'error', message: MIC_BLOCKED })
     })
@@ -161,12 +162,12 @@ describe('updateSession', () => {
 
     it('ends on an Error message from Deepgram, before or after the start', () => {
       const agentError: LiveEvent = { type: 'agentError' }
-      expect(live(agentError)).toMatchObject({ status: 'error', message: VOICE_UNAVAILABLE })
+      expect(live(agentError)).toMatchObject({ status: 'error', message: VOICE_UNAVAILABLE, endedBy: 'agentError' })
       expect(live(...started, agentError)).toMatchObject({ status: 'error', message: VOICE_UNAVAILABLE })
     })
 
     it('ends on any other SDK error before the agent has its settings', () => {
-      expect(live(openTimeout)).toMatchObject({ status: 'error', message: VOICE_UNAVAILABLE })
+      expect(live(openTimeout)).toMatchObject({ status: 'error', message: VOICE_UNAVAILABLE, endedBy: 'sdkError' })
       expect(live({ type: 'sdkError', error: 'socket closed' })).toMatchObject({
         status: 'error',
         message: VOICE_UNAVAILABLE,
@@ -184,7 +185,12 @@ describe('updateSession', () => {
     })
 
     it('says the connection was lost when the SDK gives up, once the session has started', () => {
-      expect(live(...started, disconnected)).toEqual({ status: 'error', sessionNumber: 1, message: CONNECTION_LOST })
+      expect(live(...started, disconnected)).toEqual({
+        status: 'error',
+        sessionNumber: 1,
+        message: CONNECTION_LOST,
+        endedBy: 'disconnected',
+      })
       // The microphone can come on before the settings arrive.
       expect(live(microphoneOn, settingsApplied, disconnected)).toMatchObject({ message: CONNECTION_LOST })
     })
@@ -197,7 +203,11 @@ describe('updateSession', () => {
     it('waits for the error that follows, before the agent has its settings', () => {
       const hungUp = live(disconnected)
       expect(hungUp.status).toBe('connecting')
-      expect(updateSession(hungUp, fromSession1(micBlocked))).toMatchObject({ status: 'error', message: MIC_BLOCKED })
+      expect(updateSession(hungUp, fromSession1(micBlocked))).toMatchObject({
+        status: 'error',
+        message: MIC_BLOCKED,
+        endedBy: 'sdkError',
+      })
     })
 
     it('keeps the error when the disconnect comes after it', () => {

@@ -45,6 +45,8 @@ Press **Talk to order** at the bottom of the screen and allow the microphone whe
 
 The agent can't change the cart yet: its tools are wired to voice in the next step. The session ends when you press the button again, when you leave the page, or after 60 seconds without speech from either side.
 
+To see the whole conversation, talk from http://localhost:3000/dev/tools: its **Session log** shows what you and the agent said, with times, and every message from Deepgram but the audio, for every session until you press **Clear**. **Copy as text** or **Copy as JSON** to share it, for example in a bug report. It's for development only; the browser console also prints each line as `[voice] you: …` and `[voice] agent: …`.
+
 ### Try the tools without a microphone
 
 Run `pnpm dev` and open http://localhost:3000/dev/tools. It's the menu page with a panel that runs the voice agent's tools through the same handlers the agent uses, so the page changes exactly as it will for a voice tool call. Pick a tool, edit its JSON arguments and press **Run** to see the result the agent would get back. Or use a preset, which fills in a call and runs it:

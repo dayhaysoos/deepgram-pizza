@@ -50,6 +50,8 @@ Add a dependency outside this table only after asking.
 - Agent instructions: a friendly counter worker at a fictional shop. Keep answers to one or two sentences. Confirm each change out loud with quantity, size and name. Ask when a request is ambiguous ("Large or medium?"). Talk about this menu and nothing else.
 - Ask for the microphone on the first press, not on page load, and handle a denied permission with a visible message.
 - `AgentProvider` reads `config` only on its first render, so the voice session mounts a new provider (new `key`) on every press with the config built at that moment (`src/voice/VoiceSession.tsx`).
+- In development every session is recorded in the session log on `/dev/tools` (`src/dev/`): what was said, and every Deepgram message but the audio. Read it, or copy it as text or JSON, when checking or reporting voice behaviour. Code that records it loads only behind `import.meta.env.DEV`.
+- In development TanStack Start renders the app inside `<StrictMode>`, so effects mount, unmount and mount again. An effect that starts something once (a connection, a log section) has to survive that.
 
 ## Cloudflare Workers
 
