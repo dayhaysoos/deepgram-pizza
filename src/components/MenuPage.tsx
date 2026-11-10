@@ -2,7 +2,7 @@ import { useRef, type ReactNode } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
 import { MenuUiProvider } from '../agent/MenuUiProvider'
 import { TapUpdatesProvider } from '../agent/TapUpdatesProvider'
-import { ToolHandlersProvider } from '../agent/useToolHandlers'
+import { ToolHandlersProvider } from '../agent/ToolHandlersProvider'
 import { categories, menu } from '../menu/menu'
 import { CartDrawer } from './CartDrawer'
 import { MenuSection } from './MenuSection'
@@ -43,6 +43,7 @@ export function MenuPage(props: MenuPageProps) {
 function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: MenuPageProps) {
   const cartOpen = useShoppingCart((cart) => cart.shouldDisplayCart)
   const cartButtonRef = useRef<HTMLButtonElement>(null)
+  const cartCloseButtonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
   useHighlightScroll(pageRef)
@@ -82,9 +83,10 @@ function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: Me
           ))}
         </main>
       </div>
-      {/* Outside the page, so it stays usable beside an open cart (styles.css says where it sits). */}
-      <SuggestionCard returnFocusRef={cartButtonRef} />
-      <CartDrawer returnFocusRef={cartButtonRef} />
+      {/* Outside the page, so it stays usable beside an open cart (styles.css says where it sits).
+          When it closes, focus goes into the open cart, since the page behind it is inert. */}
+      <SuggestionCard returnFocusRef={cartOpen ? cartCloseButtonRef : cartButtonRef} />
+      <CartDrawer returnFocusRef={cartButtonRef} closeButtonRef={cartCloseButtonRef} />
       {children}
     </>
   )

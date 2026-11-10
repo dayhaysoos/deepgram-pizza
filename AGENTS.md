@@ -63,7 +63,7 @@ Add a dependency outside this table only after asking.
 
 ## use-shopping-cart
 
-- In components, read state through selectors: `useShoppingCart((cart) => cart.cartCount)`. Tool handlers call actions from `useShoppingCart()`.
+- In components, read state through selectors: `useShoppingCart((cart) => cart.cartCount)`. Tool handlers call the cart's actions through the cart port they're given; `ToolHandlersProvider` passes in the actions from `useShoppingCart`.
 - Select actions the same way as state: `useShoppingCart((cart) => cart.addItem)`, so a component doesn't re-render on every cart change. To open the drawer from code, call `handleCartHover()`; `handleCartClick()` toggles and `handleCloseCart()` closes. See `LIBRARY_FEEDBACK.md`.
 - Code can't read the cart back right after calling an action: the hook shows the new cart only after the next render, and has no `getState()`. Tool handlers work out the cart after their change themselves and summarize that (`src/agent/handlers.ts`); a test checks the result against a real core `ShoppingCart`. Follow the same pattern anywhere else that needs the cart right after changing it.
 - Checkout: the client posts `cartDetails` to the checkout server function. The server keeps only each line's id and quantity (`{ [id]: { quantity } }`), rebuilds the line items with `validateCartItems(products, …)` from `use-shopping-cart/utilities`, creates the session, and returns `session.url`. Passing the posted `cartDetails` straight through would let the browser's `product_data.metadata` reach Stripe (see `LIBRARY_FEEDBACK.md`). The client then calls `redirectToCheckout(url)`. Prices come from `menu.json` on the server, never from the browser.

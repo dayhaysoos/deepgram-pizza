@@ -1,13 +1,13 @@
 // What the voice tools change on the menu page, besides the cart: the menu
 // cards find_menu_items lights up, and the suggestion card show_suggestions
-// opens. The page reads this state; the tool handlers (useToolHandlers.tsx) and
+// opens. The page reads this state; the tool handlers (ToolHandlersProvider.tsx) and
 // the page's own controls change it.
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import type { SuggestionCard } from './handlers'
+import type { Suggestions } from './handlers'
 
 /** The suggestion card on screen. `key` is new for every card, so a replaced card starts fresh. */
-export type ShownSuggestion = { key: number; card: SuggestionCard }
+export type ShownSuggestion = { key: number; card: Suggestions }
 
 export type MenuUi = {
   /** Item ids of the highlighted menu cards, in the order find_menu_items found them. */
@@ -17,7 +17,7 @@ export type MenuUi = {
   highlight(itemIds: readonly string[]): void
   clearHighlight(): void
   /** Opens the suggestion card, replacing any card already open. */
-  showSuggestions(card: SuggestionCard): void
+  showSuggestions(card: Suggestions): void
   closeSuggestions(): void
 }
 
@@ -33,7 +33,7 @@ export function MenuUiProvider({ children }: { children: ReactNode }) {
   const [actions] = useState(() => ({
     highlight: (itemIds: readonly string[]) => setHighlighted(itemIds.length > 0 ? itemIds : NONE),
     clearHighlight: () => setHighlighted(NONE),
-    showSuggestions: (card: SuggestionCard) => setSuggestion((shown) => ({ key: (shown?.key ?? 0) + 1, card })),
+    showSuggestions: (card: Suggestions) => setSuggestion((shown) => ({ key: (shown?.key ?? 0) + 1, card })),
     closeSuggestions: () => setSuggestion(null),
   }))
 

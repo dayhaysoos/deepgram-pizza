@@ -18,7 +18,8 @@ function product(id: string) {
 /**
  * The handlers against a real use-shopping-cart store, behaving the way they
  * will in React: a handler reads the cart as of the last render, and what its
- * actions change shows up only after the next render (here, after each call).
+ * actions change shows up only after the next render (here, after each
+ * `call`; `handlers` and `render` run calls that arrive before a render).
  * A handler that read the cart back after acting would get the old cart, and
  * the summary checks below would catch it.
  */
@@ -36,7 +37,13 @@ function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESS
     removeItem: vi.fn<CartPort['removeItem']>((id) => store.removeItem(id)),
     clearCart: vi.fn<CartPort['clearCart']>(() => store.clearCart()),
   }
-  const ui = { highlight: vi.fn(), showSuggestions: vi.fn(), openCart: vi.fn(), goToCheckout: vi.fn() }
+  const ui = {
+    highlight: vi.fn(),
+    showSuggestions: vi.fn(),
+    closeSuggestions: vi.fn(),
+    openCart: vi.fn(),
+    goToCheckout: vi.fn(),
+  }
   const checkout = vi.fn<ToolPorts['checkout']>(respond)
   const handlers = createToolHandlers({ cart, ui, checkout })
 
@@ -64,7 +71,7 @@ function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESS
     expect(cart.clearCart).not.toHaveBeenCalled()
   }
 
-  return { store, cart, ui, checkout, call, given, storeSummary, noCartChanges }
+  return { store, cart, ui, checkout, handlers, render, call, given, storeSummary, noCartChanges }
 }
 
 const BAD_QUANTITY = 'The quantity has to be a whole number from 1 to 20.'
@@ -350,28 +357,39 @@ describe('opening the cart drawer', () => {
 })
 
 describe('addLines, for the suggestion card’s Add all', () => {
-  it('adds every line with the same checks as add_items, without opening the drawer', async () => {
-    const { cart, ui, store } = setup()
+  it('adds every line with the same checks as add_items, and returns the lines and the cart after', async () => {
+    const { cart, ui, given, store } = setup()
+    given({ fries: 1 })
 
-    const result = addLines(cart, [
-      { id: 'fries', quantity: 1 },
+    const result = addLines(cart, { fries: 1 }, [
       { id: 'soda', quantity: 2 },
+      { id: 'fries', quantity: 1 },
     ])
 
-    expect(result).toEqual(summarizeCart({ fries: 1, soda: 2 }))
-    expect(summarizeCart(quantitiesOf(store.getState().cartDetails))).toEqual(result)
+    expect(result).toEqual({
+      lines: [
+        { id: 'soda', quantity: 2 },
+        { id: 'fries', quantity: 1 },
+      ],
+      cartAfter: { fries: 2, soda: 2 },
+    })
+    expect(quantitiesOf(store.getState().cartDetails)).toEqual({ fries: 2, soda: 2 })
     expect(ui.openCart).not.toHaveBeenCalled()
   })
 
-  it('adds nothing when a line is bad', async () => {
+  it('adds nothing when a line is bad, counting the cart it is given', async () => {
     const { cart, noCartChanges } = setup()
 
     expect(
-      addLines(cart, [
+      addLines(cart, {}, [
         { id: 'fries', quantity: 1 },
         { id: 'soda', quantity: 25 },
       ]),
     ).toEqual({ message: `Nothing was added. Line 2 ("soda"): ${BAD_QUANTITY}` })
+    expect(addLines(cart, { soda: 19 }, [{ id: 'soda', quantity: 2 }])).toEqual({
+      message:
+        'Nothing was added. Line 1 ("soda"): That would make 21 × Fountain Soda, and a line holds at most 20. There are 19 in the cart now.',
+    })
     noCartChanges()
   })
 })
@@ -388,18 +406,34 @@ describe('set_quantity', () => {
     expect(result).toEqual(storeSummary())
   })
 
-  it('lists the cart, with ids, when the item is not in it', async () => {
+  it('lists the cart, with ids, when the item is on the menu but not in the cart', async () => {
     const { call, given, noCartChanges } = setup()
     given({ 'margherita-pizza-large': 2, fries: 1 })
-    const message = {
+
+    expect(await call('set_quantity', { id: 'pepperoni-pizza-large', quantity: 1 })).toEqual({
       message:
         "That isn't in the cart. The cart has: 2 × Large Margherita Pizza (margherita-pizza-large), 1 × Fries (fries).",
-    }
+    })
+    noCartChanges()
+  })
 
-    expect(await call('set_quantity', { id: 'pepperoni-pizza-large', quantity: 1 })).toEqual(message)
-    expect(await call('set_quantity', { id: 'margherita-pizza', quantity: 1 })).toEqual(message)
-    expect(await call('set_quantity', { id: 'constructor', quantity: 1 })).toEqual(message)
-    expect(await call('set_quantity', { quantity: 1 })).toEqual(message)
+  it('answers an id that is not on the menu as add_item does', async () => {
+    const { call, given, noCartChanges } = setup()
+    given({ 'margherita-pizza-large': 2 })
+
+    expect(await call('set_quantity', { id: 'margarita', quantity: 1 })).toEqual({
+      message:
+        "That's not on the menu. Close matches: Margherita Pizza (margherita-pizza-medium or margherita-pizza-large).",
+    })
+    expect(await call('set_quantity', { id: 'margherita-pizza', quantity: 1 })).toEqual({
+      message: 'Margherita Pizza comes in medium or large. Which one?',
+    })
+    expect(await call('set_quantity', { id: 'constructor', quantity: 1 })).toEqual({
+      message: "That's not on the menu, and nothing on it is close. Offer something we do have.",
+    })
+    expect(await call('set_quantity', { quantity: 1 })).toEqual({
+      message: "The id is missing. Send the item's id from the menu.",
+    })
     noCartChanges()
   })
 
@@ -434,14 +468,26 @@ describe('remove_item', () => {
     expect(result).toEqual(storeSummary())
   })
 
-  it('lists the cart when the item is not in it', async () => {
+  it('lists the cart when the item is on the menu but not in the cart', async () => {
     const { call, given, noCartChanges } = setup()
     given({ fries: 1 })
-    const message = { message: "That isn't in the cart. The cart has: 1 × Fries (fries)." }
 
-    expect(await call('remove_item', { id: 'soda' })).toEqual(message)
-    expect(await call('remove_item', { id: '__proto__' })).toEqual(message)
-    expect(await call('remove_item', { id: 'hawaiian' })).toEqual(message)
+    expect(await call('remove_item', { id: 'soda' })).toEqual({
+      message: "That isn't in the cart. The cart has: 1 × Fries (fries).",
+    })
+    noCartChanges()
+  })
+
+  it('answers an id that is not on the menu as add_item does', async () => {
+    const { call, given, noCartChanges } = setup()
+    given({ fries: 1 })
+    const nothingClose = { message: "That's not on the menu, and nothing on it is close. Offer something we do have." }
+
+    expect(await call('remove_item', { id: 'hawaiian' })).toEqual(nothingClose)
+    expect(await call('remove_item', { id: '__proto__' })).toEqual(nothingClose)
+    expect(await call('remove_item', { id: 'pepperoni-pizza' })).toEqual({
+      message: 'Pepperoni Pizza comes in medium or large. Which one?',
+    })
     noCartChanges()
   })
 })
@@ -666,8 +712,8 @@ describe('show_suggestions', () => {
       title: 'Goes with the Classic Cheeseburger',
       reason: 'Fries and a soda, the usual.',
       lines: [
-        { id: 'fries', name: 'Fries', quantity: 1, unitPrice: '$4.99', lineTotal: '$4.99' },
-        { id: 'soda', name: 'Fountain Soda', quantity: 1, unitPrice: '$2.49', lineTotal: '$2.49' },
+        { id: 'fries', name: 'Fries', quantity: 1, total: '$4.99' },
+        { id: 'soda', name: 'Fountain Soda', quantity: 1, total: '$2.49' },
       ],
       total: '$7.48',
     })
@@ -697,7 +743,7 @@ describe('show_suggestions', () => {
 
     expect(ui.showSuggestions).toHaveBeenCalledWith({
       title: 'Suggestions',
-      lines: [{ id: 'cannoli', name: 'Cannoli', quantity: 2, unitPrice: '$4.99', lineTotal: '$9.98' }],
+      lines: [{ id: 'cannoli', name: 'Cannoli', quantity: 2, total: '$9.98' }],
       total: '$9.98',
     })
   })
@@ -714,7 +760,7 @@ describe('show_suggestions', () => {
     })
 
     expect(ui.showSuggestions.mock.calls[0][0].lines).toEqual([
-      { id: 'fries', name: 'Fries', quantity: 3, unitPrice: '$4.99', lineTotal: '$14.97' },
+      { id: 'fries', name: 'Fries', quantity: 3, total: '$14.97' },
     ])
   })
 
@@ -744,6 +790,120 @@ describe('show_suggestions', () => {
       shown: true,
       total: '$9.98',
     })
+  })
+})
+
+describe('the suggestion card after add_items', () => {
+  const plan = [
+    { id: 'pepperoni-pizza-large', quantity: 3 },
+    { id: 'garlic-knots', quantity: 2 },
+    { id: 'soda', quantity: 12 },
+  ]
+
+  it('closes when add_items adds exactly the lines it shows, in any order, as Add all would', async () => {
+    const { call, ui, storeSummary } = setup()
+    await call('show_suggestions', { title: 'Party of 20', items: plan })
+
+    await call('add_items', { items: [...plan].reverse() })
+
+    expect(ui.closeSuggestions).toHaveBeenCalledTimes(1)
+    expect(storeSummary()).toEqual(summarizeCart({ soda: 12, 'garlic-knots': 2, 'pepperoni-pizza-large': 3 }))
+
+    // The set was added and the card closed: adding the same lines again is a new order, not the card.
+    await call('add_items', { items: plan })
+    expect(ui.closeSuggestions).toHaveBeenCalledTimes(1)
+  })
+
+  it('matches repeated ids by their sum, as the card merges them', async () => {
+    const { call, ui } = setup()
+    await call('show_suggestions', { title: 'Snacks', items: [{ id: 'fries', quantity: 3 }] })
+
+    await call('add_items', {
+      items: [
+        { id: 'fries', quantity: 1 },
+        { id: 'fries', quantity: 2 },
+      ],
+    })
+
+    expect(ui.closeSuggestions).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays open when add_items adds other lines, or is refused', async () => {
+    const { call, given, ui } = setup()
+    await call('show_suggestions', { title: 'Party of 20', items: plan })
+
+    await call('add_items', { items: [{ id: 'soda', quantity: 12 }] })
+    await call('add_items', { items: [...plan, { id: 'cannoli', quantity: 1 }] })
+    await call('add_items', { items: plan.map((line) => ({ ...line, quantity: 1 })) })
+    await call('add_item', { id: 'soda', quantity: 1 })
+    expect(ui.closeSuggestions).not.toHaveBeenCalled()
+
+    given({ 'pepperoni-pizza-large': 18 })
+    expect(await call('add_items', { items: plan })).toHaveProperty('message')
+    expect(ui.closeSuggestions).not.toHaveBeenCalled()
+  })
+})
+
+describe('several calls before React renders', () => {
+  // Deepgram can send several function calls in one request, and they can all
+  // run before the next render: cartDetails() still returns the cart from
+  // before the first one. Here, `handlers` runs a call without rendering after it.
+
+  it('gives cumulative summaries for two add_item calls', async () => {
+    const { handlers, storeSummary } = setup()
+
+    expect(await handlers.add_item({ id: 'fries', quantity: 2 })).toEqual(summarizeCart({ fries: 2 }))
+    expect(await handlers.add_item({ id: 'soda', quantity: 1 })).toEqual(summarizeCart({ fries: 2, soda: 1 }))
+    const third = await handlers.add_item({ id: 'fries', quantity: 3 })
+
+    expect(third).toEqual(summarizeCart({ fries: 5, soda: 1 }))
+    expect(third).toEqual(storeSummary())
+  })
+
+  it('lets set_quantity and remove_item change a line added just before', async () => {
+    const { handlers, cart, storeSummary } = setup()
+
+    await handlers.add_item({ id: 'margherita-pizza-large', quantity: 2 })
+    await handlers.add_items({ items: [{ id: 'fries', quantity: 1 }] })
+    const set = await handlers.set_quantity({ id: 'margherita-pizza-large', quantity: 1 })
+
+    expect(cart.setItemQuantity).toHaveBeenCalledWith('margherita-pizza-large', 1)
+    expect(set).toEqual(summarizeCart({ 'margherita-pizza-large': 1, fries: 1 }))
+    expect(set).toEqual(storeSummary())
+
+    const removed = await handlers.remove_item({ id: 'fries' })
+    expect(removed).toEqual(summarizeCart({ 'margherita-pizza-large': 1 }))
+    expect(removed).toEqual(storeSummary())
+    expect(await handlers.view_cart({})).toEqual(storeSummary())
+  })
+
+  it('counts earlier calls toward the 20-per-line cap', async () => {
+    const { handlers, cart, storeSummary } = setup()
+
+    await handlers.add_item({ id: 'fries', quantity: 15 })
+
+    expect(await handlers.add_item({ id: 'fries', quantity: 6 })).toEqual({
+      message: 'That would make 21 × Fries, and a line holds at most 20. There are 15 in the cart now.',
+    })
+    expect(await handlers.add_items({ items: [{ id: 'fries', quantity: 6 }] })).toEqual({
+      message:
+        'Nothing was added. Line 1 ("fries"): That would make 21 × Fries, and a line holds at most 20. There are 15 in the cart now.',
+    })
+    expect(cart.addItem).toHaveBeenCalledTimes(1)
+    expect(storeSummary()).toEqual(summarizeCart({ fries: 15 }))
+  })
+
+  it('reads the rendered cart again once React has rendered', async () => {
+    const { handlers, render, store } = setup()
+    await handlers.add_item({ id: 'fries', quantity: 1 })
+    render()
+
+    // The customer taps two sodas in; the tap renders.
+    store.addItem(product('soda'), { count: 2 })
+    render()
+
+    expect(await handlers.view_cart({})).toEqual(summarizeCart({ fries: 1, soda: 2 }))
+    expect(await handlers.add_item({ id: 'soda', quantity: 1 })).toEqual(summarizeCart({ fries: 1, soda: 3 }))
   })
 })
 

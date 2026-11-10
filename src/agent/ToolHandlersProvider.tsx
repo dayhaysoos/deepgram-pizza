@@ -3,18 +3,15 @@
 // handlers themselves (handlers.ts) know nothing about React.
 //
 // The page gets one set of handlers for its lifetime, shared through context:
-// they remember whether a voice add has opened the drawer yet, so everything
+// they remember what they did (whether a voice add has opened the drawer, the
+// suggestions shown last, a change React hasn't rendered yet), so everything
 // that calls a tool (the talk button, the dev tools panel) must use the same set.
 
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { redirectToCheckout, useShoppingCart } from 'use-shopping-cart'
 import { startCheckout } from '../checkout/startCheckout'
-import { createToolHandlers, type ToolHandler } from './handlers'
+import { createToolHandlers, type ToolHandlers } from './handlers'
 import { useMenuUi } from './MenuUiProvider'
-import type { ToolName } from './tools'
-
-/** One handler per tool, keyed by tool name. Each takes the agent's arguments and never rejects. */
-export type ToolHandlers = Record<ToolName, ToolHandler>
 
 const ToolHandlersContext = createContext<ToolHandlers | null>(null)
 
@@ -28,7 +25,7 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
   const clearCart = useShoppingCart((cart) => cart.clearCart)
   // The cart library's only action that just opens the drawer (handleCartClick toggles).
   const openCart = useShoppingCart((cart) => cart.handleCartHover)
-  const { highlight, showSuggestions } = useMenuUi()
+  const { highlight, showSuggestions, closeSuggestions } = useMenuUi()
 
   // The handlers are created once, so they read the cart through a ref that
   // always holds the cart as of the last render.
@@ -46,6 +43,7 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
       ui: {
         highlight,
         showSuggestions,
+        closeSuggestions,
         openCart,
         // With voice, this will first wait for the agent to finish speaking and close the session (SPEC.md, "Checkout").
         goToCheckout: (url) => redirectToCheckout(url),

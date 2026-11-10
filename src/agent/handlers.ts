@@ -13,6 +13,7 @@
 //   out the cart after its change with applyCartChange (cartSummary.ts, which
 //   tap updates use too), makes the change, and summarizes the cart it worked
 //   out. handlers.test.ts checks that this always matches what the store holds.
+//   Several calls can run before the next render; see `currentCart` below.
 
 import type { CartDetails } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
@@ -20,10 +21,11 @@ import { categories, findVariant, formatPrice, menu, tags, type Category, type P
 import { isLineQuantity, MAX_LINE_QUANTITY } from '../shop'
 import {
   applyCartChange,
+  describeLine,
   quantitiesOf,
   summarizeCart,
-  type CartChange,
   type CartSummary,
+  type ItemQuantity,
   type Quantities,
 } from './cartSummary'
 import { closeMatches, searchMenu, type MenuFilters } from './menuSearch'
@@ -47,16 +49,19 @@ export type UiPort = {
   /** Lights up these menu cards, by item id. An empty list clears the highlights. */
   highlight(itemIds: string[]): void
   /** Opens the suggestion card, replacing any card already open. */
-  showSuggestions(card: SuggestionCard): void
+  showSuggestions(suggestions: Suggestions): void
+  /** Closes the suggestion card, if one is open. */
+  closeSuggestions(): void
   openCart(): void
   /** Leaves for Stripe Checkout, once the agent has finished speaking. */
   goToCheckout(url: string): void
 }
 
-export type SuggestionCard = {
+/** What the suggestion card shows: the lines show_suggestions was given, priced as a cart of their own. */
+export type Suggestions = {
   title: string
   reason?: string
-  lines: Array<{ id: string; name: string; quantity: number; unitPrice: string; lineTotal: string }>
+  lines: CartSummary['lines']
   /** What every line together costs. */
   total: string
 }
@@ -93,11 +98,14 @@ export type ToolResult = CartSummary | Recovery | FoundItems | { shown: true; to
  */
 export type ToolHandler = (args: unknown) => Promise<ToolResult>
 
+/** One handler per tool, keyed by tool name. */
+export type ToolHandlers = Record<ToolName, ToolHandler>
+
 const BAD_QUANTITY = `The quantity has to be a whole number from 1 to ${MAX_LINE_QUANTITY}.`
 const EMPTY_CART = 'The cart is empty.'
 
-/** One handler per tool, keyed by tool name. */
-export function createToolHandlers({ cart, ui, checkout }: ToolPorts): Record<ToolName, ToolHandler> {
+/** Creates the handlers. A page makes one set and shares it, since the set remembers what it did. */
+export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandlers {
   // The drawer opens on its own the first time a voice change adds an item, so
   // the customer sees it happen. After that it's theirs to open and close.
   let drawerOpened = false
@@ -106,6 +114,32 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): Record<To
     drawerOpened = true
     ui.openCart()
   }
+
+  // Deepgram can send several function calls in one request, and they can all
+  // run before React re-renders, while cart.cartDetails() still returns the
+  // cart from before the first of them. So the handlers remember the cart their
+  // last change worked out, with the cartDetails() object it was based on.
+  // While cartDetails() returns that same object, nothing has rendered since,
+  // so the remembered cart is the current one. Once it returns a new object,
+  // React has rendered (the change, or a tap), and cartDetails() is trusted again.
+  let lastChange: { basedOn: CartDetails; cartAfter: Quantities } | null = null
+
+  /** The cart now, counting changes the last render doesn't show yet. */
+  function currentCart(): Quantities {
+    const rendered = cart.cartDetails()
+    return lastChange?.basedOn === rendered ? lastChange.cartAfter : quantitiesOf(rendered)
+  }
+
+  /** Call once a cart action has run: remembers the cart after it, and returns its summary. */
+  function changed(cartAfter: Quantities): CartSummary {
+    lastChange = { basedOn: cart.cartDetails(), cartAfter }
+    return summarizeCart(cartAfter)
+  }
+
+  // The lines on the suggestion card shown last. When add_items adds exactly
+  // those ("add all of that"), the card closes, as it does after its own Add
+  // all, so tapping Add all can't add the whole set a second time.
+  let suggested: ItemQuantity[] | null = null
 
   return {
     find_menu_items: recovering((args) => {
@@ -135,61 +169,63 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): Record<To
       // Add all, and Add all checks again then.
       const checked = checkLines(args.items, {})
       if ('message' in checked) return { message: `Nothing was shown. ${checked.message}` }
-      const lines = checked.lines.map(({ product, quantity }) => ({
-        id: product.id,
-        name: product.name,
-        quantity,
-        unitPrice: formatPrice(product.price),
-        lineTotal: formatPrice(product.price * quantity),
-      }))
-      const total = formatPrice(checked.lines.reduce((sum, { product, quantity }) => sum + product.price * quantity, 0))
-      const reason = text(args.reason)
-      ui.showSuggestions({ title: text(args.title) ?? 'Suggestions', ...(reason ? { reason } : {}), lines, total })
+      // Priced as a cart holding only these lines, so summarizeCart is the one place that prices lines.
+      const { lines, total } = summarizeCart(applyCartChange({}, { type: 'add', lines: checked.lines }))
+      const reason = nonBlankText(args.reason)
+      ui.showSuggestions({ title: nonBlankText(args.title) ?? 'Suggestions', ...(reason ? { reason } : {}), lines, total })
+      suggested = checked.lines
       return { shown: true, total }
     }),
 
     add_item: recovering((args) => {
-      const quantities = quantitiesOf(cart.cartDetails())
-      const line = checkLine(args.id, args.quantity, quantities)
+      const inCart = currentCart()
+      const line = checkLine(args.id, args.quantity, inCart)
       if ('message' in line) return line
-      const next = applyCartChange(quantities, adding([line]))
+      const cartAfter = applyCartChange(inCart, { type: 'add', lines: [line] })
       cart.addItem(line.product, { count: line.quantity })
       openDrawerOnce()
-      return summarizeCart(next)
+      return changed(cartAfter)
     }),
 
     add_items: recovering((args) => {
-      const result = addLines(cart, args.items)
-      if (!('message' in result)) openDrawerOnce()
-      return result
+      const added = addLines(cart, currentCart(), args.items)
+      if ('message' in added) return added
+      openDrawerOnce()
+      if (suggested && sameLines(added.lines, suggested)) {
+        suggested = null
+        ui.closeSuggestions()
+      }
+      return changed(added.cartAfter)
     }),
 
     set_quantity: recovering(({ id, quantity }) => {
-      const quantities = quantitiesOf(cart.cartDetails())
-      if (!isInCart(quantities, id)) return notInCart(quantities)
+      const inCart = currentCart()
+      if (!isInCart(inCart, id)) return notInCart(id, inCart)
       if (!isLineQuantity(quantity)) return { message: `${BAD_QUANTITY} To take it out of the cart, use remove_item.` }
-      const next = applyCartChange(quantities, { type: 'quantity', id, quantity })
+      const cartAfter = applyCartChange(inCart, { type: 'quantity', id, quantity })
       cart.setItemQuantity(id, quantity)
-      return summarizeCart(next)
+      return changed(cartAfter)
     }),
 
     remove_item: recovering(({ id }) => {
-      const quantities = quantitiesOf(cart.cartDetails())
-      if (!isInCart(quantities, id)) return notInCart(quantities)
-      const next = applyCartChange(quantities, { type: 'remove', id })
+      const inCart = currentCart()
+      if (!isInCart(inCart, id)) return notInCart(id, inCart)
+      const cartAfter = applyCartChange(inCart, { type: 'remove', id })
       cart.removeItem(id)
-      return summarizeCart(next)
+      return changed(cartAfter)
     }),
 
-    view_cart: recovering(() => summarizeCart(quantitiesOf(cart.cartDetails()))),
+    view_cart: recovering(() => summarizeCart(currentCart())),
 
     clear_cart: recovering(() => {
-      const next = applyCartChange(quantitiesOf(cart.cartDetails()), { type: 'clear' })
+      const cartAfter = applyCartChange(currentCart(), { type: 'clear' })
       cart.clearCart()
-      return summarizeCart(next)
+      return changed(cartAfter)
     }),
 
     checkout: recovering(async () => {
+      // The rendered cart, not currentCart(): checkout needs full cart entries. The agent
+      // checks out only once the customer confirms the order, a turn after any change.
       const cartDetails = cart.cartDetails()
       if (Object.keys(cartDetails).length === 0) return { message: EMPTY_CART }
       const result = await checkout(cartDetails)
@@ -201,26 +237,26 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): Record<To
 }
 
 /**
- * Adds every line or none. All lines are checked first (on the menu, a size
- * given, a good quantity, and at most 20 per line counting what's in the cart),
- * and lines with the same id are added up. add_items uses it, and so does the
- * suggestion card's Add all, so both behave the same.
+ * Adds every line or none, to a cart that holds `inCart`. All lines are checked
+ * first (on the menu, a size given, a good quantity, and at most 20 per line
+ * counting what's in the cart), and lines with the same id are added up.
+ * Returns the lines added and the cart after. add_items uses it, and so does
+ * the suggestion card's Add all, so both behave the same.
  */
-export function addLines(cart: Pick<CartPort, 'cartDetails' | 'addItem'>, items: unknown): CartSummary | Recovery {
-  const quantities = quantitiesOf(cart.cartDetails())
-  const checked = checkLines(items, quantities)
+export function addLines(
+  cart: Pick<CartPort, 'addItem'>,
+  inCart: Quantities,
+  items: unknown,
+): { lines: ItemQuantity[]; cartAfter: Quantities } | Recovery {
+  const checked = checkLines(items, inCart)
   if ('message' in checked) return { message: `Nothing was added. ${checked.message}` }
-  const next = applyCartChange(quantities, adding(checked.lines))
+  const cartAfter = applyCartChange(inCart, { type: 'add', lines: checked.lines })
   for (const line of checked.lines) cart.addItem(line.product, { count: line.quantity })
-  return summarizeCart(next)
+  return { lines: checked.lines.map(({ id, quantity }) => ({ id, quantity })), cartAfter }
 }
 
-type CheckedLine = { product: Product; quantity: number }
-
-/** The change that adds lines that passed the checks. */
-function adding(lines: CheckedLine[]): CartChange {
-  return { type: 'add', lines: lines.map(({ product, quantity }) => ({ id: product.id, quantity })) }
-}
+/** A line that passed the checks, with its product from the menu. */
+type CheckedLine = ItemQuantity & { product: Product }
 
 /** Checks a list of lines to add, merging repeated ids. A problem names its line. */
 function checkLines(items: unknown, inCart: Quantities): { lines: CheckedLine[] } | Recovery {
@@ -239,26 +275,30 @@ function checkLines(items: unknown, inCart: Quantities): { lines: CheckedLine[] 
       const label = typeof id === 'string' ? `Line ${index + 1} (${JSON.stringify(id)})` : `Line ${index + 1}`
       return { message: `${label}: ${line.message}` }
     }
-    merged.set(line.product.id, { product: line.product, quantity: earlier + line.quantity })
+    merged.set(line.id, { ...line, quantity: earlier + line.quantity })
   }
   return { lines: [...merged.values()] }
 }
 
 /** Checks one line to add. `earlier` is how many of the same id earlier lines in this call add. */
 function checkLine(id: unknown, quantity: unknown, inCart: Quantities, earlier = 0): CheckedLine | Recovery {
-  if (typeof id !== 'string' || id === '') return { message: "The id is missing. Send the item's id from the menu." }
-  const found = findVariant(id)
-  if (!found) return notOnMenu(id)
+  const product = findOnMenu(id)
+  if ('message' in product) return product
   if (!isLineQuantity(quantity)) return { message: BAD_QUANTITY }
-  const already = quantityOf(inCart, id)
+  const already = quantityOf(inCart, product.id)
   const total = already + earlier + quantity
   if (total > MAX_LINE_QUANTITY) {
     const now = already > 0 ? ` There are ${already} in the cart now.` : ''
-    return {
-      message: `That would make ${total} × ${found.product.name}, and a line holds at most ${MAX_LINE_QUANTITY}.${now}`,
-    }
+    const line = describeLine({ name: product.name, quantity: total })
+    return { message: `That would make ${line}, and a line holds at most ${MAX_LINE_QUANTITY}.${now}` }
   }
-  return { product: found.product, quantity }
+  return { id: product.id, quantity, product }
+}
+
+/** The product with this id, or why there's none: no id, no size, or not on the menu. */
+function findOnMenu(id: unknown): Product | Recovery {
+  if (typeof id !== 'string' || id === '') return { message: "The id is missing. Send the item's id from the menu." }
+  return findVariant(id)?.product ?? notOnMenu(id)
 }
 
 function notOnMenu(id: string): Recovery {
@@ -276,11 +316,24 @@ function notOnMenu(id: string): Recovery {
   return { message: `That's not on the menu. Close matches: ${named.join(', ')}.` }
 }
 
-function notInCart(quantities: Quantities): Recovery {
+/**
+ * For set_quantity and remove_item, when the id isn't in the cart: what's wrong
+ * with an id that isn't on the menu, or else the cart's lines with their ids.
+ */
+function notInCart(id: unknown, quantities: Quantities): Recovery {
+  const product = findOnMenu(id)
+  if ('message' in product) return product
   const { lines } = summarizeCart(quantities)
   if (lines.length === 0) return { message: `That isn't in the cart. ${EMPTY_CART}` }
-  const listed = lines.map((line) => `${line.quantity} × ${line.name} (${line.id})`).join(', ')
+  const listed = lines.map((line) => `${describeLine(line)} (${line.id})`).join(', ')
   return { message: `That isn't in the cart. The cart has: ${listed}.` }
+}
+
+/** Whether two lists of lines, one line per id, hold the same ids and quantities, in any order. */
+function sameLines(a: ItemQuantity[], b: ItemQuantity[]): boolean {
+  return (
+    a.length === b.length && a.every((line) => b.some((other) => other.id === line.id && other.quantity === line.quantity))
+  )
 }
 
 /** Reads the filters find_menu_items was given. Null counts as not given. */
@@ -307,7 +360,7 @@ function readFilters(args: Record<string, unknown>): MenuFilters | Recovery {
     }
     filters.maxPrice = Math.round(dollars * 100)
   }
-  const query = text(args.query)
+  const query = nonBlankText(args.query)
   if (query) filters.query = query
   if (Object.keys(filters).length === 0) return { message: 'Give at least one filter: category, tags, max_price or query.' }
   return filters
@@ -361,8 +414,8 @@ function isTag(value: unknown): value is Tag {
   return tags.some((tag) => tag === value)
 }
 
-/** A non-blank string, trimmed. */
-function text(value: unknown): string | undefined {
+/** The value trimmed, if it's a string that isn't blank. */
+function nonBlankText(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
 

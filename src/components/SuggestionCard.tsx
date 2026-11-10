@@ -1,11 +1,16 @@
 import { useId, useState, type RefObject } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
-import { addLines, type SuggestionCard as Card } from '../agent/handlers'
+import { describeLine, quantitiesOf } from '../agent/cartSummary'
+import { addLines, type Suggestions } from '../agent/handlers'
 import { useMenuUi } from '../agent/MenuUiProvider'
 import { useReportTap } from '../agent/TapUpdatesProvider'
 
 type SuggestionCardProps = {
-  /** Gets focus when the customer closes the card or adds everything on it (the header's cart button). */
+  /**
+   * Gets focus when the customer closes the card or adds everything on it: the
+   * header's cart button, or a control in the cart while it's open, since the
+   * page behind an open cart is inert and can't take focus.
+   */
   returnFocusRef: RefObject<HTMLElement | null>
 }
 
@@ -32,9 +37,10 @@ export function SuggestionCard({ returnFocusRef }: SuggestionCardProps) {
   )
 }
 
-type Line = Card['lines'][number]
+/** One line on the card: an item, how many, and what they cost. */
+type SuggestedLine = Suggestions['lines'][number]
 
-function SuggestionSheet({ card, onClose }: { card: Card; onClose: () => void }) {
+function SuggestionSheet({ card, onClose }: { card: Suggestions; onClose: () => void }) {
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
   const addItem = useShoppingCart((cart) => cart.addItem)
   const reportTap = useReportTap()
@@ -43,15 +49,14 @@ function SuggestionSheet({ card, onClose }: { card: Card; onClose: () => void })
 
   // Add and Add all check lines exactly as the add_items tool does: all or nothing,
   // at most 20 per line counting the cart. Returns whether the lines went in.
-  function add(lines: Line[]): boolean {
-    const added = lines.map(({ id, quantity }) => ({ id, quantity }))
-    const result = addLines({ cartDetails: () => cartDetails, addItem }, added)
+  function add(lines: SuggestedLine[]): boolean {
+    const result = addLines({ addItem }, quantitiesOf(cartDetails), lines)
     if ('message' in result) {
       setNotice({ text: result.message, refused: true })
       return false
     }
-    reportTap({ type: 'add', lines: added })
-    setNotice({ text: `Added ${lines.map((line) => `${line.quantity} × ${line.name}`).join(', ')}.`, refused: false })
+    reportTap({ type: 'add', lines: result.lines })
+    setNotice({ text: `Added ${lines.map(describeLine).join(', ')}.`, refused: false })
     return true
   }
 
@@ -73,10 +78,8 @@ function SuggestionSheet({ card, onClose }: { card: Card; onClose: () => void })
       <ul className="suggestion-lines">
         {card.lines.map((line) => (
           <li key={line.id} className="suggestion-line">
-            <span className="suggestion-line-name">
-              {line.quantity} × {line.name}
-            </span>
-            <span className="suggestion-line-total">{line.lineTotal}</span>
+            <span className="suggestion-line-name">{describeLine(line)}</span>
+            <span className="suggestion-line-total">{line.total}</span>
             <button
               type="button"
               className="suggestion-add"

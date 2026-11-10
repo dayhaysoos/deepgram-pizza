@@ -9,9 +9,10 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
+import type { ItemQuantity } from '../agent/cartSummary'
 import type { ToolResult } from '../agent/handlers'
 import { toolDefinitions, type ToolName } from '../agent/tools'
-import { useToolHandlers } from '../agent/useToolHandlers'
+import { useToolHandlers } from '../agent/ToolHandlersProvider'
 import { defaultVariant, findVariant, menu } from '../menu/menu'
 import './ToolsPanel.css'
 
@@ -19,7 +20,6 @@ import './ToolsPanel.css'
 export type LoggedUpdate = { id: number; time: Date; text: string }
 
 type Args = Record<string, unknown>
-type Line = { id: string; quantity: number }
 
 type Preset = {
   label: string
@@ -32,7 +32,7 @@ type Preset = {
 // What the Classic Cheeseburger goes with, read from menu.json as the agent
 // reads it. A sized pairing gets the size menu cards start on.
 const cheeseburger = menu.find((item) => item.id === 'classic-cheeseburger')
-const pairings: Line[] = (cheeseburger?.pairsWith ?? []).flatMap((id) => {
+const pairings: ItemQuantity[] = (cheeseburger?.pairsWith ?? []).flatMap((id) => {
   const item = menu.find((menuItem) => menuItem.id === id)
   return item ? [{ id: defaultVariant(item).id, quantity: 1 }] : []
 })
@@ -40,12 +40,12 @@ const pairingsTitle = `Goes great with the ${cheeseburger?.name ?? 'cheeseburger
 
 // A plan for a party of 20, built the way the agent's instructions say: mains
 // that feed about one serving per person (by `serves`), plus sides and drinks.
-const partyMains: Line[] = [
+const partyMains: ItemQuantity[] = [
   { id: 'pepperoni-pizza-large', quantity: 3 },
   { id: 'cheese-pizza-large', quantity: 1 },
   { id: 'veggie-supreme-pizza-large', quantity: 1 },
 ]
-const partyPlan: Line[] = [
+const partyPlan: ItemQuantity[] = [
   ...partyMains,
   { id: 'garlic-knots', quantity: 2 },
   { id: 'soda', quantity: 12 },

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ShoppingCart } from 'use-shopping-cart/core'
 import { findVariant } from '../menu/menu'
 import { CURRENCY, LOCALE } from '../shop'
-import { applyCartChange, quantitiesOf, summarizeCart, type CartChange, type Quantities } from './cartSummary'
+import { applyCartChange, describeLine, quantitiesOf, summarizeCart, type CartChange, type Quantities } from './cartSummary'
 
 describe('summarizeCart', () => {
   it('lists each line with its name, quantity and total, in cart order, plus the count and the total', () => {
@@ -26,6 +26,12 @@ describe('summarizeCart', () => {
       count: 2,
       total: '$4.98',
     })
+  })
+})
+
+describe('describeLine', () => {
+  it('names a line by quantity and name', () => {
+    expect(describeLine({ name: 'Large Margherita Pizza', quantity: 2 })).toBe('2 × Large Margherita Pizza')
   })
 })
 

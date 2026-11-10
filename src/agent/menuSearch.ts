@@ -29,8 +29,11 @@ export function searchMenu(filters: MenuFilters): Array<{ item: MenuItem; varian
   })
 }
 
+/** The most close matches offered for an id that isn't on the menu. */
+const MAX_CLOSE_MATCHES = 3
+
 /**
- * Up to `limit` menu items that look most like `text` (an id the agent made
+ * Up to three menu items that look most like `text` (an id the agent made
  * up, such as "pepperoni-pizza-xl" or "margarita"), in menu order. Empty when
  * nothing is close.
  *
@@ -38,7 +41,7 @@ export function searchMenu(filters: MenuFilters): Array<{ item: MenuItem; varian
  * scores a point; the items with the top score win. Words match when they're
  * equal, when one starts with the other, or when they're a typo or two apart.
  */
-export function closeMatches(text: string, limit = 3): MenuItem[] {
+export function closeMatches(text: string): MenuItem[] {
   const words = [...new Set(wordsIn(text).map(singular))]
   const scored = menu.map((item) => {
     const itemWords = wordsIn([item.id, item.name, ...item.variants.flatMap((v) => [v.id, v.label ?? ''])].join(' '))
@@ -48,7 +51,7 @@ export function closeMatches(text: string, limit = 3): MenuItem[] {
   })
   const best = Math.max(...scored.map(({ score }) => score))
   if (best === 0) return []
-  return scored.filter(({ score }) => score === best).slice(0, limit).map(({ item }) => item)
+  return scored.filter(({ score }) => score === best).slice(0, MAX_CLOSE_MATCHES).map(({ item }) => item)
 }
 
 function wordsIn(text: string): string[] {

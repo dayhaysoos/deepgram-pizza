@@ -8,12 +8,14 @@ import { CheckoutButton } from './CheckoutButton'
 type CartDrawerProps = {
   /** Gets focus back when the drawer closes (the header's cart button). */
   returnFocusRef: RefObject<HTMLElement | null>
+  /** The drawer's close button, which gets focus when it opens. The page holds it so other parts can focus it too. */
+  closeButtonRef: RefObject<HTMLButtonElement | null>
 }
 
 // Open/closed is the cart library's `shouldDisplayCart`, so anything can open the
 // drawer the same way: the cart button calls `handleCartClick()`, and a voice
 // tool can call `handleCartHover()` (which only opens).
-export function CartDrawer({ returnFocusRef }: CartDrawerProps) {
+export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) {
   const open = useShoppingCart((cart) => cart.shouldDisplayCart)
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
   const formattedTotalPrice = useShoppingCart((cart) => cart.formattedTotalPrice)
@@ -21,13 +23,12 @@ export function CartDrawer({ returnFocusRef }: CartDrawerProps) {
   const lines = Object.values(cartDetails)
 
   // Focus moves into the drawer when it opens and back to the cart button when it closes.
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
   const wasOpen = useRef(false)
   useEffect(() => {
     if (open) closeButtonRef.current?.focus()
     else if (wasOpen.current) returnFocusRef.current?.focus()
     wasOpen.current = open
-  }, [open, returnFocusRef])
+  }, [open, returnFocusRef, closeButtonRef])
 
   // Escape closes it.
   useEffect(() => {

@@ -4,7 +4,7 @@
 // context update.
 
 import { findVariant } from '../menu/menu'
-import type { CartChange, CartSummary } from './cartSummary'
+import { describeLine, type CartChange, type CartSummary } from './cartSummary'
 
 /**
  * "Customer added 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza,
@@ -20,7 +20,7 @@ export function describeTapChange(change: CartChange, cartAfter: CartSummary): s
 function describeChange(change: CartChange): string {
   switch (change.type) {
     case 'add':
-      return `added ${change.lines.map((line) => `${line.quantity} × ${nameOf(line.id)}`).join(', ')}`
+      return `added ${change.lines.map(({ id, quantity }) => describeLine({ name: nameOf(id), quantity })).join(', ')}`
     case 'quantity':
       return `changed ${nameOf(change.id)} to ${change.quantity}`
     case 'remove':
@@ -32,7 +32,7 @@ function describeChange(change: CartChange): string {
 
 function describeCart(cart: CartSummary): string {
   if (cart.lines.length === 0) return 'Cart: empty.'
-  const lines = cart.lines.map((line) => `${line.quantity} × ${line.name}`).join(', ')
+  const lines = cart.lines.map(describeLine).join(', ')
   return `Cart: ${lines}. Total ${cart.total}.`
 }
 

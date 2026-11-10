@@ -11,10 +11,13 @@ import { findVariant, formatPrice } from '../menu/menu'
 /** How many of each product the cart holds, by product id, in cart order. */
 export type Quantities = Record<string, number>
 
+/** A product id and how many of it: a line a tool call or a tap adds. */
+export type ItemQuantity = { id: string; quantity: number }
+
 /** One change to the cart, from a tool call or a tap. */
 export type CartChange =
   /** Adds each line's quantity to the cart, as `addItem` does: a new line goes last. */
-  | { type: 'add'; lines: Array<{ id: string; quantity: number }> }
+  | { type: 'add'; lines: ItemQuantity[] }
   /** Sets a line's quantity, as `setItemQuantity` does. */
   | { type: 'quantity'; id: string; quantity: number }
   | { type: 'remove'; id: string }
@@ -25,6 +28,11 @@ export type CartSummary = {
   /** How many products in all: 2 pizzas and a soda is 3. */
   count: number
   total: string
+}
+
+/** "2 × Large Margherita Pizza": how the tools, the tap updates and the suggestion card name a line. */
+export function describeLine({ name, quantity }: { name: string; quantity: number }): string {
+  return `${quantity} × ${name}`
 }
 
 /** Reads id → quantity from use-shopping-cart's `cartDetails`. Nothing else in an entry is trusted. */
