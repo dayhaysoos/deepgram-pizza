@@ -1,6 +1,7 @@
 // The menu, typed, plus the helpers the rest of the app reads it through.
 // menu.json is the single source of truth: edit it to make this your shop.
 
+import { CURRENCY, LOCALE } from '../shop'
 import menuJson from './menu.json'
 
 export type Category = 'pizza' | 'subs' | 'wings' | 'burgers' | 'salads' | 'sides' | 'drinks' | 'dessert'
@@ -34,7 +35,7 @@ export type Product = {
   id: string
   name: string
   price: number
-  currency: 'USD'
+  currency: typeof CURRENCY
 }
 
 // TypeScript widens JSON imports (`category` becomes `string`), so the menu is
@@ -58,27 +59,44 @@ export const categories: Array<{ id: Category; label: string; note?: string }> =
 /** Every tag an item can have. */
 export const tags: Tag[] = ['vegetarian', 'vegan', 'spicy', 'popular']
 
-/** One product per variant. A sized product's name includes the size: "Large Pepperoni Pizza". */
+/** The cart product for one variant. A sized product's name includes the size: "Large Pepperoni Pizza". */
+export function productFor(item: MenuItem, variant: Variant): Product {
+  return {
+    id: variant.id,
+    name: variant.label ? `${variant.label} ${item.name}` : item.name,
+    price: variant.price,
+    currency: CURRENCY,
+  }
+}
+
+/** One product per variant, in menu order. */
 export function menuToProducts(items: MenuItem[]): Product[] {
-  return items.flatMap((item) =>
-    item.variants.map((variant) => ({
-      id: variant.id,
-      name: variant.label ? `${variant.label} ${item.name}` : item.name,
-      price: variant.price,
-      currency: 'USD' as const,
-    })),
-  )
+  return items.flatMap((item) => item.variants.map((variant) => productFor(item, variant)))
 }
 
 export const products = menuToProducts(menu)
 
-/** Looks up a variant id ("pepperoni-pizza-large") and returns it with its item. */
-export function findVariant(variantId: string): { item: MenuItem; variant: Variant } | undefined {
-  for (const item of menu) {
-    const variant = item.variants.find((v) => v.id === variantId)
-    if (variant) return { item, variant }
+/**
+ * The size a menu card selects before the customer picks one: the variant that
+ * feeds the most people (Large, 12 pc). On a tie, the first one listed wins.
+ */
+export function defaultVariant(item: MenuItem): Variant {
+  return item.variants.reduce((largest, variant) => (variant.serves > largest.serves ? variant : largest))
+}
+
+type FoundVariant = { item: MenuItem; variant: Variant; product: Product }
+
+// Built once at module load: the menu doesn't change while the app runs.
+const byVariantId = new Map<string, FoundVariant>()
+for (const item of menu) {
+  for (const variant of item.variants) {
+    byVariantId.set(variant.id, { item, variant, product: productFor(item, variant) })
   }
-  return undefined
+}
+
+/** Looks up a variant id ("pepperoni-pizza-large") and returns it with its item and its cart product. */
+export function findVariant(variantId: string): FoundVariant | undefined {
+  return byVariantId.get(variantId)
 }
 
 /** Photos live in public/images, named after the item id. */
@@ -86,9 +104,9 @@ export function imagePath(item: MenuItem): string {
   return `/images/${item.id}.jpg`
 }
 
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const priceFormat = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: CURRENCY })
 
 /** 2099 → "$20.99" */
 export function formatPrice(cents: number): string {
-  return usd.format(cents / 100)
+  return priceFormat.format(cents / 100)
 }

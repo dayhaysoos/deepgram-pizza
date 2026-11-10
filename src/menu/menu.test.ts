@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   categories,
+  defaultVariant,
   findVariant,
   formatPrice,
   imagePath,
   menu,
   menuToProducts,
+  productFor,
   products,
   tags,
   type MenuItem,
@@ -154,6 +156,30 @@ const fixture: MenuItem[] = [
   },
 ]
 
+describe('productFor', () => {
+  it('puts the size in front of the name of a sized item', () => {
+    const [calzone] = fixture
+
+    expect(productFor(calzone, calzone.variants[1])).toStrictEqual({
+      id: 'calzone-big',
+      name: 'Big Calzone',
+      price: 1500,
+      currency: 'USD',
+    })
+  })
+
+  it('uses the item name alone for a single-size item', () => {
+    const water = fixture[1]
+
+    expect(productFor(water, water.variants[0])).toStrictEqual({
+      id: 'water',
+      name: 'Water',
+      price: 150,
+      currency: 'USD',
+    })
+  })
+})
+
 describe('menuToProducts', () => {
   it('makes one product per variant, with the size in the name of sized items', () => {
     expect(menuToProducts(fixture)).toStrictEqual([
@@ -175,10 +201,12 @@ describe('products', () => {
 })
 
 describe('findVariant', () => {
-  it('finds every variant of the menu along with its item', () => {
+  it('finds every variant of the menu along with its item and the product the cart uses', () => {
     for (const item of menu) {
       for (const variant of item.variants) {
-        expect(findVariant(variant.id)).toEqual({ item, variant })
+        const product = products.find((p) => p.id === variant.id)
+
+        expect(findVariant(variant.id)).toEqual({ item, variant, product })
       }
     }
   })
@@ -191,6 +219,36 @@ describe('findVariant', () => {
     for (const item of menu.filter((item) => item.variants.length > 1)) {
       expect(findVariant(item.id)).toBeUndefined()
     }
+  })
+})
+
+describe('defaultVariant', () => {
+  const [calzone, water] = fixture
+
+  it('picks the variant that serves the most people', () => {
+    expect(defaultVariant(calzone).id).toBe('calzone-big')
+  })
+
+  it('does not depend on the order of the variants', () => {
+    const reversed = { ...calzone, variants: [...calzone.variants].reverse() }
+
+    expect(defaultVariant(reversed).id).toBe('calzone-big')
+  })
+
+  it('keeps the first one listed when two serve the same number', () => {
+    const tied: MenuItem = {
+      ...calzone,
+      variants: [
+        { id: 'calzone-classic', label: 'Classic', price: 1400, serves: 2 },
+        { id: 'calzone-big', label: 'Big', price: 1500, serves: 2 },
+      ],
+    }
+
+    expect(defaultVariant(tied).id).toBe('calzone-classic')
+  })
+
+  it('returns the only variant of a single-size item', () => {
+    expect(defaultVariant(water).id).toBe('water')
   })
 })
 

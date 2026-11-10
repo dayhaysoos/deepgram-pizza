@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 import { createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
 import { CartProvider } from 'use-shopping-cart'
-import { SHOP_NAME } from '../shop'
+import { CURRENCY, LOCALE, SHOP_NAME } from '../shop'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
@@ -25,9 +25,9 @@ function RootDocument({ children }: { children: ReactNode }) {
       </head>
       <body>
         {/* One cart for every page. The server renders it empty; the saved cart
-            (localStorage) is applied after hydration. A fixed currency and
-            language make server and browser format prices the same way. */}
-        <CartProvider currency="USD" language="en-US">
+            (localStorage) is applied after hydration. The fixed currency and
+            locale from shop.ts make server and browser format prices the same way. */}
+        <CartProvider currency={CURRENCY} language={LOCALE}>
           {children}
         </CartProvider>
         <Scripts />

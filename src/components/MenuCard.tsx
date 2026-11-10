@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
-import { formatPrice, imagePath, products, type MenuItem } from '../menu/menu'
-import { largestVariant, MAX_LINE_QUANTITY } from '../shop'
+import { defaultVariant, formatPrice, imagePath, productFor, type MenuItem } from '../menu/menu'
+import { MAX_LINE_QUANTITY } from '../shop'
 
 /** How long the Add button says "Added ✓". */
 const ADDED_FEEDBACK_MS = 1000
 
 export function MenuCard({ item }: { item: MenuItem }) {
-  const [variantId, setVariantId] = useState(() => largestVariant(item).id)
-  const variant = item.variants.find((v) => v.id === variantId) ?? largestVariant(item)
-  const product = products.find((p) => p.id === variant.id)
+  const [variantId, setVariantId] = useState(() => defaultVariant(item).id)
+  const variant = item.variants.find((v) => v.id === variantId) ?? defaultVariant(item)
+  const product = productFor(item, variant)
 
   const addItem = useShoppingCart((cart) => cart.addItem)
   const quantityInCart = useShoppingCart((cart) => cart.cartDetails[variant.id]?.quantity ?? 0)
@@ -24,7 +24,7 @@ export function MenuCard({ item }: { item: MenuItem }) {
   }, [recentAdds])
 
   function add() {
-    if (!product || atLimit) return
+    if (atLimit) return
     addItem(product, { count: 1 })
     setRecentAdds((n) => n + 1)
   }
@@ -78,7 +78,7 @@ export function MenuCard({ item }: { item: MenuItem }) {
           </div>
         </div>
         <span className="visually-hidden" role="status">
-          {recentAdds > 0 && product ? `Added ${product.name} to the cart` : ''}
+          {recentAdds > 0 ? `Added ${product.name} to the cart` : ''}
         </span>
       </div>
     </article>
