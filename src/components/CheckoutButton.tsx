@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { redirectToCheckout, useShoppingCart } from 'use-shopping-cart'
-import { CHECKOUT_UNAVAILABLE } from '../checkout/checkout'
-import { createCheckoutSession } from '../checkout/createCheckoutSession'
+import { startCheckout } from '../checkout/startCheckout'
 
 // The cart drawer's Checkout button. The server rebuilds the order from
 // menu.json and creates a Stripe Checkout Session; the browser then goes to
@@ -27,19 +26,13 @@ export function CheckoutButton() {
     if (pending) return
     setPending(true)
     setMessage(null)
-    try {
-      const result = await createCheckoutSession({ data: { cartDetails } })
-      if ('url' in result) {
-        // The button stays pending while the browser leaves for Stripe.
-        redirectToCheckout(result.url)
-        return
-      }
-      setMessage(result.message)
-    } catch (error) {
-      // The request itself failed: offline, or the server is down.
-      console.error('Checkout request failed:', error)
-      setMessage(CHECKOUT_UNAVAILABLE)
+    const result = await startCheckout(cartDetails)
+    if ('url' in result) {
+      // The button stays pending while the browser leaves for Stripe.
+      redirectToCheckout(result.url)
+      return
     }
+    setMessage(result.message)
     setPending(false)
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { useShoppingCart, type CartEntry } from 'use-shopping-cart'
+import { useReportTap } from '../agent/TapUpdatesProvider'
 import { findVariant, imagePath } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
 import { CheckoutButton } from './CheckoutButton'
@@ -85,6 +86,7 @@ function CartLine({ line }: { line: CartEntry }) {
   const incrementItem = useShoppingCart((cart) => cart.incrementItem)
   const decrementItem = useShoppingCart((cart) => cart.decrementItem)
   const removeItem = useShoppingCart((cart) => cart.removeItem)
+  const reportTap = useReportTap()
   // The photo comes from the menu, not the cart entry, so cart entries stay plain products.
   const found = findVariant(line.id)
 
@@ -104,7 +106,10 @@ function CartLine({ line }: { line: CartEntry }) {
               type="button"
               aria-label={`One fewer ${line.name}`}
               disabled={line.quantity <= 1}
-              onClick={() => decrementItem(line.id)}
+              onClick={() => {
+                decrementItem(line.id)
+                reportTap({ type: 'quantity', id: line.id, quantity: line.quantity - 1 })
+              }}
             >
               −
             </button>
@@ -113,7 +118,10 @@ function CartLine({ line }: { line: CartEntry }) {
               type="button"
               aria-label={`One more ${line.name}`}
               disabled={line.quantity >= MAX_LINE_QUANTITY}
-              onClick={() => incrementItem(line.id)}
+              onClick={() => {
+                incrementItem(line.id)
+                reportTap({ type: 'quantity', id: line.id, quantity: line.quantity + 1 })
+              }}
             >
               +
             </button>
@@ -122,7 +130,10 @@ function CartLine({ line }: { line: CartEntry }) {
             type="button"
             className="remove-button"
             aria-label={`Remove ${line.name}`}
-            onClick={() => removeItem(line.id)}
+            onClick={() => {
+              removeItem(line.id)
+              reportTap({ type: 'remove', id: line.id })
+            }}
           >
             Remove
           </button>

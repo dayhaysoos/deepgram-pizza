@@ -4,7 +4,7 @@
 // context update.
 
 import { findVariant } from '../menu/menu'
-import type { CartSummary } from './cartSummary'
+import type { CartSummary, Quantities } from './cartSummary'
 
 /** A cart change the customer made by tapping. */
 export type TapChange =
@@ -21,6 +21,28 @@ export type TapChange =
  */
 export function describeTapChange(change: TapChange, cartAfter: CartSummary): string {
   return `Customer ${describeChange(change)} by tapping. ${describeCart(cartAfter)}`
+}
+
+/**
+ * The cart after a tap, worked out from the cart before it. A tap handler can't
+ * read the cart back right after its action (see handlers.ts), so the update
+ * describes the cart this returns.
+ */
+export function applyTapChange(quantities: Quantities, change: TapChange): Quantities {
+  switch (change.type) {
+    case 'add': {
+      // A Map, not assignment, so an id like "__proto__" stays a plain key. New lines go last, as in the cart.
+      const next = new Map(Object.entries(quantities))
+      for (const { id, quantity } of change.lines) next.set(id, (next.get(id) ?? 0) + quantity)
+      return Object.fromEntries(next)
+    }
+    case 'quantity':
+      return { ...quantities, [change.id]: change.quantity }
+    case 'remove':
+      return Object.fromEntries(Object.entries(quantities).filter(([id]) => id !== change.id))
+    case 'clear':
+      return {}
+  }
 }
 
 function describeChange(change: TapChange): string {

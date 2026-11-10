@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
+import { useMenuUi } from '../agent/MenuUiProvider'
+import { useReportTap } from '../agent/TapUpdatesProvider'
 import { defaultVariant, formatPrice, imagePath, productFor, type MenuItem } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
 
@@ -14,6 +16,11 @@ export function MenuCard({ item }: { item: MenuItem }) {
   const addItem = useShoppingCart((cart) => cart.addItem)
   const quantityInCart = useShoppingCart((cart) => cart.cartDetails[variant.id]?.quantity ?? 0)
   const atLimit = quantityInCart >= MAX_LINE_QUANTITY
+  const reportTap = useReportTap()
+
+  // Lit up by the find_menu_items tool, until the next search, a scroll, or a click on any card.
+  const { highlighted, clearHighlight } = useMenuUi()
+  const isHighlighted = highlighted.includes(item.id)
 
   // Add clicks in a row. The button says "Added ✓" until a second passes without one.
   const [recentAdds, setRecentAdds] = useState(0)
@@ -31,12 +38,14 @@ export function MenuCard({ item }: { item: MenuItem }) {
   function add() {
     if (atLimit) return
     addItem(product, { count: 1 })
+    reportTap({ type: 'add', lines: [{ id: product.id, quantity: 1 }] })
     setRecentAdds((n) => n + 1)
     setAddedMessage(`Added ${product.name}. ${quantityInCart + 1} in your cart.`)
   }
 
   return (
-    <article className="menu-card">
+    // A click anywhere in a card clears the highlights.
+    <article className="menu-card" data-highlighted={isHighlighted || undefined} onClick={clearHighlight}>
       {/* Empty alt: the heading below already names the item, so screen readers would read it twice. */}
       <img
         className="menu-card-photo"
@@ -48,6 +57,7 @@ export function MenuCard({ item }: { item: MenuItem }) {
       />
       <div className="menu-card-body">
         <h3 className="menu-card-name">{item.name}</h3>
+        {isHighlighted && <span className="menu-card-match">Match</span>}
         {item.tags.length > 0 && (
           <ul className="tags" aria-label="Tags">
             {item.tags.map((tag) => (

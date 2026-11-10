@@ -198,7 +198,7 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): Record<To
  * and lines with the same id are added up. add_items uses it, and so does the
  * suggestion card's Add all, so both behave the same.
  */
-export function addLines(cart: CartPort, items: unknown): CartSummary | Recovery {
+export function addLines(cart: Pick<CartPort, 'cartDetails' | 'addItem'>, items: unknown): CartSummary | Recovery {
   const quantities = quantitiesOf(cart.cartDetails())
   const checked = checkLines(items, quantities)
   if ('message' in checked) return { message: `Nothing was added. ${checked.message}` }
