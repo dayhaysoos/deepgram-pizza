@@ -1,4 +1,5 @@
-/* Every style in the app. Change the look from the tokens on :root. */
+/* Every style in the app, except the dev-only tool panel, which keeps its own in
+   src/dev/ToolsPanel.css. Change the look from the tokens on :root. */
 
 :root {
   color-scheme: light;

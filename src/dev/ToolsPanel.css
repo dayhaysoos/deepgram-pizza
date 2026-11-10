@@ -1,0 +1,219 @@
+/* The dev tools panel on /dev/tools (ToolsPanel.tsx). It's dev only, so its
+   styles live here with it rather than in src/styles.css: production builds
+   leave the panel out, and these styles with it.
+
+   On phones it's a bottom sheet. From 64rem wide it's docked on the left, and
+   the page moves over to make room. Open, it sits above the cart and the
+   suggestion card, so tools can run with either one open. Collapsed, it's a
+   small tab in the bottom-left corner, under the cart, so it never covers the
+   Checkout button, and the bottom centre stays free for the talk button. */
+
+:root {
+  --tools-panel-width: 24rem;
+  --tools-sheet-height: 55dvh;
+}
+
+.tools-panel {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30; /* above the cart (20) and the suggestion card (25) */
+  display: flex;
+  flex-direction: column;
+  max-height: var(--tools-sheet-height);
+  border-top: 4px solid var(--ink);
+  background: var(--white);
+  box-shadow: var(--shadow-drawer);
+  font-size: 0.875rem;
+}
+
+.tools-panel:not([data-open]) {
+  right: auto;
+  bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+  left: var(--space-2);
+  z-index: 15; /* under the cart (20) */
+  border: 0;
+  border-radius: var(--pill);
+  box-shadow: var(--shadow);
+}
+
+.tools-panel-heading button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: var(--ink);
+  color: var(--white);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tools-panel:not([data-open]) .tools-panel-heading button {
+  border-radius: var(--pill);
+}
+
+.tools-panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-3) var(--space-4) var(--space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tools-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.tools-panel-section h3 {
+  color: var(--ink-soft);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tools-panel-note {
+  color: var(--ink-soft);
+}
+
+.tools-panel-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tools-panel-presets button {
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--ink-faint);
+  border-radius: var(--pill);
+  background: var(--cream);
+  font-weight: 600;
+  text-align: left;
+}
+
+.tools-panel-presets button:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--cream-dark);
+}
+
+.tools-panel-presets button:disabled {
+  color: var(--ink-faint);
+}
+
+.tools-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-weight: 700;
+}
+
+.tools-panel select,
+.tools-panel textarea {
+  padding: var(--space-2);
+  border: 1px solid var(--ink-faint);
+  border-radius: var(--radius-small);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.tools-panel select {
+  min-height: var(--tap);
+}
+
+.tools-panel textarea,
+.tools-panel code,
+.tools-panel-json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.tools-panel textarea {
+  resize: vertical;
+}
+
+.tools-panel-run {
+  align-self: flex-start;
+  min-width: 6rem;
+  min-height: var(--tap);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--pill);
+  background: var(--ink);
+  color: var(--white);
+  font-weight: 700;
+}
+
+.tools-panel-json {
+  max-height: 16rem;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow: auto;
+  border-radius: var(--radius-small);
+  background: var(--cream);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tools-panel-error {
+  color: var(--red-dark);
+  font-weight: 600;
+}
+
+.tools-panel-log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tools-panel-log time {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phones: the menu can scroll clear of the open sheet. */
+@media (width < 64rem) {
+  body:has(.tools-panel[data-open]) {
+    padding-bottom: var(--tools-sheet-height);
+  }
+}
+
+/* Wide screens: docked on the left, with the page and the suggestion card moved over. */
+@media (min-width: 64rem) {
+  .tools-panel[data-open] {
+    top: 0;
+    right: auto;
+    width: var(--tools-panel-width);
+    max-height: none;
+    border-top: 0;
+    border-right: 4px solid var(--ink);
+  }
+
+  body:has(.tools-panel[data-open]) {
+    padding-left: var(--tools-panel-width);
+  }
+
+  body:has(.tools-panel[data-open]) .suggestion-card {
+    left: calc(var(--tools-panel-width) + var(--space-4));
+  }
+}

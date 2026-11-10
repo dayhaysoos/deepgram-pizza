@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DevToolsRouteImport } from './routes/dev.tools'
 import { Route as OrderSuccessRouteImport } from './routes/order.success'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevToolsRoute = DevToolsRouteImport.update({
+  id: '/dev/tools',
+  path: '/dev/tools',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrderSuccessRoute = OrderSuccessRouteImport.update({
@@ -25,27 +31,31 @@ const OrderSuccessRoute = OrderSuccessRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dev/tools': typeof DevToolsRoute
   '/order/success': typeof OrderSuccessRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dev/tools': typeof DevToolsRoute
   '/order/success': typeof OrderSuccessRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dev/tools': typeof DevToolsRoute
   '/order/success': typeof OrderSuccessRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/order/success'
+  fullPaths: '/' | '/dev/tools' | '/order/success'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/order/success'
-  id: '__root__' | '/' | '/order/success'
+  to: '/' | '/dev/tools' | '/order/success'
+  id: '__root__' | '/' | '/dev/tools' | '/order/success'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DevToolsRoute: typeof DevToolsRoute
   OrderSuccessRoute: typeof OrderSuccessRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/tools': {
+      id: '/dev/tools'
+      path: '/dev/tools'
+      fullPath: '/dev/tools'
+      preLoaderRoute: typeof DevToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/order/success': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DevToolsRoute: DevToolsRoute,
   OrderSuccessRoute: OrderSuccessRoute,
 }
 export const routeTree = rootRouteImport

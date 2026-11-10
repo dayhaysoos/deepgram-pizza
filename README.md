@@ -37,6 +37,18 @@ Add something to the cart, open it and press **Checkout**. Stripe's test checkou
 
 The server accepts only Stripe test keys (`sk_test_…`), so no real payment can be taken.
 
+### Try the tools without a microphone
+
+Run `pnpm dev` and open http://localhost:3000/dev/tools. It's the menu page with a panel that runs the voice agent's tools through the same handlers the agent uses, so the page changes exactly as it will for a voice tool call. Pick a tool, edit its JSON arguments and press **Run** to see the result the agent would get back. Or use a preset, which fills in a call and runs it:
+
+- **Golden path:** find the vegetarian items, add two large margheritas, make that one, read the total, check out. Check out goes straight to Stripe's test checkout.
+- **Suggestions:** what goes with the cheeseburger, a plan for a party of 20 on the suggestion card, then add all of that.
+- **Recovery:** calls the agent can get wrong, such as an item that isn't on the menu or a pizza without a size. Each answers with a message the agent can act on.
+
+When you change the cart by tapping (Add on a menu card, − or + in the cart, Add on the suggestion card), the panel logs the update a voice session would send the agent.
+
+The page is for development only. A production build leaves the panel out, and `/dev/tools` answers 404.
+
 ## Make it your own shop
 
 **The menu** is `src/menu/menu.json`, one entry per item in the `MenuItem` shape from `src/menu/menu.ts`:
