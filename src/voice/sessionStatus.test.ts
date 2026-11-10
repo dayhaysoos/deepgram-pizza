@@ -31,6 +31,9 @@ function fromSession1(event: LiveEvent): SessionEvent {
 const settingsApplied: LiveEvent = { type: 'settingsApplied' }
 const microphoneOn: LiveEvent = { type: 'microphoneOn' }
 const listening: LiveEvent = { type: 'agentChanged', state: 'connected', mode: 'listening' }
+const speaking: LiveEvent = { type: 'agentChanged', state: 'connected', mode: 'speaking' }
+const customerStartedSpeaking: LiveEvent = { type: 'customerStartedSpeaking' }
+const customerFinishedSpeaking: LiveEvent = { type: 'customerFinishedSpeaking' }
 const disconnected: LiveEvent = { type: 'disconnected' }
 /** The customer was asked for the microphone, and said no. */
 const micBlocked: LiveEvent = { type: 'sdkError', error: new DOMException('Permission denied', 'NotAllowedError') }
@@ -83,6 +86,46 @@ describe('updateSession', () => {
       expect(live(...started, { type: 'agentChanged', state: 'reconnecting', mode: 'listening' }).status).toBe(
         'connecting',
       )
+    })
+  })
+
+  // Deepgram doesn't send AgentThinking every turn, so the SDK's mode can go
+  // straight from listening to speaking. The customer's line, which arrives
+  // at the end of their turn, shows thinking in between.
+  describe('thinking after the customer speaks', () => {
+    it("shows thinking once the customer's line arrives", () => {
+      expect(live(...started, customerFinishedSpeaking).status).toBe('thinking')
+    })
+
+    it('shows speaking once the agent starts speaking', () => {
+      expect(live(...started, customerFinishedSpeaking, speaking).status).toBe('speaking')
+    })
+
+    it("stays speaking when the customer's line arrives after the agent started speaking", () => {
+      const talking = live(...started, speaking)
+      expect(updateSession(talking, fromSession1(customerFinishedSpeaking))).toBe(talking)
+    })
+
+    it('shows listening when the customer starts speaking again', () => {
+      expect(live(...started, customerFinishedSpeaking, customerStartedSpeaking).status).toBe('listening')
+    })
+
+    it('stays connecting until the agent has its settings', () => {
+      const connecting = live()
+      expect(updateSession(connecting, fromSession1(customerFinishedSpeaking))).toBe(connecting)
+      expect(updateSession(connecting, fromSession1(customerStartedSpeaking))).toBe(connecting)
+    })
+
+    it("keeps the SDK's own thinking", () => {
+      const thinking: LiveEvent = { type: 'agentChanged', state: 'connected', mode: 'thinking' }
+      expect(live(...started, thinking).status).toBe('thinking')
+      expect(live(...started, thinking, customerFinishedSpeaking).status).toBe('thinking')
+    })
+
+    it('ignores a line from a session that was replaced', () => {
+      const second = after(press, press, press, ...started.map((event) => ({ ...event, sessionNumber: 2 })))
+      expect(second).toMatchObject({ status: 'listening', sessionNumber: 2 })
+      expect(updateSession(second, fromSession1(customerFinishedSpeaking))).toBe(second)
     })
   })
 

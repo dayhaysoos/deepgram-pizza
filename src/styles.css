@@ -59,8 +59,12 @@
   --header-offset: 8rem; /* about the sticky header height, so anchor jumps land below it */
   --drawer-width: 26rem;
   --drawer-speed: 250ms;
-  --talk-button-space: 5.5rem; /* kept free at the bottom centre for the talk button; the suggestion card sits above it */
-  --captions-space: 8rem; /* kept free above the talk button for the captions or a message */
+  /* Room kept free at the bottom of the screen for the voice strip. The two add
+     up to --voice-space (set on body, under Voice): the talk button's room, plus
+     the captions' while the captions or a message show. The menu and the cart's
+     footer leave --voice-space free, and the suggestion card sits above it. */
+  --talk-button-space: 5.5rem; /* the talk button */
+  --captions-space: 8rem; /* the captions or a message, above the talk button */
   --sheet-width: 30rem;
   --sheet-speed: 250ms;
   --highlight-ring: 0 0 0 3px var(--red);
@@ -987,7 +991,7 @@ body:has(.drawer[data-open]) .voice {
 }
 
 .talk-button[data-status='listening'] {
-  box-shadow: 0 0 0 4px rgb(198 40 40 / 0.3), var(--shadow-raised);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 30%, transparent), var(--shadow-raised);
 }
 
 .talk-button[data-status='thinking'] {
@@ -1022,7 +1026,7 @@ body:has(.drawer[data-open]) .voice {
 [data-status='connecting'] .talk-icon > span {
   width: 1.25rem;
   height: 1.25rem;
-  border: 3px solid rgb(198 40 40 / 0.25);
+  border: 3px solid color-mix(in srgb, var(--red) 25%, transparent);
   border-top-color: currentColor;
   border-radius: 50%;
 }
@@ -1081,10 +1085,10 @@ body:has(.drawer[data-open]) .voice {
 
 @keyframes talk-pulse {
   from {
-    box-shadow: 0 0 0 0 rgb(198 40 40 / 0.45), var(--shadow-raised);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--red) 45%, transparent), var(--shadow-raised);
   }
   to {
-    box-shadow: 0 0 0 14px rgb(198 40 40 / 0), var(--shadow-raised);
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--red) 0%, transparent), var(--shadow-raised);
   }
 }
 

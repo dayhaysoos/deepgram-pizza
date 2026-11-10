@@ -65,6 +65,10 @@ export type LiveEvent =
   | { type: 'settingsApplied' }
   /** The microphone started. */
   | { type: 'microphoneOn' }
+  /** The customer started speaking (Deepgram's UserStartedSpeaking). */
+  | { type: 'customerStartedSpeaking' }
+  /** The customer's line arrived as text (their ConversationText), which Deepgram sends at the end of their turn. */
+  | { type: 'customerFinishedSpeaking' }
   /** The token server function answered with a message instead of a token. */
   | { type: 'tokenFailed'; message: string }
   /** The SDK reported an error: the microphone, or a connection that failed. */
@@ -100,10 +104,18 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
   if (!isLive(state) || event.sessionNumber !== state.sessionNumber) return state
 
   switch (event.type) {
-    case 'agentChanged': {
-      const status = liveStatus(event.state, event.mode)
-      return status === state.status ? state : { ...state, status }
-    }
+    case 'agentChanged':
+      return withStatus(state, liveStatus(event.state, event.mode))
+    // Deepgram doesn't send AgentThinking every turn, so the SDK's mode can go
+    // straight from listening to speaking. The customer's line ends their
+    // turn: the agent is thinking until it starts speaking (agentChanged) or
+    // the customer starts speaking again. A line that comes after the agent
+    // started speaking changes nothing. As in the SDK, the customer speaking
+    // means listening, even over the agent (the SDK stops its audio).
+    case 'customerFinishedSpeaking':
+      return state.status === 'listening' ? withStatus(state, 'thinking') : state
+    case 'customerStartedSpeaking':
+      return state.status === 'connecting' ? state : withStatus(state, 'listening')
     case 'settingsApplied':
       return state.settingsApplied ? state : { ...state, settingsApplied: true }
     case 'microphoneOn':
@@ -125,6 +137,11 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
       // browser is still asking for it, after the settings have arrived.
       return state.settingsApplied && state.microphoneOn ? failed(state, CONNECTION_LOST) : state
   }
+}
+
+/** `state` with `status`, or `state` itself when the status is already that. */
+function withStatus(state: LiveSession, status: LiveStatus): LiveSession {
+  return status === state.status ? state : { ...state, status }
 }
 
 function failed(state: LiveSession, message: string): SessionState {

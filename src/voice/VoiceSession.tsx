@@ -22,6 +22,7 @@ import {
   useAgentSession,
   useAgentState,
   type AgentSessionConfig,
+  type ConversationTextMessage,
 } from '@deepgram/react'
 import { useShoppingCart } from 'use-shopping-cart'
 import { quantitiesOf, summarizeCart } from '../agent/cartSummary'
@@ -134,8 +135,9 @@ async function fetchToken(send: (event: LiveEvent) => void): Promise<string> {
 
 /**
  * Sends the live session's changes as events: the connection and the agent's
- * mode, the settings, the microphone, a disconnect, the customer leaving the
- * page, and a minute with no speech.
+ * mode, the settings, the microphone, the customer starting and finishing a
+ * turn, a disconnect, the customer leaving the page, and a minute with no
+ * speech.
  */
 function SessionEvents({ send }: { send: (event: LiveEvent) => void }) {
   const agentSession = useAgentSession()
@@ -153,11 +155,20 @@ function SessionEvents({ send }: { send: (event: LiveEvent) => void }) {
   useEffect(() => {
     const onSettingsApplied = () => send({ type: 'settingsApplied' })
     const onDisconnected = () => send({ type: 'disconnected' })
+    const onUserStartedSpeaking = () => send({ type: 'customerStartedSpeaking' })
+    // The customer's line arrives at the end of their turn; the agent's own lines don't count.
+    const onConversationText = ({ role }: ConversationTextMessage) => {
+      if (role === 'user') send({ type: 'customerFinishedSpeaking' })
+    }
     agentSession.on('settings-applied', onSettingsApplied)
     agentSession.on('disconnected', onDisconnected)
+    agentSession.on('user-started-speaking', onUserStartedSpeaking)
+    agentSession.on('conversation-text', onConversationText)
     return () => {
       agentSession.off('settings-applied', onSettingsApplied)
       agentSession.off('disconnected', onDisconnected)
+      agentSession.off('user-started-speaking', onUserStartedSpeaking)
+      agentSession.off('conversation-text', onConversationText)
     }
   }, [agentSession, send])
 

@@ -43,7 +43,8 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
   return (
     <div className="drawer" data-open={open || undefined}>
       <div className="drawer-backdrop" onClick={close} />
-      <div className="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="cart-title">
+      {/* No aria-modal: the page wrapper is already inert, and aria-modal would also hide the talk button, captions and voice errors. */}
+      <div className="drawer-panel" role="dialog" aria-labelledby="cart-title">
         <div className="drawer-header">
           <h2 id="cart-title">Your order</h2>
           <button
