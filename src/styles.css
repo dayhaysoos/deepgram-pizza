@@ -167,12 +167,15 @@ button:disabled {
   padding: var(--space-3) var(--space-4) var(--space-1);
 }
 
+/* An h1 on the menu page, a link home on the order page. */
 .brand {
   min-width: 0;
   color: var(--red);
+  font-family: var(--font-serif);
   font-size: clamp(1.25rem, 0.8rem + 2.5vw, 2.25rem);
   font-weight: 900;
   letter-spacing: 0.03em;
+  text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -679,7 +682,7 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-/* Room for the Checkout button (step 3) under the total. */
+/* The total, then any checkout message, then the Checkout button. */
 .drawer-footer {
   display: flex;
   flex-direction: column;
@@ -696,4 +699,91 @@ button:disabled {
   font-size: 1.25rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+/* Checkout, in the drawer footer. On phones the drawer is full screen, so the
+   button spans the bottom of the screen. */
+
+.checkout-message {
+  color: var(--red-dark);
+  font-weight: 600;
+}
+
+.checkout-button {
+  min-height: 3.25rem;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--pill);
+  background: var(--red);
+  color: var(--white);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.checkout-button:hover:not(:disabled) {
+  background: var(--red-dark);
+}
+
+.checkout-button:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+/* "Checkout cancelled" notice, at the top of the menu. */
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4);
+  border-left: 4px solid var(--red);
+  border-radius: var(--radius-small);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+}
+
+/* Order page, after checkout. */
+
+.order {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: calc(100% - 2 * var(--space-4));
+  max-width: 36rem;
+  margin: var(--space-8) auto;
+  padding: var(--space-8) var(--space-6);
+  border-radius: var(--radius);
+  background: var(--white);
+  box-shadow: var(--shadow);
+}
+
+.order h1 {
+  font-size: clamp(1.75rem, 1.4rem + 1.5vw, 2.5rem);
+  font-weight: 900;
+}
+
+.order-number strong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.order-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin-top: var(--space-2);
+  padding: 0 var(--space-5);
+  border-radius: var(--pill);
+  background: var(--red);
+  color: var(--white);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.order-link:hover {
+  background: var(--red-dark);
 }

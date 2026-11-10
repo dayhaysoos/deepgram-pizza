@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from 'react'
 import { useShoppingCart, type CartEntry } from 'use-shopping-cart'
 import { findVariant, imagePath } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
+import { CheckoutButton } from './CheckoutButton'
 
 type CartDrawerProps = {
   /** Gets focus back when the drawer closes (the header's cart button). */
@@ -66,12 +67,12 @@ export function CartDrawer({ returnFocusRef }: CartDrawerProps) {
                 <CartLine key={line.id} line={line} />
               ))}
             </ul>
-            {/* Step 3 adds the Checkout button here, under the total. */}
             <div className="drawer-footer">
               <p className="drawer-total">
                 <span>Total</span>
                 <span>{formattedTotalPrice}</span>
               </p>
+              <CheckoutButton />
             </div>
           </>
         )}

@@ -4,7 +4,7 @@ Talk to a pizza shop. A voice agent answers questions about the menu, suggests w
 
 Clone it to put voice ordering on your own shop: swap the menu, the photos and the agent's instructions.
 
-> Work in progress: the app is being built step by step. The menu and cart work by clicking today; checkout and voice land next.
+> Work in progress: the app is being built step by step. The menu, the cart and test mode checkout work by clicking today; voice lands next.
 
 ## Stack
 
@@ -30,6 +30,12 @@ Fill in both keys in `.dev.vars`, which stays out of git:
 - `STRIPE_SECRET_KEY`: a Stripe test mode secret key (`sk_test_…`) from the [Stripe dashboard](https://dashboard.stripe.com/test/apikeys).
 
 Then run `pnpm dev` and open http://localhost:3000.
+
+### Try checkout
+
+Add something to the cart, open it and press **Checkout**. Stripe's test checkout page opens. Pay with the test card `4242 4242 4242 4242`, any future expiry date and any CVC. Stripe sends you back to the order page, which shows an order number and empties the cart. Leave Stripe's page with its back link instead and the menu says checkout was cancelled, with the cart as you left it.
+
+The server accepts only Stripe test keys (`sk_test_…`), so no real payment can be taken.
 
 ## Make it your own shop
 
@@ -85,7 +91,7 @@ Deploy fails until both secrets are set: they're listed under `secrets.required`
 
 ## How it works
 
-The cart lives in the browser. Voice and checkout, the next steps, are built around it: when you ask for something, the voice agent calls a tool, and the tool updates the cart on the page. The server will do two things: mint a short-lived Deepgram token, so your API key never reaches the browser, and create the Stripe Checkout session from prices it checks itself.
+The cart lives in the browser. Voice, the next step, is built around it: when you ask for something, the voice agent calls a tool, and the tool updates the cart on the page. The server does two things. It creates the Stripe Checkout session, taking names and prices from `menu.json` rather than from the cart the browser sends (`src/checkout/`). Once voice lands, it also mints a short-lived Deepgram token, so your API key never reaches the browser.
 
 ## License
 
