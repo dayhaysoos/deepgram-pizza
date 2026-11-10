@@ -1166,6 +1166,45 @@ body:has(.drawer[data-open]) .voice {
   font-weight: 600;
 }
 
+/* What the agent is doing while the customer waits (AgentActivity.tsx): a
+   spinner and a label, where the reply will appear. */
+.caption-activity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Empty, it's out of the flow, so it adds no gap, but stays in place for
+   screen readers. */
+.caption-activity:empty {
+  position: absolute;
+}
+
+/* While it shows, the reply keeps its newest 2 lines, so the box still fits
+   in --captions-space. */
+.captions:has(.caption-activity:not(:empty)) .caption-agent {
+  max-height: 2lh;
+}
+
+.caption-activity-spinner {
+  flex-shrink: 0;
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid var(--line);
+  border-top-color: var(--red);
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .caption-activity-spinner {
+    animation: talk-spin 0.9s linear infinite;
+  }
+}
+
 /* Checkout, in the drawer footer. On phones the drawer is full screen, so the
    button spans the bottom of the screen. */
 

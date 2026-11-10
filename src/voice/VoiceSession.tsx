@@ -38,9 +38,11 @@ import {
   useAgentState,
   type AgentSessionConfig,
   type ConversationTextMessage,
+  type FunctionCallRequestMessage,
 } from '@deepgram/react'
 import { useShoppingCart } from 'use-shopping-cart'
 import { quantitiesOf, summarizeCart } from '../agent/cartSummary'
+import { activityLabel } from './AgentActivity'
 import { agentSettings } from './agentSettings'
 import { Captions } from './Captions'
 import { getDeepgramToken } from './getDeepgramToken'
@@ -102,7 +104,13 @@ export function VoiceSession() {
   return (
     <div className="voice">
       {isLive(state) && (
-        <DeepgramSession key={state.sessionNumber} sessionNumber={state.sessionNumber} send={send} onLive={setLive} />
+        <DeepgramSession
+          key={state.sessionNumber}
+          sessionNumber={state.sessionNumber}
+          activity={activityLabel(state)}
+          send={send}
+          onLive={setLive}
+        />
       )}
       {/* After the session, so it keeps its place (and its focus) as sessions come and go. */}
       <TalkButton
@@ -121,13 +129,15 @@ export function VoiceSession() {
 
 type DeepgramSessionProps = {
   sessionNumber: number
+  /** What the captions say the agent is doing, if anything (activityLabel). */
+  activity?: string
   send: (event: SessionEvent) => void
   /** Hears about the session's AgentSession once its provider has made it, and `null` once it's gone. */
   onLive: (live: LiveAgent | null) => void
 }
 
 /** One session's Deepgram connection: connects on mount, hangs up on unmount. */
-function DeepgramSession({ sessionNumber, send: sendToPage, onLive }: DeepgramSessionProps) {
+function DeepgramSession({ sessionNumber, activity, send: sendToPage, onLive }: DeepgramSessionProps) {
   const send = useCallback(
     (event: LiveEvent) => sendToPage({ ...event, sessionNumber }),
     [sendToPage, sessionNumber],
@@ -155,7 +165,7 @@ function DeepgramSession({ sessionNumber, send: sendToPage, onLive }: DeepgramSe
       onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
     >
       <SessionEvents config={config} send={send} onLive={onLive} />
-      <Captions />
+      <Captions activity={activity} />
     </AgentProvider>
   )
 }
@@ -181,8 +191,9 @@ type SessionEventsProps = {
 /**
  * Hands the live session up to VoiceSession (`onLive`), and sends its changes
  * as events: the connection and the agent's mode, the settings, the
- * microphone, the customer starting and finishing a turn, a disconnect, the
- * customer leaving the page, and a minute with no speech.
+ * microphone, the customer starting and finishing a turn, the agent's lines
+ * and tool requests, a disconnect, the customer leaving the page, and a
+ * minute with no speech.
  */
 function SessionEvents({ config, send, onLive }: SessionEventsProps) {
   const agentSession = useAgentSession()
@@ -206,19 +217,24 @@ function SessionEvents({ config, send, onLive }: SessionEventsProps) {
     const onSettingsApplied = () => send({ type: 'settingsApplied' })
     const onDisconnected = () => send({ type: 'disconnected' })
     const onUserStartedSpeaking = () => send({ type: 'customerStartedSpeaking' })
-    // The customer's line arrives at the end of their turn; the agent's own lines don't count.
+    // The customer's line arrives at the end of their turn.
     const onConversationText = ({ role }: ConversationTextMessage) => {
       if (role === 'user') send({ type: 'customerFinishedSpeaking' })
+      if (role === 'assistant') send({ type: 'agentLine' })
     }
+    const onFunctionCallRequest = ({ functions }: FunctionCallRequestMessage) =>
+      send({ type: 'toolsRequested', names: functions.map((call) => call.name) })
     agentSession.on('settings-applied', onSettingsApplied)
     agentSession.on('disconnected', onDisconnected)
     agentSession.on('user-started-speaking', onUserStartedSpeaking)
     agentSession.on('conversation-text', onConversationText)
+    agentSession.on('function-call-request', onFunctionCallRequest)
     return () => {
       agentSession.off('settings-applied', onSettingsApplied)
       agentSession.off('disconnected', onDisconnected)
       agentSession.off('user-started-speaking', onUserStartedSpeaking)
       agentSession.off('conversation-text', onConversationText)
+      agentSession.off('function-call-request', onFunctionCallRequest)
     }
   }, [agentSession, send])
 

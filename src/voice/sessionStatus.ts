@@ -1,8 +1,10 @@
 // The voice session's lifecycle, as one plain reducer: what the talk button
-// shows (its status, and the message when a session fails), and every rule for
-// when a session ends. No React or SDK code (only types), so tests run it as a
-// list of events. VoiceSession.tsx holds it with `useReducer`, turns the SDK's
-// callbacks into events, and renders from the state.
+// shows (its status, and the message when a session fails), the tools the
+// agent is waiting on (for the captions' activity line, AgentActivity.tsx),
+// and every rule for when a session ends. No React or SDK code (only types),
+// so tests run it as a list of events. VoiceSession.tsx holds it with
+// `useReducer`, turns the SDK's callbacks into events, and renders from the
+// state.
 //
 // One session per press. A press starts a session, or ends the one that's on.
 // A session also ends when the customer leaves the page, after a minute with no
@@ -48,6 +50,13 @@ export type LiveSession = {
   settingsApplied: boolean
   /** The microphone is on, so AgentProvider has finished starting the session. */
   microphoneOn: boolean
+  /**
+   * The tools the agent asked the browser to run, by name, in its last
+   * FunctionCallRequest. The SDK sends no event when the browser answers, so
+   * they're kept until what comes next: the agent starts speaking or sends a
+   * line, the customer starts speaking, or the connection drops.
+   */
+  toolCalls?: string[]
 }
 
 /** What ended a session: the type of the event that ended it. */
@@ -78,6 +87,10 @@ export type LiveEvent =
   | { type: 'customerStartedSpeaking' }
   /** The customer's line arrived as text (their ConversationText), which Deepgram sends at the end of their turn. */
   | { type: 'customerFinishedSpeaking' }
+  /** The agent's line arrived as text (its ConversationText). */
+  | { type: 'agentLine' }
+  /** The agent asked the browser to run tools (Deepgram's FunctionCallRequest). */
+  | { type: 'toolsRequested'; names: string[] }
   /** The token server function answered with a message instead of a token. */
   | { type: 'tokenFailed'; message: string }
   /** The SDK reported an error: the microphone, or a connection that failed. */
@@ -113,8 +126,12 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
   if (!isLive(state) || event.sessionNumber !== state.sessionNumber) return state
 
   switch (event.type) {
-    case 'agentChanged':
-      return withStatus(state, liveStatus(event.state, event.mode))
+    case 'agentChanged': {
+      const status = liveStatus(event.state, event.mode)
+      // The agent speaking means its tool calls were answered; a reconnect drops them.
+      const toolCallsOver = status === 'speaking' || status === 'connecting'
+      return withStatus(toolCallsOver ? withoutToolCalls(state) : state, status)
+    }
     // Deepgram doesn't send AgentThinking every turn, so the SDK's mode can go
     // straight from listening to speaking. The customer's line ends their
     // turn: the agent is thinking until it starts speaking (agentChanged) or
@@ -124,7 +141,12 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
     case 'customerFinishedSpeaking':
       return state.status === 'listening' ? withStatus(state, 'thinking') : state
     case 'customerStartedSpeaking':
-      return state.status === 'connecting' ? state : withStatus(state, 'listening')
+      return state.status === 'connecting' ? state : withStatus(withoutToolCalls(state), 'listening')
+    // A request's tool calls last until what comes next (see `toolCalls`).
+    case 'toolsRequested':
+      return event.names.length === 0 ? state : { ...state, toolCalls: event.names }
+    case 'agentLine':
+      return withoutToolCalls(state)
     case 'settingsApplied':
       return state.settingsApplied ? state : { ...state, settingsApplied: true }
     case 'microphoneOn':
@@ -151,6 +173,11 @@ export function updateSession(state: SessionState, event: SessionEvent): Session
 /** `state` with `status`, or `state` itself when the status is already that. */
 function withStatus(state: LiveSession, status: LiveStatus): LiveSession {
   return status === state.status ? state : { ...state, status }
+}
+
+/** `state` without tool calls, or `state` itself when it has none. */
+function withoutToolCalls(state: LiveSession): LiveSession {
+  return state.toolCalls ? { ...state, toolCalls: undefined } : state
 }
 
 function failed(state: LiveSession, endedBy: SessionEnd, message: string): SessionState {

@@ -129,6 +129,81 @@ describe('updateSession', () => {
     })
   })
 
+  // The captions show what a requested tool is doing (AgentActivity.tsx) from
+  // the agent's FunctionCallRequest until its answer comes. The SDK sends no
+  // event when the browser answers, so what comes next ends it.
+  describe("the agent's tool calls", () => {
+    const findMenuItems: LiveEvent = { type: 'toolsRequested', names: ['find_menu_items'] }
+    const agentLine: LiveEvent = { type: 'agentLine' }
+    const asked = [...started, customerFinishedSpeaking, findMenuItems]
+
+    it('keeps the names of the tools the agent asked for', () => {
+      expect(live(...asked)).toMatchObject({ status: 'thinking', toolCalls: ['find_menu_items'] })
+    })
+
+    it('keeps every name of a request with several, in order', () => {
+      const several: LiveEvent = { type: 'toolsRequested', names: ['view_cart', 'add_item'] }
+      expect(live(...started, several)).toMatchObject({ toolCalls: ['view_cart', 'add_item'] })
+    })
+
+    it('takes the newest request over the one before', () => {
+      const showSuggestions: LiveEvent = { type: 'toolsRequested', names: ['show_suggestions'] }
+      expect(live(...asked, showSuggestions)).toMatchObject({ toolCalls: ['show_suggestions'] })
+    })
+
+    it('ignores a request without names', () => {
+      const thinking = live(...started, customerFinishedSpeaking)
+      expect(updateSession(thinking, fromSession1({ type: 'toolsRequested', names: [] }))).toBe(thinking)
+    })
+
+    it('ends when the agent starts speaking', () => {
+      expect(live(...asked, speaking)).toMatchObject({ status: 'speaking', toolCalls: undefined })
+    })
+
+    it('ends when a line from the agent arrives', () => {
+      expect(live(...asked, agentLine)).toMatchObject({ status: 'thinking', toolCalls: undefined })
+    })
+
+    it('ends when the customer starts speaking', () => {
+      expect(live(...asked, customerStartedSpeaking)).toMatchObject({ status: 'listening', toolCalls: undefined })
+    })
+
+    it('ends when the connection drops', () => {
+      const reconnecting: LiveEvent = { type: 'agentChanged', state: 'reconnecting', mode: 'listening' }
+      expect(live(...asked, reconnecting)).toMatchObject({ status: 'connecting', toolCalls: undefined })
+    })
+
+    it('ends with the session', () => {
+      expect(live(...asked, { type: 'idle' })).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'idle' })
+      const next = updateSession(live(...asked), press)
+      expect(updateSession(next, press)).toEqual({
+        status: 'connecting',
+        sessionNumber: 2,
+        settingsApplied: false,
+        microphoneOn: false,
+      })
+    })
+
+    it("stays while the agent's words before the call end", () => {
+      // The agent may say something ("Let me look.") before it asks for a tool.
+      // Once its audio is done, the SDK's mode goes back to listening.
+      expect(live(...started, speaking, findMenuItems, listening)).toMatchObject({
+        status: 'listening',
+        toolCalls: ['find_menu_items'],
+      })
+    })
+
+    it('ignores a request from a session that was replaced', () => {
+      const second = after(press, press, press, ...started.map((event) => ({ ...event, sessionNumber: 2 })))
+      expect(updateSession(second, fromSession1(findMenuItems))).toBe(second)
+    })
+
+    it("keeps the same state when there's no tool call to end", () => {
+      const on = live(...started)
+      expect(updateSession(on, fromSession1(agentLine))).toBe(on)
+    })
+  })
+
   describe('ending a session', () => {
     it('ends without a message when the customer leaves the page', () => {
       expect(live(...started, { type: 'pageHidden' })).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'pageHidden' })
