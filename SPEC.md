@@ -304,6 +304,12 @@ Record decisions made during the build here (voice settings, library choices, an
 - **Categories live in `src/menu/menu.ts`.** SPEC fixes `menu.json` as a list of items; `categories` sits next to it and defines which category ids exist and how they're shown (order, label, note).
 - **Menu cards start on the size that feeds the most people** (Large, 12 pc), via `defaultVariant`: the common order is one tap away; the SPEC sketch's mixed defaults were illustrative.
 - **Clicks share the voice tools' cap of 20 per line** (`MAX_LINE_QUANTITY` in `src/shop.ts`): Add and + stop at 20, so a line the agent reads back never exceeds what its tools accept.
+- **use-shopping-cart is pinned to `4.0.0-rc.2`.** pnpm 12's minimum release age blocked rc.3, published hours before step 2; bump it once pnpm allows.
+- **Photos are found by item id** (`public/images/<item-id>.jpg`, via `imagePath`), so the SPEC's `MenuItem` shape needs no image field.
+- **Sized product names put the size first:** variant labels are `Medium`/`Large` and `6 pc`/`12 pc`, and the product is "Large Pepperoni Pizza" or "12 pc Buffalo Wing Dings". One rule, in `productFor`.
+- **A click on Add doesn't open the drawer.** The button says "Added ✓" and the badge updates; SPEC opens the drawer on its own only for voice changes.
+- **The drawer is a custom sheet, not a native `<dialog>`.** While it's open only the page wrapper is `inert`, so the step 4 talk button can live outside it and stay usable mid-conversation. Open/closed is the cart library's `shouldDisplayCart`.
+- **System font stacks, no web fonts.** A bold serif stack for headings and a sans stack for text keep the page free of third-party requests.
 
 ## Open questions
 
