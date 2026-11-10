@@ -9,15 +9,23 @@
 // - Every cart tool returns the cart summary. In React, a use-shopping-cart
 //   action updates the store at once, but the cart a component holds stays as
 //   it was until the next render, and the hook has no way to read the store
-//   directly. So a handler reads the cart once, works out the cart after its
-//   change itself, makes the change, and summarizes the cart it worked out.
-//   handlers.test.ts checks that this always matches what the store holds.
+//   directly. So a handler reads the cart once, checks the arguments, works
+//   out the cart after its change with applyCartChange (cartSummary.ts, which
+//   tap updates use too), makes the change, and summarizes the cart it worked
+//   out. handlers.test.ts checks that this always matches what the store holds.
 
 import type { CartDetails } from 'use-shopping-cart/core'
-import { CHECKOUT_UNAVAILABLE, type CheckoutResult } from '../checkout/checkout'
+import type { CheckoutResult } from '../checkout/checkout'
 import { categories, findVariant, formatPrice, menu, tags, type Category, type Product, type Tag } from '../menu/menu'
-import { MAX_LINE_QUANTITY } from '../shop'
-import { quantitiesOf, summarizeCart, type CartSummary, type Quantities } from './cartSummary'
+import { isLineQuantity, MAX_LINE_QUANTITY } from '../shop'
+import {
+  applyCartChange,
+  quantitiesOf,
+  summarizeCart,
+  type CartChange,
+  type CartSummary,
+  type Quantities,
+} from './cartSummary'
 import { closeMatches, searchMenu, type MenuFilters } from './menuSearch'
 import { MAX_LINES_PER_CALL, type ToolName } from './tools'
 
@@ -56,7 +64,10 @@ export type SuggestionCard = {
 export type ToolPorts = {
   cart: CartPort
   ui: UiPort
-  /** Starts checkout for the cart: the `createCheckoutSession` server function in the app. */
+  /**
+   * Starts checkout for the cart. It never rejects: a failed request comes back
+   * as `{ message }`. In the app it's `startCheckout`, which guarantees that.
+   */
   checkout(cartDetails: CartDetails): Promise<CheckoutResult>
 }
 
@@ -141,9 +152,10 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): Record<To
       const quantities = quantitiesOf(cart.cartDetails())
       const line = checkLine(args.id, args.quantity, quantities)
       if ('message' in line) return line
+      const next = applyCartChange(quantities, adding([line]))
       cart.addItem(line.product, { count: line.quantity })
       openDrawerOnce()
-      return summarizeCart(withLineAdded(quantities, line))
+      return summarizeCart(next)
     }),
 
     add_items: recovering((args) => {
@@ -156,35 +168,31 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): Record<To
       const quantities = quantitiesOf(cart.cartDetails())
       if (!isInCart(quantities, id)) return notInCart(quantities)
       if (!isLineQuantity(quantity)) return { message: `${BAD_QUANTITY} To take it out of the cart, use remove_item.` }
+      const next = applyCartChange(quantities, { type: 'quantity', id, quantity })
       cart.setItemQuantity(id, quantity)
-      return summarizeCart({ ...quantities, [id]: quantity })
+      return summarizeCart(next)
     }),
 
     remove_item: recovering(({ id }) => {
       const quantities = quantitiesOf(cart.cartDetails())
       if (!isInCart(quantities, id)) return notInCart(quantities)
+      const next = applyCartChange(quantities, { type: 'remove', id })
       cart.removeItem(id)
-      return summarizeCart(Object.fromEntries(Object.entries(quantities).filter(([lineId]) => lineId !== id)))
+      return summarizeCart(next)
     }),
 
     view_cart: recovering(() => summarizeCart(quantitiesOf(cart.cartDetails()))),
 
     clear_cart: recovering(() => {
+      const next = applyCartChange(quantitiesOf(cart.cartDetails()), { type: 'clear' })
       cart.clearCart()
-      return summarizeCart({})
+      return summarizeCart(next)
     }),
 
     checkout: recovering(async () => {
       const cartDetails = cart.cartDetails()
       if (Object.keys(cartDetails).length === 0) return { message: EMPTY_CART }
-      let result: CheckoutResult
-      try {
-        result = await checkout(cartDetails)
-      } catch (error) {
-        // The request itself failed: offline, or the server is down.
-        console.error('Checkout request failed:', error)
-        return { message: CHECKOUT_UNAVAILABLE }
-      }
+      const result = await checkout(cartDetails)
       if ('message' in result) return result
       ui.goToCheckout(result.url)
       return { ok: true }
@@ -202,15 +210,17 @@ export function addLines(cart: Pick<CartPort, 'cartDetails' | 'addItem'>, items:
   const quantities = quantitiesOf(cart.cartDetails())
   const checked = checkLines(items, quantities)
   if ('message' in checked) return { message: `Nothing was added. ${checked.message}` }
-  let next = quantities
-  for (const line of checked.lines) {
-    cart.addItem(line.product, { count: line.quantity })
-    next = withLineAdded(next, line)
-  }
+  const next = applyCartChange(quantities, adding(checked.lines))
+  for (const line of checked.lines) cart.addItem(line.product, { count: line.quantity })
   return summarizeCart(next)
 }
 
 type CheckedLine = { product: Product; quantity: number }
+
+/** The change that adds lines that passed the checks. */
+function adding(lines: CheckedLine[]): CartChange {
+  return { type: 'add', lines: lines.map(({ product, quantity }) => ({ id: product.id, quantity })) }
+}
 
 /** Checks a list of lines to add, merging repeated ids. A problem names its line. */
 function checkLines(items: unknown, inCart: Quantities): { lines: CheckedLine[] } | Recovery {
@@ -334,10 +344,6 @@ function readArgs(args: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {}
 }
 
-function withLineAdded(quantities: Quantities, { product, quantity }: CheckedLine): Quantities {
-  return { ...quantities, [product.id]: quantityOf(quantities, product.id) + quantity }
-}
-
 // Object.hasOwn, so an id like "constructor" isn't found on Object.prototype.
 function isInCart(quantities: Quantities, id: unknown): id is string {
   return typeof id === 'string' && Object.hasOwn(quantities, id)
@@ -345,10 +351,6 @@ function isInCart(quantities: Quantities, id: unknown): id is string {
 
 function quantityOf(quantities: Quantities, id: string): number {
   return Object.hasOwn(quantities, id) ? quantities[id] : 0
-}
-
-function isLineQuantity(quantity: unknown): quantity is number {
-  return typeof quantity === 'number' && Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_LINE_QUANTITY
 }
 
 function isCategory(value: unknown): value is Category {

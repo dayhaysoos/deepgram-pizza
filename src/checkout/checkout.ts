@@ -9,7 +9,7 @@
 
 import { validateCartItems, type ValidatedItem } from 'use-shopping-cart/utilities'
 import { findVariant, products } from '../menu/menu'
-import { MAX_LINE_QUANTITY } from '../shop'
+import { isLineQuantity, MAX_LINE_QUANTITY } from '../shop'
 
 /** What to show or say when Stripe fails, or the request never reaches the server. */
 export const CHECKOUT_UNAVAILABLE = "Checkout isn't available right now. Please try again in a moment."
@@ -110,10 +110,6 @@ function idsAndQuantities(cartDetails: Record<string, unknown>): Record<string, 
   return Object.fromEntries(
     Object.entries(cartDetails).map(([id, line]) => [id, { quantity: isRecord(line) ? line.quantity : undefined }]),
   )
-}
-
-function isLineQuantity(quantity: unknown): quantity is number {
-  return typeof quantity === 'number' && Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_LINE_QUANTITY
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

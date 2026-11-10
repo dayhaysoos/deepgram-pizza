@@ -1,10 +1,15 @@
-// Shop-wide settings that more than one part of the app reads.
+// Shop-wide settings, and the rules built on them, that more than one part of the app reads.
 
 /** The page title and the header brand. */
 export const SHOP_NAME = "Nick's Pizza"
 
 /** The most of one product a cart line can hold. The voice tools use the same cap. */
 export const MAX_LINE_QUANTITY = 20
+
+/** Whether a cart line can hold this quantity: a whole number from 1 to `MAX_LINE_QUANTITY`. */
+export function isLineQuantity(quantity: unknown): quantity is number {
+  return typeof quantity === 'number' && Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_LINE_QUANTITY
+}
 
 // Prices in menu.json are cents in this currency. The cart and every price
 // formatter read these two, so server and browser format prices the same way.

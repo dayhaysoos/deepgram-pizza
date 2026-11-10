@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShoppingCart } from 'use-shopping-cart/core'
-import { CHECKOUT_UNAVAILABLE, type CheckoutResult } from '../checkout/checkout'
+import type { CheckoutResult } from '../checkout/checkout'
 import { findVariant, menu, products } from '../menu/menu'
 import { CURRENCY, LOCALE } from '../shop'
 import { quantitiesOf, summarizeCart } from './cartSummary'
@@ -780,13 +780,18 @@ describe('checkout', () => {
     expect(ui.goToCheckout).not.toHaveBeenCalled()
   })
 
-  it('says checkout is unavailable when the request fails', async () => {
+  // The port never rejects in the app (startCheckout turns a failed request
+  // into CHECKOUT_UNAVAILABLE), but a port that breaks that promise still
+  // can't silence the agent.
+  it('still returns a message, without throwing, if the checkout port rejects', async () => {
     const { call, given, ui } = setup(async () => {
       throw new Error('offline')
     })
     given({ fries: 1 })
 
-    expect(await call('checkout')).toEqual({ message: CHECKOUT_UNAVAILABLE })
+    expect(await call('checkout')).toEqual({
+      message: "That didn't work. Call view_cart to see the cart, then try again.",
+    })
     expect(ui.goToCheckout).not.toHaveBeenCalled()
   })
 })

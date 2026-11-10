@@ -6,8 +6,8 @@
 
 import { createContext, useCallback, useContext, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
-import { quantitiesOf, summarizeCart } from './cartSummary'
-import { applyTapChange, describeTapChange, type TapChange } from './tapUpdates'
+import { applyCartChange, quantitiesOf, summarizeCart, type CartChange } from './cartSummary'
+import { describeTapChange } from './tapUpdates'
 
 /** Receives each update's text: "Customer added 1 × Fries by tapping. Cart: …". */
 export type TapUpdateSink = (text: string) => void
@@ -18,7 +18,7 @@ export type TapUpdateSink = (text: string) => void
  */
 export const TapUpdateSinkContext = createContext<TapUpdateSink>(() => {})
 
-type ReportTap = (change: TapChange) => void
+type ReportTap = (change: CartChange) => void
 
 const ReportTapContext = createContext<ReportTap | null>(null)
 
@@ -39,7 +39,7 @@ export function TapUpdatesProvider({ children }: { children: ReactNode }) {
   // cart here is the one from before the tap, and the change is applied to it.
   const reportTap = useCallback<ReportTap>((change) => {
     const { sink, cartDetails } = latest.current
-    sink(describeTapChange(change, summarizeCart(applyTapChange(quantitiesOf(cartDetails), change))))
+    sink(describeTapChange(change, summarizeCart(applyCartChange(quantitiesOf(cartDetails), change))))
   }, [])
 
   return <ReportTapContext value={reportTap}>{children}</ReportTapContext>

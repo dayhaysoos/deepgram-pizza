@@ -1,10 +1,24 @@
-// The cart as the agent hears it. Every cart tool returns this summary, so the
-// agent speaks only from what a tool returned and never invents a price.
+// The cart as quantities: what a change does to it and how it reads.
+//
+// A use-shopping-cart action updates the store at once, but in React the cart
+// a component holds stays as it was until the next render. So the tool
+// handlers and the tap updates both work out the cart after a change here, from
+// the cart before it, and summarize that. Every cart tool returns the summary,
+// so the agent speaks only from what a tool returned and never invents a price.
 
 import { findVariant, formatPrice } from '../menu/menu'
 
 /** How many of each product the cart holds, by product id, in cart order. */
 export type Quantities = Record<string, number>
+
+/** One change to the cart, from a tool call or a tap. */
+export type CartChange =
+  /** Adds each line's quantity to the cart, as `addItem` does: a new line goes last. */
+  | { type: 'add'; lines: Array<{ id: string; quantity: number }> }
+  /** Sets a line's quantity, as `setItemQuantity` does. */
+  | { type: 'quantity'; id: string; quantity: number }
+  | { type: 'remove'; id: string }
+  | { type: 'clear' }
 
 export type CartSummary = {
   lines: Array<{ id: string; name: string; quantity: number; total: string }>
@@ -17,6 +31,27 @@ export type CartSummary = {
 export function quantitiesOf(cartDetails: Readonly<Record<string, { quantity: number }>>): Quantities {
   // Object.fromEntries, not assignment, so an id like "__proto__" stays a plain key.
   return Object.fromEntries(Object.entries(cartDetails).map(([id, entry]) => [id, entry.quantity]))
+}
+
+/**
+ * The cart after a change, worked out from the cart before it, which is left
+ * as it was. Only arithmetic: the caller checks ids and quantities first.
+ */
+export function applyCartChange(quantities: Quantities, change: CartChange): Quantities {
+  switch (change.type) {
+    case 'add': {
+      // A Map, not assignment, so an id like "__proto__" stays a plain key. New lines go last, as in the cart.
+      const next = new Map(Object.entries(quantities))
+      for (const { id, quantity } of change.lines) next.set(id, (next.get(id) ?? 0) + quantity)
+      return Object.fromEntries(next)
+    }
+    case 'quantity':
+      return { ...quantities, [change.id]: change.quantity }
+    case 'remove':
+      return Object.fromEntries(Object.entries(quantities).filter(([id]) => id !== change.id))
+    case 'clear':
+      return {}
+  }
 }
 
 /**
