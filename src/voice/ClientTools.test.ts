@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { summarizeCart } from '../agent/cartSummary'
 import { createToolHandlers, type ToolHandler } from '../agent/handlers'
 import { answerToolCall } from './ClientTools'
 
@@ -14,7 +15,7 @@ describe('answerToolCall', () => {
 
   it("answers with the handler's result as JSON, the string a FunctionCallResponse carries", async () => {
     const handlers = createToolHandlers({
-      cart: { cartDetails: () => ({}), addItem() {}, setItemQuantity() {}, removeItem() {}, clearCart() {} },
+      cart: { now: () => ({}), cartDetails: () => ({}), change: () => summarizeCart({}) },
       ui: { highlight() {}, showSuggestions() {}, closeSuggestions() {}, openCart() {}, goToCheckout() {} },
       checkout: async () => ({ message: 'unused' }),
     })

@@ -1,8 +1,8 @@
 import { useRef, type ReactNode } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
+import { CartChangesProvider } from '../agent/CartChangesProvider'
 import { MenuUiProvider } from '../agent/MenuUiProvider'
-import { TapUpdatesProvider } from '../agent/TapUpdatesProvider'
-import { ToolHandlersProvider, useToolHandlers } from '../agent/ToolHandlersProvider'
+import { ToolHandlersProvider } from '../agent/ToolHandlersProvider'
 import { categories, menu } from '../menu/menu'
 import { VoiceSession, VoiceSessionProvider } from '../voice/VoiceSession'
 import { CartDrawer } from './CartDrawer'
@@ -30,16 +30,17 @@ type MenuPageProps = {
  */
 export function MenuPage(props: MenuPageProps) {
   // The voice session, first, so everything below can reach it; what the
-  // voice tools change on screen, the tool handlers that change it, and the
-  // updates the agent gets when the customer taps.
+  // voice tools change on screen (useMenuUi); the cart changes, which taps and
+  // tools both go through and which tell the agent about taps; and the tool
+  // handlers. src/pageContext.ts has the hooks that read the others.
   return (
     <VoiceSessionProvider>
       <MenuUiProvider>
-        <ToolHandlersProvider>
-          <TapUpdatesProvider>
+        <CartChangesProvider>
+          <ToolHandlersProvider>
             <MenuLayout {...props} />
-          </TapUpdatesProvider>
-        </ToolHandlersProvider>
+          </ToolHandlersProvider>
+        </CartChangesProvider>
       </MenuUiProvider>
     </VoiceSessionProvider>
   )
@@ -47,7 +48,6 @@ export function MenuPage(props: MenuPageProps) {
 
 function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: MenuPageProps) {
   const cartOpen = useShoppingCart((cart) => cart.shouldDisplayCart)
-  const toolHandlers = useToolHandlers()
   const cartButtonRef = useRef<HTMLButtonElement>(null)
   const cartCloseButtonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLElement>(null)
@@ -96,7 +96,7 @@ function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: Me
       {/* Outside the page too, so the conversation goes on while the cart is open.
           The session's state lives in VoiceSessionProvider, above. Its sessions
           answer the agent's tool calls with the page's one set of handlers. */}
-      <VoiceSession handlers={toolHandlers} />
+      <VoiceSession />
       {children}
     </>
   )

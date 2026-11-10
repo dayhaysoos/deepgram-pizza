@@ -1,0 +1,80 @@
+// What the menu page's parts share through React context, and the hooks that
+// read it: the voice session's handle, the page's cart changes and its tool
+// handlers. Each is provided once, near the top of MenuPage (MenuPage.tsx says
+// where), and the parts below read it wherever they are.
+//
+// The contexts live here, apart from their providers, so this module imports
+// nothing but types. That keeps src/agent/ and src/voice/ from importing each
+// other: the cart changes and the tool handlers reach the voice session
+// through useVoiceSession(), and the voice session reaches the tool handlers
+// through useToolHandlers(). It also means hot-reloading a provider's module
+// in `pnpm dev` doesn't make a new context that the components already on the
+// page can't read.
+
+import { createContext, useContext } from 'react'
+import type { CartChanges } from './agent/cartChanges'
+import type { ToolHandlers } from './agent/handlers'
+import type { PromptTarget, SessionHandle } from './voice/sessionHandle'
+import type { SessionEvent, SessionState } from './voice/sessionStatus'
+
+/** What the voice session's own parts (VoiceSession.tsx) need to run it. */
+export type VoiceSessionControls = {
+  state: SessionState
+  /** Passes an event to the session's reducer (sessionStatus.ts). */
+  send: (event: SessionEvent) => void
+  /** Hands the live session's AgentSession to the handle. Returns the function to call when it's gone. */
+  attach: (agent: PromptTarget) => () => void
+}
+
+/** Provided by VoiceSessionProvider (VoiceSession.tsx). */
+export const VoiceSessionControlsContext = createContext<VoiceSessionControls | null>(null)
+
+/** Provided by VoiceSessionProvider (VoiceSession.tsx). */
+export const VoiceHandleContext = createContext<SessionHandle | null>(null)
+
+/** Provided by CartChangesProvider (src/agent/CartChangesProvider.tsx). */
+export const CartChangesContext = createContext<CartChanges | null>(null)
+
+/** Provided by ToolHandlersProvider (src/agent/ToolHandlersProvider.tsx). */
+export const ToolHandlersContext = createContext<ToolHandlers | null>(null)
+
+/** Receives the text of each tap update: "Customer added 1 × Fries by tapping. Cart: …". */
+export type TapUpdateSink = (text: string) => void
+
+/**
+ * Also hears each tap update, besides the voice agent. Provide one above
+ * MenuPage to see them, as the dev tools panel does; by default, nothing does.
+ */
+export const TapUpdateSinkContext = createContext<TapUpdateSink>(() => {})
+
+/** The voice session's state, and how VoiceSession.tsx runs it. */
+export function useVoiceSessionControls(): VoiceSessionControls {
+  return required(useContext(VoiceSessionControlsContext), 'useVoiceSessionControls', 'VoiceSessionProvider')
+}
+
+/**
+ * The page's handle on the voice session: `tell(text)` and
+ * `leaveAfterSpeaking()`, safe to call whether or not a session is on. It's
+ * the same object for the page's lifetime.
+ */
+export function useVoiceSession(): SessionHandle {
+  return required(useContext(VoiceHandleContext), 'useVoiceSession', 'VoiceSessionProvider')
+}
+
+/**
+ * The page's cart changes: a tap calls `tap({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })`
+ * instead of a use-shopping-cart action, so the agent hears about it.
+ */
+export function useCartChanges(): CartChanges {
+  return required(useContext(CartChangesContext), 'useCartChanges', 'CartChangesProvider')
+}
+
+/** The page's tool handlers: `await handlers.add_item({ id: 'fries', quantity: 1 })`. */
+export function useToolHandlers(): ToolHandlers {
+  return required(useContext(ToolHandlersContext), 'useToolHandlers', 'ToolHandlersProvider')
+}
+
+function required<Value>(value: Value | null, hook: string, provider: string): Value {
+  if (value === null) throw new Error(`${hook} needs a <${provider}> above it.`)
+  return value
+}

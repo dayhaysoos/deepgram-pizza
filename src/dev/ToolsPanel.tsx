@@ -1,6 +1,6 @@
 // The panel on /dev/tools: runs the voice agent's tools by hand, so the page
 // can be built and tested without a microphone. It calls the page's own tool
-// handlers (useToolHandlers), the set the talk button will use, so a run here
+// handlers (useToolHandlers), the set the voice session uses, so a run here
 // changes the page exactly as the agent's tool call would, and shows the result
 // the agent would get back. Its first section is the voice session log
 // (SessionLogSection.tsx), to read and copy while you talk.
@@ -14,8 +14,8 @@ import type { ItemQuantity } from '../agent/cartSummary'
 import type { ToolResult } from '../agent/handlers'
 import { planGroupOrder, type GroupOrderRequest } from '../agent/planGroupOrder'
 import { toolDefinitions, type ToolName } from '../agent/tools'
-import { useToolHandlers } from '../agent/ToolHandlersProvider'
 import { defaultVariant, menu } from '../menu/menu'
+import { useToolHandlers } from '../pageContext'
 import { SessionLogSection } from './SessionLogSection'
 import './ToolsPanel.css'
 
@@ -240,8 +240,9 @@ export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
         <section className="tools-panel-section">
           <h3>Updates sent to the agent</h3>
           <p className="tools-panel-note">
-            Would be sent to the agent with UpdatePrompt when a voice session is open (voice isn&apos;t built yet).
-            Tap Add on a menu card, − or + or Remove in the cart, or Add or Add all on the suggestion card.
+            Each goes to the agent with UpdatePrompt while a voice session is on, and is logged here with a session
+            or without. Tap Add on a menu card, − or + or Remove in the cart, or Add or Add all on the suggestion
+            card.
           </p>
           {updates.length === 0 ? (
             <p>None yet.</p>

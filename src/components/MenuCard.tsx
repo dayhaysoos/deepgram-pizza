@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
 import { useMenuUi } from '../agent/MenuUiProvider'
-import { useReportTap } from '../agent/TapUpdatesProvider'
 import { defaultVariant, formatPrice, imagePath, productFor, type MenuItem } from '../menu/menu'
+import { useCartChanges } from '../pageContext'
 import { MAX_LINE_QUANTITY } from '../shop'
 
 /** How long the Add button says "Added ✓". */
@@ -13,10 +13,9 @@ export function MenuCard({ item }: { item: MenuItem }) {
   const variant = item.variants.find((v) => v.id === variantId) ?? defaultVariant(item)
   const product = productFor(item, variant)
 
-  const addItem = useShoppingCart((cart) => cart.addItem)
   const quantityInCart = useShoppingCart((cart) => cart.cartDetails[variant.id]?.quantity ?? 0)
   const atLimit = quantityInCart >= MAX_LINE_QUANTITY
-  const reportTap = useReportTap()
+  const cartChanges = useCartChanges()
 
   // Lit up by the find_menu_items tool, until the next search, a scroll, or a click on any card.
   const { highlighted, clearHighlight } = useMenuUi()
@@ -37,8 +36,7 @@ export function MenuCard({ item }: { item: MenuItem }) {
 
   function add() {
     if (atLimit) return
-    addItem(product, { count: 1 })
-    reportTap({ type: 'add', lines: [{ id: product.id, quantity: 1 }] })
+    cartChanges.tap({ type: 'add', lines: [{ id: product.id, quantity: 1 }] })
     setRecentAdds((n) => n + 1)
     setAddedMessage(`Added ${product.name}. ${quantityInCart + 1} in your cart.`)
   }

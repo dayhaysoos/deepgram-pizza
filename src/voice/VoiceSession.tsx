@@ -4,10 +4,10 @@
 //
 // VoiceSessionProvider holds the session's state for the page's lifetime, at
 // the top of MenuPage, and the handle (sessionHandle.ts) that page code reaches
-// with useVoiceSession(): tap updates tell the agent through it, and checkout
-// by voice leaves through it. VoiceSession renders the talk button, the
-// captions and, while a session is on, a Deepgram AgentProvider, with the
-// agent's tools registered inside it (ClientTools.tsx).
+// with useVoiceSession() (src/pageContext.ts): tap updates tell the agent
+// through it, and checkout by voice leaves through it. VoiceSession renders the
+// talk button, the captions and, while a session is on, a Deepgram
+// AgentProvider, with the agent's tools registered inside it (ClientTools.tsx).
 //
 // One session per press. AgentProvider creates its AgentSession once, from the
 // `config` of its first render, and ignores later changes. The agent's
@@ -27,18 +27,7 @@
 // session's AgentSession handed up from inside its provider. Production builds
 // have no recorder, so nothing is handed up.
 
-import {
-  createContext,
-  lazy,
-  Suspense,
-  useCallback,
-  useContext,
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from 'react'
 import {
   AgentProvider,
   useAgentConversation,
@@ -52,23 +41,16 @@ import {
 } from '@deepgram/react'
 import { useShoppingCart } from 'use-shopping-cart'
 import { quantitiesOf, summarizeCart } from '../agent/cartSummary'
-import type { ToolHandlers } from '../agent/handlers'
 import { toolDefinitions } from '../agent/tools'
+import { VoiceHandleContext, VoiceSessionControlsContext, useVoiceSessionControls } from '../pageContext'
 import { activityLabel } from './AgentActivity'
 import { agentSettings } from './agentSettings'
 import { Captions } from './Captions'
 import { ClientTools } from './ClientTools'
 import { getDeepgramToken } from './getDeepgramToken'
 import { createIdleTimer, RESTART_EVENTS, type IdleTimer } from './idleTimer'
-import { createSessionHandle, type PromptTarget, type SessionHandle } from './sessionHandle'
-import {
-  isLive,
-  NO_SESSION,
-  updateSession,
-  type LiveEvent,
-  type SessionEvent,
-  type SessionState,
-} from './sessionStatus'
+import { createSessionHandle } from './sessionHandle'
+import { isLive, NO_SESSION, updateSession, type LiveEvent } from './sessionStatus'
 import { TalkButton } from './TalkButton'
 import { NO_TRANSCRIPT, sessionLines, updateTranscript, type Transcript, type TranscriptLine } from './transcript'
 
@@ -87,21 +69,10 @@ const SessionRecorder = import.meta.env.DEV
 /** A live session's AgentSession, and the config its AgentProvider made it from. */
 export type LiveAgent = { session: ReturnType<typeof useAgentSession>; config: AgentSessionConfig }
 
-type VoiceSessionContextValue = {
-  state: SessionState
-  send: (event: SessionEvent) => void
-  /** Hands the live session's AgentSession to the handle (see SessionHandleControls). */
-  attach: (agent: PromptTarget) => () => void
-}
-
-const VoiceSessionContext = createContext<VoiceSessionContextValue | null>(null)
-
-const VoiceHandleContext = createContext<SessionHandle | null>(null)
-
 /**
  * Holds the voice session for the page's lifetime. It goes at the top of
- * MenuPage, above the tool handlers and the tap updates, so code that lives as
- * long as the page can reach the live session through useVoiceSession().
+ * MenuPage, above the cart changes and the tool handlers, so code that lives
+ * as long as the page can reach the live session through useVoiceSession().
  */
 export function VoiceSessionProvider({ children }: { children: ReactNode }) {
   const [state, send] = useReducer(updateSession, NO_SESSION)
@@ -112,41 +83,28 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => handle.update(state), [handle, state])
 
   return (
-    <VoiceSessionContext value={{ state, send, attach: handle.attach }}>
+    <VoiceSessionControlsContext value={{ state, send, attach: handle.attach }}>
       <VoiceHandleContext value={handle}>{children}</VoiceHandleContext>
-    </VoiceSessionContext>
+    </VoiceSessionControlsContext>
   )
 }
 
 /**
- * The page's handle on the voice session: `tell(text)` and
- * `leaveAfterSpeaking()`, safe to call whether or not a session is on. It's
- * the same object for the page's lifetime.
- */
-export function useVoiceSession(): SessionHandle {
-  const handle = useContext(VoiceHandleContext)
-  if (!handle) throw new Error('useVoiceSession needs a <VoiceSessionProvider> above it.')
-  return handle
-}
-
-/**
  * The talk button, the captions, and while a session is on, the live Deepgram
- * session, which answers the agent's tool calls with `handlers`: the page's
- * one set (useToolHandlers()), so voice and the dev tools panel share what it
+ * session, which answers the agent's tool calls with the page's one set of
+ * handlers (ClientTools.tsx), so voice and the dev tools panel share what it
  * remembers. MenuPage renders it outside the page wrapper an open cart makes
  * inert, so the conversation goes on while the cart is open. It lives as long
  * as the page, so the transcript and the toggle's choice do too.
  */
-export function VoiceSession({ handlers }: { handlers: ToolHandlers }) {
-  const voice = useContext(VoiceSessionContext)
+export function VoiceSession() {
+  const { state, send } = useVoiceSessionControls()
   // The live session's AgentSession, for the session log's recorder. Only the
   // recorder sets it, so production doesn't re-render as sessions come and go.
   const [live, setLive] = useState<LiveAgent | null>(null)
   const [transcript, keepConversation] = useReducer(updateTranscript, NO_TRANSCRIPT)
   // Whether the captions show the whole conversation, until the customer toggles it again.
   const [expanded, setExpanded] = useState(false)
-  if (!voice) throw new Error('VoiceSession needs a <VoiceSessionProvider> above it.')
-  const { state, send, attach } = voice
   const sessionOn = isLive(state)
   const lines = sessionLines(transcript, state.sessionNumber)
 
@@ -157,9 +115,6 @@ export function VoiceSession({ handlers }: { handlers: ToolHandlers }) {
           key={state.sessionNumber}
           sessionNumber={state.sessionNumber}
           agentSpeaking={state.status === 'speaking'}
-          handlers={handlers}
-          send={send}
-          attach={attach}
           onConversation={keepConversation}
           onLive={SessionRecorder ? setLive : undefined}
         />
@@ -193,9 +148,6 @@ type DeepgramSessionProps = {
   sessionNumber: number
   /** The talk button says Speaking: the agent's voice is playing. */
   agentSpeaking: boolean
-  handlers: ToolHandlers
-  send: (event: SessionEvent) => void
-  attach: (agent: PromptTarget) => () => void
   /** Hears the session's conversation each time it changes, for the transcript. */
   onConversation: (conversation: Transcript) => void
   /** Hears about the session's AgentSession once its provider has made it, and `null` once it's gone. */
@@ -203,19 +155,8 @@ type DeepgramSessionProps = {
 }
 
 /** One session's Deepgram connection: connects on mount, hangs up on unmount. */
-function DeepgramSession({
-  sessionNumber,
-  agentSpeaking,
-  handlers,
-  send: sendToPage,
-  attach,
-  onConversation,
-  onLive,
-}: DeepgramSessionProps) {
-  const send = useCallback(
-    (event: LiveEvent) => sendToPage({ ...event, sessionNumber }),
-    [sendToPage, sessionNumber],
-  )
+function DeepgramSession({ sessionNumber, agentSpeaking, onConversation, onLive }: DeepgramSessionProps) {
+  const send = useSessionSend(sessionNumber)
   const keepConversation = useCallback(
     (conversation: readonly TranscriptLine[]) => onConversation({ sessionNumber, lines: conversation }),
     [onConversation, sessionNumber],
@@ -243,17 +184,25 @@ function DeepgramSession({
       }}
       onWarning={({ code, description }) => console.warn(`Deepgram voice agent warning ${code}: ${description}`)}
     >
-      <ClientTools handlers={handlers} />
+      <ClientTools />
       <SessionEvents
         config={config}
+        sessionNumber={sessionNumber}
         agentSpeaking={agentSpeaking}
-        send={send}
-        attach={attach}
         keepConversation={keepConversation}
         onLive={onLive}
       />
     </AgentProvider>
   )
+}
+
+/**
+ * Passes this session's events to the reducer, marked with its number, so the
+ * reducer ignores them once the session has ended.
+ */
+function useSessionSend(sessionNumber: number): (event: LiveEvent) => void {
+  const { send } = useVoiceSessionControls()
+  return useCallback((event: LiveEvent) => send({ ...event, sessionNumber }), [send, sessionNumber])
 }
 
 /**
@@ -270,9 +219,8 @@ async function fetchToken(send: (event: LiveEvent) => void): Promise<string> {
 
 type SessionEventsProps = {
   config: AgentSessionConfig
+  sessionNumber: number
   agentSpeaking: boolean
-  send: (event: LiveEvent) => void
-  attach: (agent: PromptTarget) => () => void
   keepConversation: (conversation: readonly TranscriptLine[]) => void
   onLive?: (live: LiveAgent | null) => void
 }
@@ -286,7 +234,9 @@ type SessionEventsProps = {
  * and tool requests, a disconnect, the customer leaving the page, and a minute
  * with no speech.
  */
-function SessionEvents({ config, agentSpeaking, send, attach, keepConversation, onLive }: SessionEventsProps) {
+function SessionEvents({ config, sessionNumber, agentSpeaking, keepConversation, onLive }: SessionEventsProps) {
+  const send = useSessionSend(sessionNumber)
+  const { attach } = useVoiceSessionControls()
   const agentSession = useAgentSession()
   const { state, stop } = useAgentState()
   const { mode } = useAgentMode()

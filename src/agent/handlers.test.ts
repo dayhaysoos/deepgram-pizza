@@ -3,8 +3,9 @@ import { ShoppingCart } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
 import { findVariant, menu, products } from '../menu/menu'
 import { CURRENCY, LOCALE } from '../shop'
+import { createCartChanges } from './cartChanges'
 import { quantitiesOf, summarizeCart } from './cartSummary'
-import { addLines, createToolHandlers, type CartPort, type ToolPorts } from './handlers'
+import { checkLinesToAdd, createToolHandlers, type ToolPorts } from './handlers'
 import { planGroupOrder } from './planGroupOrder'
 import type { ToolName } from './tools'
 
@@ -17,12 +18,12 @@ function product(id: string) {
 }
 
 /**
- * The handlers against a real use-shopping-cart store, behaving the way they
- * will in React: a handler reads the cart as of the last render, and what its
- * actions change shows up only after the next render (here, after each
- * `call`; `handlers` and `render` run calls that arrive before a render).
- * A handler that read the cart back after acting would get the old cart, and
- * the summary checks below would catch it.
+ * The handlers with the page's cart changes (cartChanges.ts) over a real
+ * use-shopping-cart store, behaving the way they will in React: the cart as
+ * of the last render shows a change only after the next render (here, after
+ * each `call`; `handlers` and `render` run calls that arrive before a render).
+ * `cart` watches the cart port, so a test can check the change a handler asked
+ * for, and compare the summary it returned with what the store holds.
  */
 function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESSION_URL })) {
   const store = new ShoppingCart({ currency: CURRENCY, language: LOCALE, shouldPersist: false })
@@ -31,12 +32,20 @@ function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESS
     rendered = store.getState().cartDetails
   }
 
+  const cartChanges = createCartChanges({
+    store: {
+      cartDetails: () => rendered,
+      addItem: (item, options) => store.addItem(item, options),
+      setItemQuantity: (id, quantity) => store.setItemQuantity(id, quantity),
+      removeItem: (id) => store.removeItem(id),
+      clearCart: () => store.clearCart(),
+    },
+    tellAgent: () => {},
+  })
   const cart = {
-    cartDetails: vi.fn(() => rendered),
-    addItem: vi.fn<CartPort['addItem']>((item, options) => store.addItem(item, options)),
-    setItemQuantity: vi.fn<CartPort['setItemQuantity']>((id, quantity) => store.setItemQuantity(id, quantity)),
-    removeItem: vi.fn<CartPort['removeItem']>((id) => store.removeItem(id)),
-    clearCart: vi.fn<CartPort['clearCart']>(() => store.clearCart()),
+    now: vi.fn(cartChanges.now),
+    cartDetails: vi.fn(cartChanges.cartDetails),
+    change: vi.fn(cartChanges.change),
   }
   const ui = {
     highlight: vi.fn(),
@@ -66,10 +75,7 @@ function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESS
   }
 
   function noCartChanges() {
-    expect(cart.addItem).not.toHaveBeenCalled()
-    expect(cart.setItemQuantity).not.toHaveBeenCalled()
-    expect(cart.removeItem).not.toHaveBeenCalled()
-    expect(cart.clearCart).not.toHaveBeenCalled()
+    expect(cart.change).not.toHaveBeenCalled()
   }
 
   return { store, cart, ui, checkout, handlers, render, call, given, storeSummary, noCartChanges }
@@ -83,7 +89,7 @@ describe('add_item', () => {
 
     const result = await call('add_item', { id: 'margherita-pizza-large', quantity: 2 })
 
-    expect(cart.addItem).toHaveBeenCalledWith(product('margherita-pizza-large'), { count: 2 })
+    expect(cart.change).toHaveBeenCalledExactlyOnceWith({ type: 'add', lines: [{ id: 'margherita-pizza-large', quantity: 2 }] })
     expect(result).toEqual({
       lines: [{ id: 'margherita-pizza-large', name: 'Large Margherita Pizza', quantity: 2, total: '$41.98' }],
       count: 2,
@@ -182,7 +188,7 @@ describe('add_item', () => {
     expect(await call('add_item', { id: 'pepperoni-pizza-large', quantity: 3 })).toEqual({
       message: 'That would make 21 × Large Pepperoni Pizza, and a line holds at most 20. There are 18 in the cart now.',
     })
-    expect(cart.addItem).not.toHaveBeenCalled()
+    expect(cart.change).not.toHaveBeenCalled()
 
     expect(await call('add_item', { id: 'pepperoni-pizza-large', quantity: 2 })).toEqual(
       summarizeCart({ 'pepperoni-pizza-large': 20 }),
@@ -202,11 +208,14 @@ describe('add_items', () => {
       ],
     })
 
-    expect(cart.addItem.mock.calls).toEqual([
-      [product('pepperoni-pizza-large'), { count: 4 }],
-      [product('buffalo-wings-12pc'), { count: 3 }],
-      [product('soda'), { count: 10 }],
-    ])
+    expect(cart.change).toHaveBeenCalledExactlyOnceWith({
+      type: 'add',
+      lines: [
+        { id: 'pepperoni-pizza-large', quantity: 4 },
+        { id: 'buffalo-wings-12pc', quantity: 3 },
+        { id: 'soda', quantity: 10 },
+      ],
+    })
     expect(result).toEqual(summarizeCart({ 'pepperoni-pizza-large': 4, 'buffalo-wings-12pc': 3, soda: 10 }))
     expect(result).toEqual(storeSummary())
   })
@@ -262,10 +271,13 @@ describe('add_items', () => {
       ],
     })
 
-    expect(cart.addItem.mock.calls).toEqual([
-      [product('fries'), { count: 5 }],
-      [product('soda'), { count: 1 }],
-    ])
+    expect(cart.change).toHaveBeenCalledExactlyOnceWith({
+      type: 'add',
+      lines: [
+        { id: 'fries', quantity: 5 },
+        { id: 'soda', quantity: 1 },
+      ],
+    })
     expect(result).toEqual(summarizeCart({ fries: 5, soda: 1 }))
     expect(result).toEqual(storeSummary())
   })
@@ -357,41 +369,33 @@ describe('opening the cart drawer', () => {
   })
 })
 
-describe('addLines, for the suggestion card’s Add all', () => {
-  it('adds every line with the same checks as add_items, and returns the lines and the cart after', async () => {
-    const { cart, ui, given, store } = setup()
-    given({ fries: 1 })
+describe('checkLinesToAdd, for the suggestion card’s Add and Add all', () => {
+  it('passes lines with the same checks as add_items, merging repeated ids', () => {
+    // The card passes its own lines, which carry a name and a total too.
+    const lines = summarizeCart({ soda: 2, fries: 1 }).lines
 
-    const result = addLines(cart, { fries: 1 }, [
-      { id: 'soda', quantity: 2 },
-      { id: 'fries', quantity: 1 },
-    ])
-
-    expect(result).toEqual({
+    expect(checkLinesToAdd([...lines, { id: 'soda', quantity: 1 }], { fries: 1 })).toEqual({
       lines: [
-        { id: 'soda', quantity: 2 },
+        { id: 'soda', quantity: 3 },
         { id: 'fries', quantity: 1 },
       ],
-      cartAfter: { fries: 2, soda: 2 },
     })
-    expect(quantitiesOf(store.getState().cartDetails)).toEqual({ fries: 2, soda: 2 })
-    expect(ui.openCart).not.toHaveBeenCalled()
   })
 
-  it('adds nothing when a line is bad, counting the cart it is given', async () => {
-    const { cart, noCartChanges } = setup()
-
+  it('passes none when a line is bad, counting the cart it is given', () => {
     expect(
-      addLines(cart, {}, [
-        { id: 'fries', quantity: 1 },
-        { id: 'soda', quantity: 25 },
-      ]),
+      checkLinesToAdd(
+        [
+          { id: 'fries', quantity: 1 },
+          { id: 'soda', quantity: 25 },
+        ],
+        {},
+      ),
     ).toEqual({ message: `Nothing was added. Line 2 ("soda"): ${BAD_QUANTITY}` })
-    expect(addLines(cart, { soda: 19 }, [{ id: 'soda', quantity: 2 }])).toEqual({
+    expect(checkLinesToAdd([{ id: 'soda', quantity: 2 }], { soda: 19 })).toEqual({
       message:
         'Nothing was added. Line 1 ("soda"): That would make 21 × Fountain Soda, and a line holds at most 20. There are 19 in the cart now.',
     })
-    noCartChanges()
   })
 })
 
@@ -402,7 +406,7 @@ describe('set_quantity', () => {
 
     const result = await call('set_quantity', { id: 'margherita-pizza-large', quantity: 1 })
 
-    expect(cart.setItemQuantity).toHaveBeenCalledWith('margherita-pizza-large', 1)
+    expect(cart.change).toHaveBeenCalledExactlyOnceWith({ type: 'quantity', id: 'margherita-pizza-large', quantity: 1 })
     expect(result).toEqual(summarizeCart({ 'margherita-pizza-large': 1, fries: 1 }))
     expect(result).toEqual(storeSummary())
   })
@@ -464,7 +468,7 @@ describe('remove_item', () => {
 
     const result = await call('remove_item', { id: 'margherita-pizza-large' })
 
-    expect(cart.removeItem).toHaveBeenCalledWith('margherita-pizza-large')
+    expect(cart.change).toHaveBeenCalledExactlyOnceWith({ type: 'remove', id: 'margherita-pizza-large' })
     expect(result).toEqual(summarizeCart({ fries: 1 }))
     expect(result).toEqual(storeSummary())
   })
@@ -525,7 +529,7 @@ describe('clear_cart', () => {
 
     const result = await call('clear_cart')
 
-    expect(cart.clearCart).toHaveBeenCalledTimes(1)
+    expect(cart.change).toHaveBeenCalledExactlyOnceWith({ type: 'clear' })
     expect(result).toEqual({ lines: [], count: 0, total: '$0.00' })
     expect(result).toEqual(storeSummary())
   })
@@ -898,19 +902,9 @@ describe('the suggestion card after add_items', () => {
 
 describe('several calls before React renders', () => {
   // Deepgram can send several function calls in one request, and they can all
-  // run before the next render: cartDetails() still returns the cart from
-  // before the first one. Here, `handlers` runs a call without rendering after it.
-
-  it('gives cumulative summaries for two add_item calls', async () => {
-    const { handlers, storeSummary } = setup()
-
-    expect(await handlers.add_item({ id: 'fries', quantity: 2 })).toEqual(summarizeCart({ fries: 2 }))
-    expect(await handlers.add_item({ id: 'soda', quantity: 1 })).toEqual(summarizeCart({ fries: 2, soda: 1 }))
-    const third = await handlers.add_item({ id: 'fries', quantity: 3 })
-
-    expect(third).toEqual(summarizeCart({ fries: 5, soda: 1 }))
-    expect(third).toEqual(storeSummary())
-  })
+  // run before the next render. The handlers check each call against
+  // cart.now(), which counts the calls before it (cartChanges.test.ts tests
+  // that). Here, `handlers` runs a call without rendering after it.
 
   it('lets set_quantity and remove_item change a line added just before', async () => {
     const { handlers, cart, storeSummary } = setup()
@@ -919,7 +913,7 @@ describe('several calls before React renders', () => {
     await handlers.add_items({ items: [{ id: 'fries', quantity: 1 }] })
     const set = await handlers.set_quantity({ id: 'margherita-pizza-large', quantity: 1 })
 
-    expect(cart.setItemQuantity).toHaveBeenCalledWith('margherita-pizza-large', 1)
+    expect(cart.change).toHaveBeenLastCalledWith({ type: 'quantity', id: 'margherita-pizza-large', quantity: 1 })
     expect(set).toEqual(summarizeCart({ 'margherita-pizza-large': 1, fries: 1 }))
     expect(set).toEqual(storeSummary())
 
@@ -941,21 +935,8 @@ describe('several calls before React renders', () => {
       message:
         'Nothing was added. Line 1 ("fries"): That would make 21 × Fries, and a line holds at most 20. There are 15 in the cart now.',
     })
-    expect(cart.addItem).toHaveBeenCalledTimes(1)
+    expect(cart.change).toHaveBeenCalledTimes(1)
     expect(storeSummary()).toEqual(summarizeCart({ fries: 15 }))
-  })
-
-  it('reads the rendered cart again once React has rendered', async () => {
-    const { handlers, render, store } = setup()
-    await handlers.add_item({ id: 'fries', quantity: 1 })
-    render()
-
-    // The customer taps two sodas in; the tap renders.
-    store.addItem(product('soda'), { count: 2 })
-    render()
-
-    expect(await handlers.view_cart({})).toEqual(summarizeCart({ fries: 1, soda: 2 }))
-    expect(await handlers.add_item({ id: 'soda', quantity: 1 })).toEqual(summarizeCart({ fries: 1, soda: 3 }))
   })
 })
 
@@ -1018,36 +999,13 @@ describe('when something unexpected throws', () => {
 
   it('returns a message instead of throwing, so the agent can keep talking', async () => {
     const { call, cart } = setup()
-    cart.addItem.mockImplementation(() => {
+    cart.change.mockImplementation(() => {
       throw new Error('boom')
     })
 
     expect(await call('add_item', { id: 'fries', quantity: 1 })).toEqual({
       message: "That didn't work. Call view_cart to see the cart, then try again.",
     })
-  })
-})
-
-describe('the summaries the handlers compute', () => {
-  it('match what use-shopping-cart really holds after every change', async () => {
-    const { call, storeSummary } = setup()
-    const steps: Array<[ToolName, unknown]> = [
-      ['add_item', { id: 'margherita-pizza-large', quantity: 2 }],
-      ['add_item', { id: 'fries', quantity: 1 }],
-      ['set_quantity', { id: 'margherita-pizza-large', quantity: 1 }],
-      ['add_items', { items: [{ id: 'soda', quantity: 2 }, { id: 'fries', quantity: 1 }, { id: 'cannoli', quantity: 1 }] }],
-      ['remove_item', { id: 'fries' }],
-      ['add_item', { id: 'fries', quantity: 1 }],
-      ['set_quantity', { id: 'soda', quantity: 5 }],
-      ['view_cart', {}],
-      ['clear_cart', {}],
-      ['add_items', { items: [{ id: 'pepperoni-pizza-large', quantity: 1 }, { id: 'pepperoni-pizza-large', quantity: 2 }] }],
-    ]
-
-    for (const [name, args] of steps) {
-      const result = await call(name, args)
-      expect(result, `${name} ${JSON.stringify(args)}`).toEqual(storeSummary())
-    }
   })
 })
 

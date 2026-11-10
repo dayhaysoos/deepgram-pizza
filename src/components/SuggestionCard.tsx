@@ -1,9 +1,8 @@
 import { useId, useState, type RefObject } from 'react'
-import { useShoppingCart } from 'use-shopping-cart'
-import { describeLine, quantitiesOf } from '../agent/cartSummary'
-import { addLines, type Suggestions } from '../agent/handlers'
+import { describeLine } from '../agent/cartSummary'
+import { checkLinesToAdd, type Suggestions } from '../agent/handlers'
 import { useMenuUi } from '../agent/MenuUiProvider'
-import { useReportTap } from '../agent/TapUpdatesProvider'
+import { useCartChanges } from '../pageContext'
 
 type SuggestionCardProps = {
   /**
@@ -41,9 +40,7 @@ export function SuggestionCard({ returnFocusRef }: SuggestionCardProps) {
 type SuggestedLine = Suggestions['lines'][number]
 
 function SuggestionSheet({ suggestions, onClose }: { suggestions: Suggestions; onClose: () => void }) {
-  const cartDetails = useShoppingCart((cart) => cart.cartDetails)
-  const addItem = useShoppingCart((cart) => cart.addItem)
-  const reportTap = useReportTap()
+  const cartChanges = useCartChanges()
   const [notice, setNotice] = useState<{ text: string; refused: boolean } | null>(null)
   const titleId = useId()
 
@@ -51,12 +48,12 @@ function SuggestionSheet({ suggestions, onClose }: { suggestions: Suggestions; o
   // at most MAX_LINE_QUANTITY per line counting the cart. Returns whether the
   // lines went in.
   function add(lines: SuggestedLine[]): boolean {
-    const result = addLines({ addItem }, quantitiesOf(cartDetails), lines)
-    if ('message' in result) {
-      setNotice({ text: result.message, refused: true })
+    const checked = checkLinesToAdd(lines, cartChanges.now())
+    if ('message' in checked) {
+      setNotice({ text: checked.message, refused: true })
       return false
     }
-    reportTap({ type: 'add', lines: result.lines })
+    cartChanges.tap({ type: 'add', lines: checked.lines })
     setNotice({ text: `Added ${lines.map(describeLine).join(', ')}.`, refused: false })
     return true
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyCartChange, summarizeCart, type CartChange } from './cartSummary'
+import { summarizeCart } from './cartSummary'
 import { describeTapChange } from './tapUpdates'
 
 const cartAfter = summarizeCart({ 'margherita-pizza-large': 2, fries: 1 })
@@ -50,14 +50,6 @@ describe('describeTapChange', () => {
   it('names a product that is no longer on the menu by its id', () => {
     expect(describeTapChange({ type: 'remove', id: 'hawaiian-pizza-large' }, summarizeCart({}))).toBe(
       'Customer removed hawaiian-pizza-large by tapping. Cart: empty.',
-    )
-  })
-
-  it('is fed the cart after the tap, worked out by applyCartChange', () => {
-    const change: CartChange = { type: 'add', lines: [{ id: 'fries', quantity: 1 }] }
-
-    expect(describeTapChange(change, summarizeCart(applyCartChange({ 'margherita-pizza-large': 2 }, change)))).toBe(
-      `Customer added 1 × Fries by tapping. ${CART}`,
     )
   })
 })

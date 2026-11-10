@@ -1,10 +1,11 @@
 // The cart as quantities: what a change does to it and how it reads.
 //
 // A use-shopping-cart action updates the store at once, but in React the cart
-// a component holds stays as it was until the next render. So the tool
-// handlers and the tap updates both work out the cart after a change here, from
-// the cart before it, and summarize that. Every cart tool returns the summary,
-// so the agent speaks only from what a tool returned and never invents a price.
+// a component holds stays as it was until the next render. So every change,
+// from a tool or a tap, works out the cart after it here, from the cart before
+// it, and summarizes that (cartChanges.ts). Every cart tool returns the
+// summary, so the agent speaks only from what a tool returned and never
+// invents a price.
 
 import { findVariant, formatPrice } from '../menu/menu'
 

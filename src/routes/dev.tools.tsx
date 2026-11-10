@@ -9,9 +9,9 @@
 
 import { lazy, Suspense, useCallback, useState } from 'react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
-import { TapUpdateSinkContext, type TapUpdateSink } from '../agent/TapUpdatesProvider'
 import { MenuPage } from '../components/MenuPage'
 import type { LoggedUpdate } from '../dev/ToolsPanel'
+import { TapUpdateSinkContext, type TapUpdateSink } from '../pageContext'
 
 // `import.meta.env.DEV` is `false` in a production build, so Vite drops this
 // branch and the panel's module, with its styles, never reaches the bundle.

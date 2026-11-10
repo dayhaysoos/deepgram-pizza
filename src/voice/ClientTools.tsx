@@ -1,8 +1,8 @@
 // The agent's tools, answered in the browser. Each tool in `toolDefinitions`
 // (src/agent/tools.ts) gets a client-side handler registered with the SDK's
-// useAgentClientTool, which calls the page's handler for it (handlers.ts) and
-// answers with its result. A new tool needs nothing here: its definition and
-// its handler are enough.
+// useAgentClientTool, which calls the page's handler for it (handlers.ts,
+// read with useToolHandlers()) and answers with its result. A new tool needs
+// nothing here; AGENTS.md ("Voice") lists what it does need.
 //
 // Rendered inside a live session's AgentProvider, so the tools are registered
 // for as long as the session lasts. The same list goes to the agent as its
@@ -10,8 +10,9 @@
 
 import { useCallback } from 'react'
 import { useAgentClientTool, type FunctionCallItem } from '@deepgram/react'
-import type { ToolHandler, ToolHandlers } from '../agent/handlers'
-import { toolDefinitions } from '../agent/tools'
+import type { ToolHandler } from '../agent/handlers'
+import { toolDefinitions, type ToolName } from '../agent/tools'
+import { useToolHandlers } from '../pageContext'
 
 /**
  * The answer to one of the agent's calls: the handler's result for the call's
@@ -24,11 +25,12 @@ export async function answerToolCall(handler: ToolHandler, call: Pick<FunctionCa
 }
 
 /** Registers every tool with the live session, each answered by the page's handler for it. */
-export function ClientTools({ handlers }: { handlers: ToolHandlers }) {
+export function ClientTools() {
+  const handlers = useToolHandlers()
   return toolDefinitions.map(({ name }) => <ClientTool key={name} name={name} handler={handlers[name]} />)
 }
 
-function ClientTool({ name, handler }: { name: string; handler: ToolHandler }) {
+function ClientTool({ name, handler }: { name: ToolName; handler: ToolHandler }) {
   const answer = useCallback((call: FunctionCallItem) => answerToolCall(handler, call), [handler])
   useAgentClientTool(name, answer)
   return null
