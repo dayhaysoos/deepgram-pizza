@@ -22,7 +22,15 @@ import { describeCart, type CartSummary } from './cartSummary'
 import { describeOrderType } from './orderType'
 import { spokenPrice } from './spokenPrice'
 import { orList } from './text'
-import { EXAMPLE_CART_CENTS, GROUP_MAINS, NOT_PLACED_YET, SAY_AT_CHECKOUT, type ToolDefinition, type ToolName } from './tools'
+import {
+  EXAMPLE_CART_CENTS,
+  GROUP_MAINS,
+  NOT_PLACED_YET,
+  PLAN_LINE,
+  SAY_AT_CHECKOUT,
+  type ToolDefinition,
+  type ToolName,
+} from './tools'
 
 /**
  * What the agent says first, as soon as the session opens: the owner wants it
@@ -185,8 +193,10 @@ function pairingRule(has: HasTool): string {
 // so. It asks one question at most, covering what the planner takes (in step
 // 5's Check it asked two before planning). A budget goes to the planner too:
 // asked to keep thirty people near $250, the agent ran the same plan again and
-// called $297.56 "the best estimate" (2026-11-11). Without the tool, the agent
-// plans from each item's serves, as SPEC's draft said.
+// called $297.56 "the best estimate" (2026-11-11). The app says PLAN_LINE as
+// the plan starts (ClientTools.tsx), so the agent is told not to say a line of
+// its own with the call, which would come before it. Without the tool, the
+// agent plans from each item's serves, as SPEC's draft said.
 function groupRule(has: HasTool): string {
   if (!has('plan_group_order')) {
     return (
@@ -198,6 +208,7 @@ function groupRule(has: HasTool): string {
   return compact([
     `- For a group, if the customer hasn't said what they like, ask one short question that covers it, such as "${groupQuestion()}", then call plan_group_order with what you know.`,
     'Never ask a second question before the plan.',
+    `When you call plan_group_order, say nothing with it: "${PLAN_LINE}" is said for you while it plans.`,
     `To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken and that it's on screen; don't list its lines or do the math out loud.`,
     "If they give a budget, before the plan or after it, call plan_group_order with it, then say in a few words what it took to fit, from the result's budget, and the total.",
     has('show_suggestions') &&

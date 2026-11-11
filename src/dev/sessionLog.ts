@@ -37,7 +37,7 @@ export type AppEntryType =
   | 'SessionEnded'
 
 /** A message the app sends: a `client` entry's type. */
-export type ClientEntryType = 'Settings' | 'UpdatePrompt' | 'FunctionCallResponse'
+export type ClientEntryType = 'Settings' | 'UpdatePrompt' | 'FunctionCallResponse' | 'InjectAgentMessage'
 
 /** What a recorder passes in: the log adds `seq` and `ts`. */
 export type NewEntry = {
@@ -438,6 +438,8 @@ function describeClientMessage(entry: LogEntry & { direction: 'client' }, get: (
       return `told the agent${entry.afterSettings ? ' once the settings were applied' : ''}: ${get('prompt')}`
     case 'FunctionCallResponse':
       return `tool ${get('name')} → ${get('content')}`
+    case 'InjectAgentMessage':
+      return `had the agent say (${get('behavior') || 'default'}): ${get('message')}`
   }
 }
 

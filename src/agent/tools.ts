@@ -249,3 +249,15 @@ export const toolDefinitions = [
 ]
 
 export type ToolName = (typeof toolDefinitions)[number]['name']
+
+/**
+ * What the agent says as it starts a plan, the same words every time: the app
+ * sends it (Deepgram's InjectAgentMessage, src/voice/ClientTools.tsx), so it
+ * doesn't rest on the LLM. The owner wanted the agent to say it's putting
+ * something together before the card comes up, so the screen follows the
+ * voice instead of jumping ahead of it (2026-11-11).
+ */
+export const PLAN_LINE = 'Let me put something together.'
+
+/** The lines the app has the agent say when it calls a tool, by tool. Only a plan takes long enough, and puts something on screen to look at. */
+export const SAID_WHEN_CALLED: Partial<Record<ToolName, string>> = { plan_group_order: PLAN_LINE }

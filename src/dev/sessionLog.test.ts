@@ -380,16 +380,21 @@ describe('the readable log', () => {
 
   it('has words for every message the app sends', () => {
     const log = createSessionLog({ now: clock() })
-    const client = (type: 'UpdatePrompt' | 'FunctionCallResponse', payload: Record<string, unknown>, afterSettings?: true) =>
-      log.append({ session: 1, direction: 'client', type, payload: { type, ...payload }, ...(afterSettings && { afterSettings }) })
+    const client = (
+      type: 'UpdatePrompt' | 'FunctionCallResponse' | 'InjectAgentMessage',
+      payload: Record<string, unknown>,
+      afterSettings?: true,
+    ) => log.append({ session: 1, direction: 'client', type, payload: { type, ...payload }, ...(afterSettings && { afterSettings }) })
     client('FunctionCallResponse', { id: 'fc-1', name: 'add_item', content: '{"count":2,"total":"$41.98"}' })
     client('UpdatePrompt', { prompt: 'Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.' })
     client('UpdatePrompt', { prompt: 'Customer removed Fries by tapping. Cart is empty.' }, true)
+    client('InjectAgentMessage', { message: 'Let me put something together.', behavior: 'queue' })
 
     expect(formatText(log.entries()).split('\n').slice(1)).toEqual([
       '13:52:17.204  tool add_item → {"count":2,"total":"$41.98"}',
       '13:52:17.205  told the agent: Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.',
       '13:52:17.206  told the agent once the settings were applied: Customer removed Fries by tapping. Cart is empty.',
+      '13:52:17.207  had the agent say (queue): Let me put something together.',
     ])
   })
 

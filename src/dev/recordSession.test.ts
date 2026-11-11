@@ -21,16 +21,19 @@ function fakeSession(state: AgentSession['state'] = 'connected') {
   // What the app sends through: the SDK's own methods, which go over the socket.
   const updatePrompt = vi.fn<(prompt: string) => void>()
   const sendFunctionCallResponse = vi.fn<(id: string | undefined, name: string, content: string) => void>()
+  const injectAgentMessage = vi.fn<AgentSession['injectAgentMessage']>()
   return {
     emitter,
     conversationHistory,
     updatePrompt,
     sendFunctionCallResponse,
+    injectAgentMessage,
     session: Object.assign(emitter, {
       state,
       conversationHistory,
       updatePrompt,
       sendFunctionCallResponse,
+      injectAgentMessage,
     }) as unknown as AgentSession,
   }
 }
@@ -259,16 +262,23 @@ describe('recordSession', () => {
     expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted', 'Connecting'])
   })
 
-  it('records the prompt updates and tool results the app sends, as client entries, and still sends them', () => {
+  it('records the prompt updates, tool results and lines the app sends, as client entries, and still sends them', () => {
     vi.spyOn(console, 'debug').mockImplementation(() => {})
-    const { log, emitter, session, updatePrompt, sendFunctionCallResponse } = setUp()
+    const { log, emitter, session, updatePrompt, sendFunctionCallResponse, injectAgentMessage } = setUp()
     emitter.emit('welcome', { type: 'Welcome', request_id: 'req-1' })
     emitter.emit('settings-applied', { type: 'SettingsApplied' })
 
     session.updatePrompt('Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.')
     session.sendFunctionCallResponse('fc-1', 'view_cart', '{"count":1}')
+    session.injectAgentMessage('Let me put something together.', 'queue')
 
-    expect(log.entries().slice(-2)).toMatchObject([
+    expect(log.entries().at(-1)).toMatchObject({
+      direction: 'client',
+      type: 'InjectAgentMessage',
+      payload: { type: 'InjectAgentMessage', message: 'Let me put something together.', behavior: 'queue' },
+    })
+    expect(injectAgentMessage).toHaveBeenCalledExactlyOnceWith('Let me put something together.', 'queue')
+    expect(log.entries().slice(-3, -1)).toMatchObject([
       {
         direction: 'client',
         type: 'UpdatePrompt',
@@ -280,7 +290,7 @@ describe('recordSession', () => {
         payload: { type: 'FunctionCallResponse', id: 'fc-1', name: 'view_cart', content: '{"count":1}' },
       },
     ])
-    expect(log.entries().at(-2)).not.toHaveProperty('afterSettings')
+    expect(log.entries().at(-3)).not.toHaveProperty('afterSettings')
     expect(updatePrompt).toHaveBeenCalledExactlyOnceWith(
       'Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99.',
     )
@@ -314,11 +324,12 @@ describe('recordSession', () => {
 
   it('puts the session\'s own methods back when stopped', () => {
     vi.spyOn(console, 'debug').mockImplementation(() => {})
-    const { log, session, stop, updatePrompt, sendFunctionCallResponse } = setUp()
+    const { log, session, stop, updatePrompt, sendFunctionCallResponse, injectAgentMessage } = setUp()
     stop()
 
     expect(session.updatePrompt).toBe(updatePrompt)
     expect(session.sendFunctionCallResponse).toBe(sendFunctionCallResponse)
+    expect(session.injectAgentMessage).toBe(injectAgentMessage)
     session.updatePrompt('after')
     expect(log.entries().map(({ type }) => type)).toEqual(['SessionStarted'])
   })

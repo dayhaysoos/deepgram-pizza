@@ -121,8 +121,9 @@ const PAIRING_RULE =
   '- When asked what goes with something, call show_suggestions with the items in its pairsWith, one of each, titled like "Goes with the Classic Cheeseburger", then name them in one short sentence. When asked what you recommend, unless it\'s for a group, do the same with two or three popular items, titled "Our favourites". Never name pairings or recommendations without showing them.'
 const PAIRING_RULE_WITHOUT_CARD =
   '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.'
+// The app says "Let me put something together." as a plan starts (ClientTools.tsx); a line of the agent's own would come first.
 const GROUP_QUESTION =
-  '- For a group, if the customer hasn\'t said what they like, ask one short question that covers it, such as "Any vegetarians, and pizza, subs or a mix?", then call plan_group_order with what you know. Never ask a second question before the plan.'
+  '- For a group, if the customer hasn\'t said what they like, ask one short question that covers it, such as "Any vegetarians, and pizza, subs or a mix?", then call plan_group_order with what you know. Never ask a second question before the plan. When you call plan_group_order, say nothing with it: "Let me put something together." is said for you while it plans.'
 const PLAN_SUMMARY =
   'To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken and that it\'s on screen; don\'t list its lines or do the math out loud.'
 // In the owner's run the agent had no way to plan to a budget, and called the same plan "the best estimate" (2026-11-11).

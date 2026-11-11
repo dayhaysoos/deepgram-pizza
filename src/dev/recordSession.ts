@@ -15,9 +15,10 @@
 // What the SDK sends raises no event. It sends the Settings on every connect,
 // reconnects included, just before it passes Welcome on, so they're recorded
 // then, rebuilt the way it builds them (settingsPayload). The messages the app
-// sends go through two of the session's methods, updatePrompt (tap updates)
-// and sendFunctionCallResponse (AgentProvider answering a tool call), so the
-// recorder wraps them while it records, and puts them back after. A prompt
+// sends go through three of the session's methods, updatePrompt (tap updates),
+// sendFunctionCallResponse (AgentProvider answering a tool call) and
+// injectAgentMessage (the line said when a plan starts, ClientTools.tsx), so
+// the recorder wraps them while it records, and puts them back after. A prompt
 // update goes over the wire only once the settings are applied; before that,
 // and after every reconnect, the SDK sends the newest one right after the
 // settings, so it's recorded there again.
@@ -87,7 +88,11 @@ export function recordSession(
   /** The newest prompt update, which the SDK sends again right after the settings on every connect. */
   let latestPrompt: string | undefined
 
-  const sends = { updatePrompt: session.updatePrompt, sendFunctionCallResponse: session.sendFunctionCallResponse }
+  const sends = {
+    updatePrompt: session.updatePrompt,
+    sendFunctionCallResponse: session.sendFunctionCallResponse,
+    injectAgentMessage: session.injectAgentMessage,
+  }
   session.updatePrompt = (prompt) => {
     latestPrompt = prompt
     if (settingsApplied) recordPrompt(prompt)
@@ -101,6 +106,15 @@ export function recordSession(
       payload: { type: 'FunctionCallResponse', id, name, content },
     })
     sends.sendFunctionCallResponse.call(session, id, name, content)
+  }
+  session.injectAgentMessage = (message, behavior) => {
+    record({
+      session: sessionNumber,
+      direction: 'client',
+      type: 'InjectAgentMessage',
+      payload: { type: 'InjectAgentMessage', message, ...(behavior !== undefined && { behavior }) },
+    })
+    sends.injectAgentMessage.call(session, message, behavior)
   }
 
   /** Whether this session's end is in the log yet. */
