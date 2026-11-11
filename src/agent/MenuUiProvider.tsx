@@ -9,6 +9,16 @@ import type { Suggestions } from './handlers'
 
 const NONE: readonly string[] = []
 
+/** The same card: same title, reason and lines, in the same order. */
+export function sameSuggestions(a: Suggestions, b: Suggestions): boolean {
+  return (
+    a.title === b.title &&
+    a.reason === b.reason &&
+    a.lines.length === b.lines.length &&
+    a.lines.every((line, i) => line.id === b.lines[i].id && line.quantity === b.lines[i].quantity)
+  )
+}
+
 export function MenuUiProvider({ children }: { children: ReactNode }) {
   const [highlighted, setHighlighted] = useState(NONE)
   const [shown, setShown] = useState<ShownSuggestions | null>(null)
@@ -17,7 +27,10 @@ export function MenuUiProvider({ children }: { children: ReactNode }) {
   const [actions] = useState(() => ({
     highlight: (itemIds: readonly string[]) => setHighlighted(itemIds.length > 0 ? itemIds : NONE),
     clearHighlight: () => setHighlighted(NONE),
-    showSuggestions: (suggestions: Suggestions) => setShown((before) => ({ key: (before?.key ?? 0) + 1, suggestions })),
+    // The agent sometimes shows the plan plan_group_order just put on the card
+    // again; the same card stays as it is rather than opening anew.
+    showSuggestions: (suggestions: Suggestions) =>
+      setShown((before) => (before && sameSuggestions(before.suggestions, suggestions) ? before : { key: (before?.key ?? 0) + 1, suggestions })),
     closeSuggestions: () => setShown(null),
   }))
 

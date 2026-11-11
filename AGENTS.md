@@ -38,7 +38,7 @@ Add a dependency outside this table only after asking.
 - **The cart lives in the browser, and so do the tools.** The agent asks for a tool. A browser handler registered with `useAgentClientTool` calls a use-shopping-cart action. The agent never changes the cart any other way.
 - **The server does two things:** it mints the short-lived Deepgram token, and it creates the Stripe Checkout Session. Each is a TanStack Start server function. Anything else on the server needs a clear reason.
 - **`menu.json` is the single source of truth.** The menu UI, the agent's instructions, the tool parameter enums and the checkout validation all read the same file. Each size is its own product with its own id (`margherita-large`), so a tool call never carries a size to interpret.
-- **Every cart tool returns the cart.** After a change, the handler returns the updated cart summary (lines, count, formatted total). The agent speaks only from what tools return, so it never invents a price or a total.
+- **Every cart tool returns the cart.** After a change, the handler returns the updated cart summary (lines, count, formatted total, and the total as words to say, `totalSpoken`). The agent speaks only from what tools return, so it never invents a price or a total.
 - **Tools recover; they don't throw.** An unknown id or a bad quantity returns a short message the agent can act on ("No 'hawaiian'. The pizzas are: …"). A thrown error ends the turn in silence.
 - **Keep the tools few and literal.** Name each one after the customer's intent. The tool list is in `SPEC.md`; add a tool only when it changes state or changes the screen.
 

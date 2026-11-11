@@ -99,7 +99,7 @@ const PLAN_ADD = 'Add it with add_items only after they agree, then name every l
 const PLAN_ADD_BY_TAPPING = 'Tell them they can add it by tapping Add all on the card.'
 const GROUP_RULE = [GROUP_QUESTION, PLAN_SUMMARY, PLAN_CHANGES, PLAN_ADD].join(' ')
 const OFFER_RULE =
-  '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.'
+  '- Offer one pairing on your own at most once per order, after the first item is added, in one short question. When the customer asks for suggestions, always help.'
 const VIEW_CART_RULE =
   "- The customer can also change the cart by tapping. Before answering anything about what's in the cart or the total, call view_cart and answer from its result."
 const DONE_RULE =
@@ -179,7 +179,7 @@ Conversation started. Cart: empty.`)
       '- When the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), name two or three matching items.',
       '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.',
       "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. Describe the plan out loud, then tell them they can add it by tapping Add on the menu.",
-      '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.',
+      '- Offer one pairing on your own at most once per order, after the first item is added, in one short question. When the customer asks for suggestions, always help.',
       "- If asked about something not on the menu, say you don't have it and offer the closest thing you do have.",
       '- If the conversation goes off topic, answer in one friendly line and steer back to the order.',
       `- Answer anything about what's in the cart or the total from the last "Cart:" line you were given, and say the cart on screen is the up-to-date one, since the customer can change it by tapping.`,

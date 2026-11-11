@@ -47,11 +47,11 @@ describe('toolDefinitions', () => {
   })
 
   it("waits for the end of the customer's turn on the tools that change or read the cart, or leave the page", () => {
-    // view_cart waits too: a view_cart sent with a deferred add_item would otherwise run before it and read the cart without it.
+    // view_cart and plan_group_order wait too, since they read the cart: sent with a deferred add_item, they'd otherwise run before it and miss it.
     // Deepgram calls the others as soon as the LLM asks, even if the customer goes on talking:
     // they read the menu, or change what's on screen, which the next call puts right.
     const deferred = toolDefinitions.filter((definition) => definition.defer_until_eot === true).map(({ name }) => name)
-    expect(deferred).toEqual(['add_item', 'add_items', 'set_quantity', 'remove_item', 'view_cart', 'clear_cart', 'checkout'])
+    expect(deferred).toEqual(['plan_group_order', 'add_item', 'add_items', 'set_quantity', 'remove_item', 'view_cart', 'clear_cart', 'checkout'])
     for (const definition of toolDefinitions) {
       if (!deferred.includes(definition.name)) expect(definition, definition.name).not.toHaveProperty('defer_until_eot')
     }

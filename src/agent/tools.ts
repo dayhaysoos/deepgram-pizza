@@ -10,11 +10,12 @@
 // Tools that change the cart or leave the page set `defer_until_eot`: Deepgram
 // then calls them only once the customer's turn is over, not while they may
 // still be talking (https://developers.deepgram.com/docs/voice-agent-speculative-replies).
-// view_cart sets it too: a call that doesn't wait runs before the deferred
-// ones in the same turn, so "add fries, what's my total?" would read the cart
-// without the fries. The others are called as soon as the LLM asks, which is
-// quicker, and harmless if the customer goes on talking: they read the menu,
-// or change what's on screen, which the next call puts right.
+// view_cart and plan_group_order set it too, because they read the cart: a
+// call that doesn't wait runs before the deferred ones in the same turn, so
+// "add fries, what's my total?" would read the cart without the fries. The
+// others are called as soon as the LLM asks, which is quicker, and harmless if
+// the customer goes on talking: they read the menu, or change what's on
+// screen, which the next call puts right.
 
 import { categories, mainCategories, menu, products, tags, type MainCategory } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
@@ -158,6 +159,7 @@ export const toolDefinitions = [
       },
       required: ['people'],
     },
+    defer_until_eot: true,
   }),
   tool({
     name: 'add_item',

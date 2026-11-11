@@ -62,7 +62,7 @@ export function agentInstructions(cart: CartSummary, tools: readonly ToolDefinit
       '- When you suggest specific items, call show_suggestions so they appear on screen, and keep your spoken answer short: the screen shows the details.',
     pairingRule(has),
     groupRule(has),
-    '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.',
+    '- Offer one pairing on your own at most once per order, after the first item is added, in one short question. When the customer asks for suggestions, always help.',
     "- If asked about something not on the menu, say you don't have it and offer the closest thing you do have.",
     '- If the conversation goes off topic, answer in one friendly line and steer back to the order.',
     has('view_cart')

@@ -44,9 +44,11 @@ describe('agentSettings', () => {
     const sent = JSON.parse(JSON.stringify(agentSettings(cart, toolDefinitions))) as { think: { functions: Array<Record<string, unknown>> } }
     const checkout = sent.think.functions.find((fn) => fn.name === 'checkout')
     const viewCart = sent.think.functions.find((fn) => fn.name === 'view_cart')
+    const planGroupOrder = sent.think.functions.find((fn) => fn.name === 'plan_group_order')
     const findMenuItems = sent.think.functions.find((fn) => fn.name === 'find_menu_items')
     expect(checkout).toMatchObject({ defer_until_eot: true })
     expect(viewCart).toMatchObject({ defer_until_eot: true })
+    expect(planGroupOrder).toMatchObject({ defer_until_eot: true })
     expect(findMenuItems).not.toHaveProperty('defer_until_eot')
   })
 
