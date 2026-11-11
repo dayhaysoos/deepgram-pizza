@@ -138,7 +138,7 @@ type CartSummary = {
 | `remove_item` | `id` | `removeItem` | `CartSummary` |
 | `view_cart` | none | reads the cart | `CartSummary` |
 | `clear_cart` | none | `clearCart` | `CartSummary` |
-| `set_order_type` | `type`: `'pickup' \| 'delivery'` | records pickup or delivery (see "Pickup or delivery"); the cart drawer shows it. It doesn't change the cart. | `{ orderType }` |
+| `set_order_type` | `type`: `'pickup' \| 'delivery'` | records pickup or delivery (see "Pickup or delivery"); the cart drawer shows it. It doesn't change the cart. | `{ orderType, cart? }`: `cart` is the cart line with the total (and, for delivery, the total with the fee), only when the cart isn't empty |
 | `checkout` | none | starts checkout for pickup or delivery (see Checkout) | `{ ok: true, total, totalSpoken }`, the amount to pay on Stripe's page (for delivery, the total with the fee), or a recovery message |
 
 - Parameter `id` is an enum of every variant id, generated from `menu.json`.
