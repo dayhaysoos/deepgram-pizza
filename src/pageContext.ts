@@ -1,7 +1,8 @@
 // What the menu page's parts share through React context, and the hooks that
-// read it: the voice session's handle, the page's cart changes and its tool
-// handlers. Each is provided once, near the top of MenuPage (MenuPage.tsx says
-// where), and the parts below read it wherever they are.
+// read it: the voice session's handle, what the voice tools change on screen,
+// the page's cart changes and its tool handlers. Each is provided once, near
+// the top of MenuPage (MenuPage.tsx says where), and the parts below read it
+// wherever they are.
 //
 // The contexts live here, apart from their providers, so this module imports
 // nothing but types. That keeps src/agent/ and src/voice/ from importing each
@@ -13,7 +14,7 @@
 
 import { createContext, useContext } from 'react'
 import type { CartChanges } from './agent/cartChanges'
-import type { ToolHandlers } from './agent/handlers'
+import type { Suggestions, ToolHandlers } from './agent/handlers'
 import type { PromptTarget, SessionHandle } from './voice/sessionHandle'
 import type { SessionEvent, SessionState } from './voice/sessionStatus'
 
@@ -31,6 +32,26 @@ export const VoiceSessionControlsContext = createContext<VoiceSessionControls | 
 
 /** Provided by VoiceSessionProvider (VoiceSession.tsx). */
 export const VoiceHandleContext = createContext<SessionHandle | null>(null)
+
+/** The suggestions on screen. `key` is new for every card, so a replaced card starts fresh. */
+export type ShownSuggestions = { key: number; suggestions: Suggestions }
+
+/** What the voice tools change on the menu page, besides the cart. */
+export type MenuUi = {
+  /** Item ids of the highlighted menu cards, in the order find_menu_items found them. */
+  highlighted: readonly string[]
+  /** What the suggestion card shows now, or null when it's closed. */
+  shown: ShownSuggestions | null
+  /** Highlights these menu cards, replacing any highlighted before. */
+  highlight(itemIds: readonly string[]): void
+  clearHighlight(): void
+  /** Opens the suggestion card, replacing any card already open. */
+  showSuggestions(suggestions: Suggestions): void
+  closeSuggestions(): void
+}
+
+/** Provided by MenuUiProvider (src/agent/MenuUiProvider.tsx). */
+export const MenuUiContext = createContext<MenuUi | null>(null)
 
 /** Provided by CartChangesProvider (src/agent/CartChangesProvider.tsx). */
 export const CartChangesContext = createContext<CartChanges | null>(null)
@@ -59,6 +80,11 @@ export function useVoiceSessionControls(): VoiceSessionControls {
  */
 export function useVoiceSession(): SessionHandle {
   return required(useContext(VoiceHandleContext), 'useVoiceSession', 'VoiceSessionProvider')
+}
+
+/** The highlighted menu cards and the suggestion card, and what changes them. */
+export function useMenuUi(): MenuUi {
+  return required(useContext(MenuUiContext), 'useMenuUi', 'MenuUiProvider')
 }
 
 /**

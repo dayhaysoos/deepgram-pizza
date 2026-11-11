@@ -393,6 +393,48 @@ describe('the readable log', () => {
     ])
   })
 
+  // Deepgram echoes every answer the app sends as a FunctionCallResponse of its own.
+  it("shows each tool answer once, marked when Deepgram echoes it back; the JSON keeps both", () => {
+    const log = createSessionLog({ now: clock() })
+    const answer = (direction: 'client' | 'server', payload: Record<string, unknown>) =>
+      log.append({ session: 1, direction, type: 'FunctionCallResponse', payload: { type: 'FunctionCallResponse', ...payload } } as NewEntry)
+    answer('client', { id: 'fc-1', name: 'view_cart', content: '{"count":1}' })
+    answer('client', { id: 'fc-2', name: 'add_item', content: '{"count":2}' })
+    answer('server', { id: 'fc-2', name: 'add_item', content: '{"count":2}' })
+    answer('server', { id: 'fc-1', name: 'view_cart', content: '{"count":1}' })
+    // An echo without an id still matches by name and content.
+    answer('client', { id: 'fc-3', name: 'view_cart', content: '{"count":2}' })
+    answer('server', { name: 'view_cart', content: '{"count":2}' })
+
+    expect(formatText(log.entries()).split('\n').slice(1)).toEqual([
+      '13:52:17.204  tool view_cart → {"count":1} (confirmed by Deepgram)',
+      '13:52:17.205  tool add_item → {"count":2} (confirmed by Deepgram)',
+      '13:52:17.208  tool view_cart → {"count":2} (confirmed by Deepgram)',
+    ])
+    expect(JSON.parse(formatJson(log.entries()))).toHaveLength(6)
+  })
+
+  it("still shows a result from Deepgram that doesn't echo one the app sent, and doesn't confirm an answer twice", () => {
+    const log = createSessionLog({ now: clock() })
+    const answer = (direction: 'client' | 'server', session: number, payload: Record<string, unknown>) =>
+      log.append({ session, direction, type: 'FunctionCallResponse', payload: { type: 'FunctionCallResponse', ...payload } } as NewEntry)
+    answer('client', 1, { id: 'fc-1', name: 'view_cart', content: '{"count":1}' })
+    // Different content, a second echo, and an echo in another session aren't folded in.
+    answer('server', 1, { id: 'fc-1', name: 'view_cart', content: '{"count":9}' })
+    answer('server', 1, { id: 'fc-1', name: 'view_cart', content: '{"count":1}' })
+    answer('server', 1, { id: 'fc-1', name: 'view_cart', content: '{"count":1}' })
+    answer('server', 2, { id: 'fc-1', name: 'view_cart', content: '{"count":1}' })
+
+    expect(readableLog(log.entries()).map((section) => section.lines.map((line) => line.text))).toEqual([
+      [
+        'tool view_cart → {"count":1} (confirmed by Deepgram)',
+        'function result: view_cart → {"count":9}',
+        'function result: view_cart → {"count":1}',
+      ],
+      ['function result: view_cart → {"count":1}'],
+    ])
+  })
+
   it('takes only the app entry types it has words for, so a typo fails typecheck', () => {
     expectTypeOf<{ session: 1; direction: 'app'; type: 'Connected'; payload: object }>().toExtend<NewEntry>()
     expectTypeOf<{ session: 1; direction: 'app'; type: 'Conected'; payload: object }>().not.toExtend<NewEntry>()

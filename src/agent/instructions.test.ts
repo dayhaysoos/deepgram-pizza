@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { categories, formatPrice, menu, products, type MenuItem } from '../menu/menu'
+import { categories, findItem, formatPrice, menu, products, type MenuItem } from '../menu/menu'
 import { SHOP_NAME } from '../shop'
 import { describeCart, summarizeCart } from './cartSummary'
 import { agentInstructions, describeMenu, GREETING } from './instructions'
 import { CALL_VIEW_CART, describeTapChange } from './tapUpdates'
-import { toolDefinitions, type ToolDefinition, type ToolName } from './tools'
+import { GROUP_MAINS, toolDefinitions, type ToolDefinition, type ToolName } from './tools'
 
 const emptyCart = summarizeCart({})
 const prompt = agentInstructions(emptyCart)
@@ -38,7 +38,7 @@ describe('describeMenu', () => {
       expect(line.startsWith(`${item.name} [item ${item.id}]: ${item.description}`), item.id).toBe(true)
       if (item.tags.length > 0) expect(line).toContain(`Tags: ${item.tags.join(', ')}.`)
       else expect(line).not.toContain('Tags:')
-      const paired = item.pairsWith.map((id) => menu.find((other) => other.id === id)?.name)
+      const paired = item.pairsWith.map((id) => findItem(id)?.name)
       if (paired.length > 0) expect(line).toContain(`Pairs with ${paired.join(', ')}.`)
       else expect(line).not.toContain('Pairs with')
     }
@@ -72,19 +72,53 @@ describe('describeMenu', () => {
 
 // The rules in SPEC.md's "Agent instructions (first draft)", word for word,
 // with the wording recorded under Decisions since the first draft.
+const CHANGE_RULE =
+  '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.'
+const CONFIRM_RULE_START =
+  '- After each change, confirm it from the tool result: the quantity, size and name of every line you added or changed, then the new total.'
+const CONFIRM_RULE = `${CONFIRM_RULE_START} After add_items, name every line it added, one by one ("two large cheese pizzas, three large pepperoni pizzas, six garlic knots, …"), a whole group plan included, even if it takes more than two sentences; never sum them up.`
+const SPOKEN_TOTAL_RULE =
+  '- Say every total exactly as the totalSpoken in the tool result gives it, word for word, even a long one ("two hundred ninety-seven dollars and fifty-six cents"); never turn the digits in total into words yourself.'
+const SIZE_RULE = '- If a sized item has no size, ask which size before adding it.'
+const FIND_RULE_START =
+  '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.'
+const FIND_RULE = `${FIND_RULE_START} They're lit up already, so don't call show_suggestions for them.`
+const SHOW_RULE =
+  '- When you suggest specific items, call show_suggestions so they appear on screen, and keep your spoken answer short: the screen shows the details.'
+const PAIRING_RULE =
+  '- When asked what goes with something, call show_suggestions with the items in its pairsWith, one of each, titled like "Goes with the Classic Cheeseburger", then name them in one short sentence. When asked what you recommend, unless it\'s for a group, do the same with two or three popular items, titled "Our favourites". Never name pairings or recommendations without showing them.'
+const PAIRING_RULE_WITHOUT_CARD =
+  '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.'
+const GROUP_QUESTION =
+  '- For a group, if the customer hasn\'t said what they like, ask one short question that covers it, such as "Any vegetarians, and pizza, subs or a mix?", then call plan_group_order with what you know. Never ask a second question before the plan.'
+const PLAN_SUMMARY =
+  'To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken and that it\'s on screen; don\'t list its lines or do the math out loud.'
+const PLAN_CHANGES =
+  'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.'
+const PLAN_ADD = 'Add it with add_items only after they agree, then name every line it added, one by one, as after any change.'
+const PLAN_ADD_BY_TAPPING = 'Tell them they can add it by tapping Add all on the card.'
+const GROUP_RULE = [GROUP_QUESTION, PLAN_SUMMARY, PLAN_CHANGES, PLAN_ADD].join(' ')
+const OFFER_RULE =
+  '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.'
+const VIEW_CART_RULE =
+  "- The customer can also change the cart by tapping. Before answering anything about what's in the cart or the total, call view_cart and answer from its result."
+const DONE_RULE =
+  '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm and say "Taking you to checkout now so you can pay." Never say the order is placed, done or confirmed: it isn\'t until they pay.'
+
 const SPEC_DRAFT_RULES = [
-  '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.',
-  '- After each change, confirm it with the quantity, size and name, then the new total from the tool result.',
-  '- If a sized item has no size, ask which size before adding it.',
-  '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.',
-  '- When you suggest specific items, call show_suggestions so they appear on screen, and keep your spoken answer short: the screen shows the details.',
-  '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.',
-  '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines. Add it with add_items only after they agree.',
-  '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.',
+  CHANGE_RULE,
+  CONFIRM_RULE,
+  SPOKEN_TOTAL_RULE,
+  SIZE_RULE,
+  FIND_RULE,
+  SHOW_RULE,
+  PAIRING_RULE,
+  GROUP_RULE,
+  OFFER_RULE,
   "- If asked about something not on the menu, say you don't have it and offer the closest thing you do have.",
   '- If the conversation goes off topic, answer in one friendly line and steer back to the order.',
-  "- The customer can also change the cart by tapping. Before answering anything about what's in the cart or the total, call view_cart and answer from its result.",
-  '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm and say "Taking you to checkout now so you can pay." Never say the order is placed, done or confirmed: it isn\'t until they pay.',
+  VIEW_CART_RULE,
+  DONE_RULE,
 ]
 
 // The group rule for a session without plan_group_order: the agent plans from serves itself.
@@ -155,6 +189,7 @@ Conversation started. Cart: empty.`)
   })
 
   it('names exactly the tools the SPEC draft names when it has them all', () => {
+    expect(rulesOf(fullPrompt)).toEqual([...SPEC_DRAFT_RULES, NO_STALLS_WITH_TOOLS])
     expect(toolsNamedIn(fullPrompt)).toEqual([
       'find_menu_items',
       'show_suggestions',
@@ -172,33 +207,33 @@ Conversation started. Cart: empty.`)
   })
 
   it("keeps each of the draft's tool rules only while the session has the tools it names", () => {
-    const rule = (index: number) => SPEC_DRAFT_RULES[index]
-    expect(rulesOf(agentInstructions(emptyCart, only('find_menu_items')))).toContain(rule(3))
-    expect(rulesOf(agentInstructions(emptyCart, allBut('find_menu_items')))).not.toContain(rule(3))
-    expect(rulesOf(agentInstructions(emptyCart, only('show_suggestions')))).toContain(rule(4))
-    expect(rulesOf(agentInstructions(emptyCart, allBut('show_suggestions')))).not.toContain(rule(4))
-    expect(rulesOf(agentInstructions(emptyCart, only('plan_group_order', 'show_suggestions', 'add_items')))).toContain(rule(6))
-    expect(rulesOf(agentInstructions(emptyCart, allBut('plan_group_order')))).not.toContain(rule(6))
-    expect(rulesOf(agentInstructions(emptyCart, only('view_cart')))).toContain(rule(10))
-    expect(rulesOf(agentInstructions(emptyCart, allBut('view_cart')))).not.toContain(rule(10))
-    expect(rulesOf(agentInstructions(emptyCart, only('view_cart', 'checkout')))).toContain(rule(11))
+    expect(rulesOf(agentInstructions(emptyCart, only('find_menu_items')))).toContain(FIND_RULE_START)
+    expect(rulesOf(agentInstructions(emptyCart, only('find_menu_items', 'show_suggestions')))).toContain(FIND_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, allBut('find_menu_items'))).join('\n')).not.toContain(FIND_RULE_START)
+    expect(rulesOf(agentInstructions(emptyCart, only('show_suggestions')))).toEqual(expect.arrayContaining([SHOW_RULE, PAIRING_RULE]))
+    expect(rulesOf(agentInstructions(emptyCart, allBut('show_suggestions')))).not.toContain(SHOW_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, only('plan_group_order', 'show_suggestions', 'add_items')))).toContain(GROUP_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, allBut('plan_group_order')))).not.toContain(GROUP_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, only('view_cart')))).toContain(VIEW_CART_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, allBut('view_cart')))).not.toContain(VIEW_CART_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, only('view_cart', 'checkout')))).toContain(DONE_RULE)
   })
 
   it.each(CART_TOOLS)('keeps the cart-change rules, and drops the cart from the safeguard, with %s', (name) => {
     const rules = rulesOf(agentInstructions(emptyCart, only(name)))
-    expect(rules).toEqual(expect.arrayContaining(SPEC_DRAFT_RULES.slice(0, 3)))
+    expect(rules).toEqual(expect.arrayContaining([CHANGE_RULE, SIZE_RULE, SPOKEN_TOTAL_RULE]))
+    expect(rules).toContain(name === 'add_items' ? CONFIRM_RULE : CONFIRM_RULE_START)
     expect(rules.join('\n')).not.toContain('add, change or remove anything in the cart')
   })
 
   it('without the cart tools, drops the cart-change rules and says only what is missing', () => {
     const rules = rulesOf(agentInstructions(emptyCart, allBut(...CART_TOOLS)))
-    for (const rule of SPEC_DRAFT_RULES.slice(0, 3)) expect(rules).not.toContain(rule)
+    for (const rule of [CHANGE_RULE, CONFIRM_RULE, SIZE_RULE]) expect(rules).not.toContain(rule)
+    expect(rules.join('\n')).not.toContain(CONFIRM_RULE_START)
     expect(rules[0]).toBe(
       "- You can't add, change or remove anything in the cart right now. If the customer asks, start by saying you can't do that yet, then tell them they can tap Add on the menu, all in one sentence. Never say you're adding, or that you did.",
     )
-    expect(rules).toContain(
-      '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines. Tell them they can add it by tapping Add all on the card.',
-    )
+    expect(rules).toContain([GROUP_QUESTION, PLAN_SUMMARY, PLAN_CHANGES, PLAN_ADD_BY_TAPPING].join(' '))
     expect(rulesOf(agentInstructions(emptyCart, allBut('plan_group_order', ...CART_TOOLS)))).toContain(
       "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. Show the plan with show_suggestions, say the total, and tell them they can add it by tapping Add on the menu.",
     )
@@ -206,14 +241,69 @@ Conversation started. Cart: empty.`)
 
   it('with plan_group_order, leaves the math to the tool and asks for one short sentence; without it, keeps the rule from before', () => {
     const groupRule = (tools: ToolDefinition[]) => rulesOf(agentInstructions(emptyCart, tools)).find((rule) => rule.startsWith('- For a group'))
-    expect(groupRule(toolDefinitions)).toBe(SPEC_DRAFT_RULES[6])
+    expect(groupRule(toolDefinitions)).toBe(GROUP_RULE)
     expect(groupRule(allBut('plan_group_order'))).toBe(GROUP_RULE_WITHOUT_PLANNER)
     // The rest of the prompt doesn't change with it.
-    expect(agentInstructions(emptyCart, allBut('plan_group_order')).replace(GROUP_RULE_WITHOUT_PLANNER, SPEC_DRAFT_RULES[6])).toBe(fullPrompt)
+    expect(agentInstructions(emptyCart, allBut('plan_group_order')).replace(GROUP_RULE_WITHOUT_PLANNER, GROUP_RULE)).toBe(fullPrompt)
     // Each part follows its own tool.
-    expect(groupRule(only('plan_group_order'))).toBe(
-      '- For a group, ask at most one short question about preferences, then call plan_group_order. Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it\'s on screen. Never read out every line or do the math out loud. Tell them they can add it by tapping Add all on the card.',
+    expect(groupRule(only('plan_group_order'))).toBe([GROUP_QUESTION, PLAN_SUMMARY, PLAN_ADD_BY_TAPPING].join(' '))
+  })
+
+  // In step 5's Check the agent asked "how many vegetarians or spicy?", then "pizza, subs or a mix?", before planning.
+  it('asks a group one question at most, covering the vegetarians and the mains, before plan_group_order', () => {
+    expect(GROUP_RULE).toContain('ask one short question that covers it, such as "Any vegetarians, and pizza, subs or a mix?"')
+    expect(GROUP_RULE).toContain('Never ask a second question before the plan.')
+    // The mains in the question are the ones plan_group_order takes.
+    expect(GROUP_MAINS).toEqual(['pizza', 'subs', 'mix'])
+    expect(toolDefinitions.find((tool) => tool.name === 'plan_group_order')?.description).toContain(
+      'after one short question about what they like at most',
     )
+  })
+
+  // The owner wants every line read back after "add all of that"; the one-sentence summary is for the plan before it's added.
+  it('confirms every line add_items added, a group plan included, and sums up a plan only before it is added', () => {
+    expect(rulesOf(fullPrompt)).toContain(CONFIRM_RULE)
+    expect(CONFIRM_RULE).toContain('After add_items, name every line it added, one by one')
+    expect(CONFIRM_RULE).toContain('a whole group plan included, even if it takes more than two sentences; never sum them up.')
+    // The group rule says when the summary applies, and sends the add back to the confirmation.
+    expect(PLAN_SUMMARY.startsWith('To present the plan, before anything is added, sum it up')).toBe(true)
+    expect(GROUP_RULE.endsWith('Add it with add_items only after they agree, then name every line it added, one by one, as after any change.')).toBe(true)
+    // Nothing anywhere says not to read every line, except while presenting the plan.
+    const notListing = fullPrompt.split(/(?<=\.)\s+/).filter((sentence) => /don't list|never read out|not.*every line/i.test(sentence))
+    expect(notListing).toEqual([expect.stringMatching(/^To present the plan, before anything is added,/)])
+    expect(toolDefinitions.find((tool) => tool.name === 'add_items')?.description).toContain(
+      'Then name every line it added, one by one, with quantity, size and name, and the new total.',
+    )
+  })
+
+  // In step 5's Check the agent twice said "The cheeseburger pairs great with fries and a fountain soda" with no card.
+  it('shows pairings and recommendations on the card, with show_suggestions', () => {
+    expect(rulesOf(fullPrompt)).toContain(PAIRING_RULE)
+    expect(PAIRING_RULE).toContain('call show_suggestions with the items in its pairsWith')
+    expect(PAIRING_RULE).toContain('titled like "Goes with the Classic Cheeseburger"')
+    expect(PAIRING_RULE).toContain('do the same with two or three popular items')
+    // Its description doesn't say "call it whenever you suggest items": with that, "What's vegetarian?" opened a card too.
+    expect(toolDefinitions.find((tool) => tool.name === 'show_suggestions')?.description).not.toMatch(/whenever/)
+    // In a text run with these rules, "What's vegetarian?" also opened a card of three pizzas: the highlights are enough.
+    expect(FIND_RULE).toContain("They're lit up already, so don't call show_suggestions for them.")
+    expect(toolDefinitions.find((tool) => tool.name === 'find_menu_items')?.description).toContain(
+      "The matching items light up on screen, which is enough: don't also show them with show_suggestions.",
+    )
+    // Without the card, it answers from pairsWith out loud, as before.
+    const rules = rulesOf(agentInstructions(emptyCart, allBut('show_suggestions')))
+    expect(rules).toContain(PAIRING_RULE_WITHOUT_CARD)
+    expect(rules).not.toContain(PAIRING_RULE)
+  })
+
+  // In step 5's Check the agent said $20.99 as "twenty oh nine nine".
+  it('says totals as the spoken total the tools return, whenever a tool returns one', () => {
+    expect(rulesOf(fullPrompt)).toContain(SPOKEN_TOTAL_RULE)
+    for (const name of [...CART_TOOLS, 'view_cart', 'show_suggestions', 'plan_group_order'] as const) {
+      expect(rulesOf(agentInstructions(emptyCart, only(name))), name).toContain(SPOKEN_TOTAL_RULE)
+    }
+    for (const tools of [[], only('find_menu_items', 'checkout')]) {
+      expect(rulesOf(agentInstructions(emptyCart, tools))).not.toContain(SPOKEN_TOTAL_RULE)
+    }
   })
 
   it('with checkout, says the customer is going to pay, and never that the order is placed', () => {
@@ -235,7 +325,7 @@ Conversation started. Cart: empty.`)
   })
 
   it('has view_cart called before answers about the cart, even right after a tap update', () => {
-    expect(rulesOf(fullPrompt)).toContain(SPEC_DRAFT_RULES[10])
+    expect(rulesOf(fullPrompt)).toContain(VIEW_CART_RULE)
     expect(toolDefinitions.find((tool) => tool.name === 'view_cart')?.description).toBe(
       "Read what's in the cart and the total. Call it before answering any question about what's in the cart or the total, even right after you were told the customer tapped something.",
     )

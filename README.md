@@ -49,7 +49,7 @@ You can tap while you talk. Each change you make by tapping (Add, − or +, Remo
 
 While it works out a reply, the captions say what it's doing under your line: "Thinking…", or what the tool it called is doing, such as "Searching the menu…" or "Adding to your cart…". The session ends when you press the button again, when you leave the page, after 60 seconds without speech from either side, or when it takes you to checkout.
 
-For a log of every session, talk from http://localhost:3000/dev/tools: its **Session log** shows what you and the agent said, with times, every message from Deepgram but the audio, each tool's answer (`tool add_item → {…}`) and each tap update the agent was told (`told the agent: Customer added 1 × Fries by tapping…`), for every session until you press **Clear**. **Copy as text** or **Copy as JSON** to share it, for example in a bug report. It's for development only; the browser console also prints each line as `[voice] you: …` and `[voice] agent: …`.
+For a log of every session, talk from http://localhost:3000/dev/tools: its **Session log** shows what you and the agent said, with times, every message from Deepgram but the audio, each tool's answer (`tool add_item → {…}`, marked "confirmed by Deepgram" once Deepgram echoes it back) and each tap update the agent was told (`told the agent: Customer added 1 × Fries by tapping…`), for every session until you press **Clear**. **Copy as text** or **Copy as JSON** to share it, for example in a bug report. It's for development only; the browser console also prints each line as `[voice] you: …` and `[voice] agent: …`.
 
 ### Try the tools without a microphone
 
@@ -59,7 +59,7 @@ Run `pnpm dev` and open http://localhost:3000/dev/tools. It's the menu page with
 - **Suggestions:** what goes with the cheeseburger, then two parties planned by `plan_group_order`: 30 people with 10 vegetarians, and 20 people. The code works out how much food from each item's `serves`, leaving room for what's already in the cart, and puts it on the suggestion card. Each party's **Add all of that** adds its plan.
 - **Recovery:** calls the agent can get wrong, such as an item that isn't on the menu or a pizza without a size. Each answers with a message the agent can act on.
 
-When you change the cart by tapping (Add on a menu card, − or + or Remove in the cart, Add or Add all on the suggestion card), the panel logs the update it sends the agent while a voice session is on.
+When you change the cart by tapping (Add on a menu card, − or + or Remove in the cart, Add or Add all on the suggestion card), the panel logs the update it sends the agent, with a voice session or without; the agent gets it only while a session is on.
 
 The page is for development only. A production build leaves the panel out, and `/dev/tools` answers 404.
 
@@ -95,10 +95,10 @@ The rest:
 
 - **Categories:** their order, labels and size notes are in `categories` in `src/menu/menu.ts`. An item's `category` must be one of their ids. For group orders, give a category a `plan`: `'main'` for mains (the planner feeds about one serving per person from them, and the customer can ask for one main category or a mix by its id), `'side'` for shareable sides, or `'drink'` for one drink each. A main category also needs a `noun`, how the plan's summary counts its items: `['pizza', 'pizzas']`. Leave `plan` out for a category the planner shouldn't touch, such as dessert. Every item in a main category needs the same sizes, as every pizza is Medium for 2 and Large for 4; `pnpm test` checks it.
 - **Tags:** add the tag to `tags` in `src/menu/menu.ts`, then give it colours as `.tag-<name>` in `src/styles.css`, like `.tag-vegetarian`.
-- **Shop name, currency and locale:** `src/shop.ts`.
+- **Shop name, currency and locale:** `src/shop.ts`. The agent says totals in English words and US dollars ("twenty ninety-nine"), from `src/agent/spokenPrice.ts`; rewrite it for another currency or language.
 - **Photos:** `public/images/<item-id>.jpg`, about 800 px wide and compressed. Use photos from Unsplash or Pexels, or your own, and add a row for each to `CREDITS.md`.
 - **Colours and fonts:** the tokens at the top of `src/styles.css`.
-- **The agent's instructions:** its greeting, persona and rules are in `src/agent/instructions.ts`. It knows the menu from `menu.json`, and the cart as it is when you press the talk button. The models it listens, thinks and speaks with, and its voice, are in `src/voice/agentSettings.ts`.
+- **The agent's instructions:** its greeting, persona and rules are in `src/agent/instructions.ts`. It knows the menu from `menu.json`, and the cart as it is when you press the talk button. The models it listens, thinks and speaks with, and its voice, are in `src/voice/agentSettings.ts`; it listens for your item names as keyterms, read from `menu.json`, so speech-to-text hears "margherita" rather than "margarita".
 
 ## Checks
 

@@ -14,7 +14,7 @@ import type { ItemQuantity, Quantities } from '../agent/cartSummary'
 import type { ToolResult } from '../agent/handlers'
 import { planGroupOrder, type GroupOrderRequest } from '../agent/planGroupOrder'
 import { toolDefinitions, type ToolName } from '../agent/tools'
-import { defaultVariant, menu } from '../menu/menu'
+import { defaultVariant, findItem } from '../menu/menu'
 import { useCartChanges, useToolHandlers } from '../pageContext'
 import { SessionLogSection } from './SessionLogSection'
 import './ToolsPanel.css'
@@ -35,9 +35,9 @@ type Preset = {
 
 // What the Classic Cheeseburger goes with, read from menu.json as the agent
 // reads it. A sized pairing gets the size menu cards start on.
-const cheeseburger = menu.find((item) => item.id === 'classic-cheeseburger')
+const cheeseburger = findItem('classic-cheeseburger')
 const pairings: ItemQuantity[] = (cheeseburger?.pairsWith ?? []).flatMap((id) => {
-  const item = menu.find((menuItem) => menuItem.id === id)
+  const item = findItem(id)
   return item ? [{ id: defaultVariant(item).id, quantity: 1 }] : []
 })
 const pairingsTitle = `Goes great with the ${cheeseburger?.name ?? 'cheeseburger'}`

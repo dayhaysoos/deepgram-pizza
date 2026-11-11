@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categories, findVariant, mainCategories, menu, spokenName, type Category } from '../menu/menu'
+import { categories, findItem, findVariant, mainCategories, menu, spokenName, type Category } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
 import type { ItemQuantity, Quantities } from './cartSummary'
 import { checkLinesToAdd } from './handlers'
@@ -473,7 +473,7 @@ describe("planGroupOrder's words come from the menu", () => {
     expect(pizza?.noun).toEqual(['pizza', 'pizzas'])
     expect(subs?.noun).toEqual(['sub', 'subs'])
 
-    const knots = menu.find((item) => item.id === 'garlic-knots')
+    const knots = findItem('garlic-knots')
     if (!knots) throw new Error('No garlic knots on the menu')
     expect(knots.name).toBe('Garlic Knots (6)')
     expect(spokenName(knots)).toBe('garlic knots')

@@ -5,7 +5,7 @@ import { CURRENCY, LOCALE } from '../shop'
 import { applyCartChange, describeCart, describeLine, quantitiesOf, summarizeCart } from './cartSummary'
 
 describe('summarizeCart', () => {
-  it('lists each line with its name, quantity and total, in cart order, plus the count and the total', () => {
+  it('lists each line with its name, quantity and total, in cart order, plus the count and the total, written and spoken', () => {
     expect(summarizeCart({ 'margherita-pizza-large': 2, fries: 1 })).toEqual({
       lines: [
         { id: 'margherita-pizza-large', name: 'Large Margherita Pizza', quantity: 2, total: '$41.98' },
@@ -13,11 +13,12 @@ describe('summarizeCart', () => {
       ],
       count: 3,
       total: '$46.97',
+      totalSpoken: 'forty-six ninety-seven',
     })
   })
 
   it('summarizes an empty cart', () => {
-    expect(summarizeCart({})).toEqual({ lines: [], count: 0, total: '$0.00' })
+    expect(summarizeCart({})).toEqual({ lines: [], count: 0, total: '$0.00', totalSpoken: 'zero dollars' })
   })
 
   it('leaves out lines that are no longer on the menu', () => {
@@ -25,7 +26,15 @@ describe('summarizeCart', () => {
       lines: [{ id: 'soda', name: 'Fountain Soda', quantity: 2, total: '$4.98' }],
       count: 2,
       total: '$4.98',
+      totalSpoken: 'four ninety-eight',
     })
+  })
+})
+
+describe('summarizeCart, spoken', () => {
+  it('says the total in the words spokenPrice uses, from a hundred dollars up too', () => {
+    expect(summarizeCart({ 'meat-lovers-pizza-large': 8 }).totalSpoken).toBe('one hundred ninety-nine dollars and ninety-two cents')
+    expect(summarizeCart({ soda: 4 }).totalSpoken).toBe('nine ninety-six')
   })
 })
 
@@ -66,6 +75,7 @@ describe('quantitiesOf', () => {
       lines: [{ id: 'fries', name: 'Fries', quantity: 2, total: '$9.98' }],
       count: 2,
       total: '$9.98',
+      totalSpoken: 'nine ninety-eight',
     })
   })
 })

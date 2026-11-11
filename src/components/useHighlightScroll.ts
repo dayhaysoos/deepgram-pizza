@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from 'react'
-import { useMenuUi } from '../agent/MenuUiProvider'
+import { useMenuUi } from '../pageContext'
 
 /** How long the page goes without a scroll event before the highlight's own scroll counts as done. */
 const SCROLL_SETTLE_MS = 150

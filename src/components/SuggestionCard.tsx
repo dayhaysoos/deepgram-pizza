@@ -1,8 +1,7 @@
 import { useId, useState, type RefObject } from 'react'
 import { describeLine } from '../agent/cartSummary'
 import { checkLinesToAdd, type Suggestions } from '../agent/handlers'
-import { useMenuUi } from '../agent/MenuUiProvider'
-import { useCartChanges } from '../pageContext'
+import { useCartChanges, useMenuUi } from '../pageContext'
 
 type SuggestionCardProps = {
   /**

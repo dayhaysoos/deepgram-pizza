@@ -15,7 +15,8 @@
 // - server: a message from Deepgram, as it came (Welcome, ConversationText, …)
 // - client: a message the app sent: the Settings on every connect, each prompt
 //   update (a tap update telling the agent about the cart), and each tool's
-//   answer (FunctionCallResponse)
+//   answer (FunctionCallResponse), which Deepgram echoes back as a server
+//   entry; the readable log shows the two as one line
 // - app: something the app saw happen: the session started or ended, and the
 //   SDK's connection events and errors
 //
@@ -237,24 +238,43 @@ export type LogLine = { seq: number; ts: string; time: string; kind: LineKind; t
 /** One session's lines, with the request_id from each of its Welcome messages (one per connection). */
 export type LogSection = { session: number; date: string; requestIds: string[]; lines: LogLine[] }
 
+/** A tool answer the app sent, waiting for Deepgram's echo of it. */
+type SentAnswer = { id: string; name: string; content: string; line: LogLine }
+
 /**
  * The entries as sections of readable lines, one per session, in order: a
- * line per entry, except that a run of speech-to-text-only latency reports
- * shares one line. With Flux, Deepgram sends one about every 240 ms while
- * audio comes in.
+ * line per entry, except for two kinds that would bury the conversation:
+ * - A run of speech-to-text-only latency reports shares one line. With Flux,
+ *   Deepgram sends one about every 240 ms while audio comes in.
+ * - Deepgram echoes each tool answer the app sends as a FunctionCallResponse
+ *   of its own. The echo marks our line "(confirmed by Deepgram)" instead of
+ *   repeating it; one that doesn't match an answer we sent gets its own line.
+ * The JSON keeps every entry.
  */
 export function readableLog(entries: readonly LogEntry[]): LogSection[] {
   const sections: LogSection[] = []
   let sttRun: { line: LogLine; count: number; min: number; max: number } | undefined
+  let sent: SentAnswer[] = []
 
   for (const entry of entries) {
     let section = sections.at(-1)
     if (section?.session !== entry.session) {
       section = { session: entry.session, date: formatDate(entry.ts), requestIds: [], lines: [] }
       sections.push(section)
+      sent = []
     }
     const requestId = entry.type === 'Welcome' ? text(field(entry.payload, 'request_id')) : ''
     if (requestId) section.requestIds.push(requestId)
+
+    const answer = entry.type === 'FunctionCallResponse' ? answerOf(entry) : undefined
+    if (answer && entry.direction === 'server') {
+      const echoed = sent.find((ours) => isEcho(answer, ours))
+      if (echoed) {
+        echoed.line.text += ' (confirmed by Deepgram)'
+        sent = sent.filter((ours) => ours !== echoed)
+        continue
+      }
+    }
 
     const stt = sttOnlyLatency(entry)
     if (stt !== undefined && sttRun && section.lines.at(-1) === sttRun.line) {
@@ -268,8 +288,19 @@ export function readableLog(entries: readonly LogEntry[]): LogSection[] {
     const line = { seq: entry.seq, ts: entry.ts, time: formatTime(entry.ts), ...describeEntry(entry) }
     section.lines.push(line)
     if (stt !== undefined) sttRun = { line, count: 1, min: stt, max: stt }
+    if (answer && entry.direction === 'client') sent.push({ ...answer, line })
   }
   return sections
+}
+
+/** A FunctionCallResponse's id (which Deepgram may leave out), name and content. */
+function answerOf({ payload }: LogEntry): Omit<SentAnswer, 'line'> {
+  return { id: text(field(payload, 'id')), name: text(field(payload, 'name')), content: text(field(payload, 'content')) }
+}
+
+/** Whether Deepgram's FunctionCallResponse repeats one the app sent: the same name and content, and id when both have one. */
+function isEcho(echo: Omit<SentAnswer, 'line'>, ours: SentAnswer): boolean {
+  return echo.name === ours.name && echo.content === ours.content && (echo.id === '' || ours.id === '' || echo.id === ours.id)
 }
 
 /** A LatencyReport's stt_latency in milliseconds, when that's all it reports. */

@@ -11,6 +11,8 @@
 // - Listen: Flux, "best for low-latency voice agents", with end-of-turn
 //   detection built into the model. It needs `version: 'v2'`, and takes no
 //   `smart_format`. https://developers.deepgram.com/docs/voice-agent-stt-models
+//   It listens for the menu's item names as keyterms (menuKeyterms below),
+//   which Flux supports: https://developers.deepgram.com/docs/keyterm
 // - Think: a Deepgram-managed LLM, so there's no endpoint or LLM key to set
 //   up. GPT-4.1 mini answers without a reasoning step first and handles tool
 //   calls well. https://developers.deepgram.com/docs/voice-agent-llm-models
@@ -28,6 +30,7 @@ import type { AgentSettingsObject } from '@deepgram/react'
 import type { CartSummary } from '../agent/cartSummary'
 import { agentInstructions, GREETING } from '../agent/instructions'
 import type { ToolDefinition } from '../agent/tools'
+import { menu, spokenName } from '../menu/menu'
 
 /** Deepgram's limit on `think.prompt` for managed LLMs, in characters. */
 export const MANAGED_PROMPT_LIMIT = 25_000
@@ -41,7 +44,7 @@ export const MANAGED_PROMPT_LIMIT = 25_000
 export function agentSettings(cart: CartSummary, tools: readonly ToolDefinition[] = []): AgentSettingsObject {
   return {
     listen: {
-      provider: { type: 'deepgram', version: 'v2', model: 'flux-general-en' },
+      provider: { type: 'deepgram', version: 'v2', model: 'flux-general-en', keyterms: menuKeyterms() },
     },
     think: {
       provider: { type: 'open_ai', model: 'gpt-4.1-mini' },
@@ -55,4 +58,17 @@ export function agentSettings(cart: CartSummary, tools: readonly ToolDefinition[
     },
     greeting: GREETING,
   }
+}
+
+/**
+ * The words Flux listens for: each item's name as people say it, from
+ * menu.json ("margherita pizza", "garlic knots"). In step 5's Check it heard
+ * "margaritas" for "margherita". Lower case, as Deepgram's keyterm guide says
+ * for words that aren't proper nouns, and the spoken name, since "(6)" in
+ * "Garlic Knots (6)" isn't something anyone says. The guide allows up to 100
+ * keyterms, 500 tokens in all, and suggests 20 to 50 that matter:
+ * https://developers.deepgram.com/docs/keyterm
+ */
+export function menuKeyterms(): string[] {
+  return [...new Set(menu.map(spokenName))]
 }

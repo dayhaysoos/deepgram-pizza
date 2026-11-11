@@ -16,9 +16,8 @@
 import { useState, type ReactNode } from 'react'
 import { redirectToCheckout, useShoppingCart } from 'use-shopping-cart'
 import { startCheckout } from '../checkout/startCheckout'
-import { ToolHandlersContext, useCartChanges, useVoiceSession } from '../pageContext'
+import { ToolHandlersContext, useCartChanges, useMenuUi, useVoiceSession } from '../pageContext'
 import { createToolHandlers } from './handlers'
-import { useMenuUi } from './MenuUiProvider'
 
 /** Creates the page's tool handlers. Goes inside `CartChangesProvider`, `VoiceSessionProvider` and `MenuUiProvider`. */
 export function ToolHandlersProvider({ children }: { children: ReactNode }) {

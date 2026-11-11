@@ -5,9 +5,11 @@
 // from a tool or a tap, works out the cart after it here, from the cart before
 // it, and summarizes that (cartChanges.ts). Every cart tool returns the
 // summary, so the agent speaks only from what a tool returned and never
-// invents a price.
+// invents a price. The total comes written for the screen and spoken for the
+// agent to say (spokenPrice.ts).
 
 import { findVariant, formatPrice } from '../menu/menu'
+import { spokenPrice } from './spokenPrice'
 
 /** How many of each product the cart holds, by product id, in cart order. */
 export type Quantities = Record<string, number>
@@ -28,7 +30,10 @@ export type CartSummary = {
   lines: Array<{ id: string; name: string; quantity: number; total: string }>
   /** How many products in all: 2 pizzas and a soda is 3. */
   count: number
+  /** "$46.97", for the screen. */
   total: string
+  /** "forty-six ninety-seven": the total as the agent says it (spokenPrice). */
+  totalSpoken: string
 }
 
 /** "2 × Large Margherita Pizza": how the tools, the tap updates and the suggestion card name a line. */
@@ -49,6 +54,11 @@ export function describeCart(cart: CartSummary): string {
 export function quantitiesOf(cartDetails: Readonly<Record<string, { quantity: number }>>): Quantities {
   // Object.fromEntries, not assignment, so an id like "__proto__" stays a plain key.
   return Object.fromEntries(Object.entries(cartDetails).map(([id, entry]) => [id, entry.quantity]))
+}
+
+/** How many of this product the cart holds: 0 when none. An id like "constructor" isn't found on Object.prototype. */
+export function quantityOf(quantities: Quantities, id: string): number {
+  return Object.hasOwn(quantities, id) ? quantities[id] : 0
 }
 
 /**
@@ -89,5 +99,5 @@ export function summarizeCart(quantities: Quantities): CartSummary {
     count += quantity
     cents += lineCents
   }
-  return { lines, count, total: formatPrice(cents) }
+  return { lines, count, total: formatPrice(cents), totalSpoken: spokenPrice(cents) }
 }

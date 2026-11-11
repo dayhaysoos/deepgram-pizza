@@ -15,12 +15,13 @@
 import type { CartDetails } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
 import { isRecord } from '../isRecord'
-import { categories, findVariant, formatPrice, menu, tags, type Category, type Product, type Tag } from '../menu/menu'
+import { categories, findItem, findVariant, formatPrice, tags, type Category, type Product, type Tag } from '../menu/menu'
 import { isLineQuantity, MAX_LINE_QUANTITY } from '../shop'
 import type { CartChanges } from './cartChanges'
 import {
   applyCartChange,
   describeLine,
+  quantityOf,
   summarizeCart,
   type CartSummary,
   type ItemQuantity,
@@ -84,26 +85,20 @@ export type FoundItems = {
   message?: string
 }
 
+/** What show_suggestions returns once the card is open: what every line together costs, written and spoken. */
+export type SuggestionsShown = { shown: true } & Pick<CartSummary, 'total' | 'totalSpoken'>
+
 /**
  * What plan_group_order returns once the plan is on the card: enough for the
  * agent to sum it up in a sentence and to change it with show_suggestions.
  */
-export type PlanShown = {
-  shown: true
+export type PlanShown = SuggestionsShown & {
   /** "8 large pizzas, 3 of them vegetarian, plus garlic knots and a drink each" */
   summary: string
-  /** What the whole plan costs. */
-  total: string
   lines: Array<{ id: string; name: string; quantity: number }>
 }
 
-export type ToolResult =
-  | CartSummary
-  | Recovery
-  | FoundItems
-  | { shown: true; total: string }
-  | PlanShown
-  | { ok: true }
+export type ToolResult = CartSummary | Recovery | FoundItems | SuggestionsShown | PlanShown | { ok: true }
 
 /**
  * Runs one tool. Takes the arguments the agent sent, as an object or as the
@@ -133,19 +128,23 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
   // all, so tapping Add all can't add the whole set a second time.
   let suggested: ItemQuantity[] | null = null
 
-  /** Opens the suggestion card with these lines: show_suggestions and plan_group_order both use it. */
-  function suggest(title: unknown, reason: unknown, items: unknown): Suggestions | Recovery {
+  /**
+   * Opens the suggestion card with these lines: show_suggestions and
+   * plan_group_order both use it. Returns what the card shows, plus the total
+   * spoken, for the agent.
+   */
+  function suggest(title: unknown, reason: unknown, items: unknown): (Suggestions & Pick<CartSummary, 'totalSpoken'>) | Recovery {
     // Not checked against the cart: it can change before the customer taps
     // Add all, and Add all checks again then.
     const checked = checkLines(items, {})
     if ('message' in checked) return { message: `Nothing was shown. ${checked.message}` }
     // Priced as a cart holding only these lines, so summarizeCart is the one place that prices lines.
-    const { lines, total } = summarizeCart(applyCartChange({}, { type: 'add', lines: checked.lines }))
+    const { lines, total, totalSpoken } = summarizeCart(applyCartChange({}, { type: 'add', lines: checked.lines }))
     const reasonText = nonBlankText(reason)
     const suggestions = { title: nonBlankText(title) ?? 'Suggestions', ...(reasonText ? { reason: reasonText } : {}), lines, total }
     ui.showSuggestions(suggestions)
     suggested = checked.lines
-    return suggestions
+    return { ...suggestions, totalSpoken }
   }
 
   return {
@@ -173,7 +172,7 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
 
     show_suggestions: recovering((args) => {
       const shown = suggest(args.title, args.reason, args.items)
-      return 'message' in shown ? shown : { shown: true, total: shown.total }
+      return 'message' in shown ? shown : { shown: true, total: shown.total, totalSpoken: shown.totalSpoken }
     }),
 
     // The code works out the plan (planGroupOrder.ts) and the card shows it, as
@@ -185,7 +184,7 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
       const shown = suggest(plan.title, plan.reason, plan.lines)
       if ('message' in shown) return shown
       const lines = shown.lines.map(({ id, name, quantity }) => ({ id, name, quantity }))
-      return { shown: true, summary: plan.summary, total: shown.total, lines }
+      return { shown: true, summary: plan.summary, total: shown.total, totalSpoken: shown.totalSpoken, lines }
     }),
 
     add_item: recovering((args) => {
@@ -295,7 +294,7 @@ function findOnMenu(id: unknown): Product | Recovery {
 
 function notOnMenu(id: string): Recovery {
   // A sized item's id without the size, such as "pepperoni-pizza".
-  const item = menu.find((menuItem) => menuItem.id === id)
+  const item = findItem(id)
   if (item) {
     const sizes = item.variants.map((variant) => (variant.label ?? variant.id).toLowerCase())
     return { message: `${item.name} comes in ${orList(sizes)}. Which one?` }
@@ -392,10 +391,6 @@ function readArgs(args: unknown): Record<string, unknown> {
 // Object.hasOwn, so an id like "constructor" isn't found on Object.prototype.
 function isInCart(quantities: Quantities, id: unknown): id is string {
   return typeof id === 'string' && Object.hasOwn(quantities, id)
-}
-
-function quantityOf(quantities: Quantities, id: string): number {
-  return Object.hasOwn(quantities, id) ? quantities[id] : 0
 }
 
 function isCategory(value: unknown): value is Category {

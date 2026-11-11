@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   categories,
   defaultVariant,
+  findItem,
   findVariant,
   formatPrice,
   imagePath,
@@ -224,6 +225,18 @@ describe('findVariant', () => {
     for (const item of menu.filter((item) => item.variants.length > 1)) {
       expect(findVariant(item.id)).toBeUndefined()
     }
+  })
+})
+
+describe('findItem', () => {
+  it('finds every item by its item id', () => {
+    for (const item of menu) expect(findItem(item.id)).toBe(item)
+  })
+
+  it("returns undefined for a variant id with a size, or an id that isn't on the menu", () => {
+    expect(findItem('pepperoni-pizza-large')).toBeUndefined()
+    expect(findItem('not-on-the-menu')).toBeUndefined()
+    expect(findItem('constructor')).toBeUndefined()
   })
 })
 

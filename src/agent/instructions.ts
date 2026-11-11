@@ -18,13 +18,16 @@ import { categories, formatPrice, menu, type CategoryInfo, type MenuItem, type V
 import { SHOP_NAME } from '../shop'
 import { describeCart, type CartSummary } from './cartSummary'
 import { orList } from './text'
-import { NOT_PLACED_YET, TO_CHECKOUT, type ToolDefinition, type ToolName } from './tools'
+import { GROUP_MAINS, NOT_PLACED_YET, TO_CHECKOUT, type ToolDefinition, type ToolName } from './tools'
 
 /** What the agent says first, as soon as the session opens. */
 export const GREETING = `Hey, welcome to ${SHOP_NAME}! What can I get started for you?`
 
 /** The tools that change the cart. With any of them, the cart-change rules apply. */
 const CART_TOOLS: readonly ToolName[] = ['add_item', 'add_items', 'set_quantity', 'remove_item', 'clear_cart']
+
+/** The tools whose result has a total, and so a `totalSpoken` (spokenPrice.ts) for the agent to say. */
+const TOTAL_TOOLS: readonly ToolName[] = [...CART_TOOLS, 'view_cart', 'show_suggestions', 'plan_group_order']
 
 type HasTool = (name: ToolName) => boolean
 
@@ -45,14 +48,19 @@ export function agentInstructions(cart: CartSummary, tools: readonly ToolDefinit
   const rules = compact([
     safeguardRule(has, changesCart),
     changesCart && '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.',
-    changesCart && '- After each change, confirm it with the quantity, size and name, then the new total from the tool result.',
+    changesCart && confirmRule(has),
+    // In step 5's Check the agent wrote $20.99 as "twenty oh nine nine".
+    TOTAL_TOOLS.some(has) &&
+      '- Say every total exactly as the totalSpoken in the tool result gives it, word for word, even a long one ("two hundred ninety-seven dollars and fifty-six cents"); never turn the digits in total into words yourself.',
     changesCart && '- If a sized item has no size, ask which size before adding it.',
     has('find_menu_items')
-      ? '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.'
+      ? '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.' +
+        // In a text run, "What's vegetarian?" also opened a card of three pizzas once the pairing rule said to show suggestions.
+        (has('show_suggestions') ? " They're lit up already, so don't call show_suggestions for them." : '')
       : '- When the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), name two or three matching items.',
     has('show_suggestions') &&
       '- When you suggest specific items, call show_suggestions so they appear on screen, and keep your spoken answer short: the screen shows the details.',
-    '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.',
+    pairingRule(has),
     groupRule(has),
     '- Offer one pairing on your own at most once per order, after the first item is added. When the customer asks for suggestions, always help.',
     "- If asked about something not on the menu, say you don't have it and offer the closest thing you do have.",
@@ -82,10 +90,40 @@ ${rules.join('\n')}
 Conversation started. ${describeCart(cart)}`
 }
 
+// After a change, every line it made, add_items included: the owner wants a
+// whole group plan read back line by line once it's added ("that's very
+// important"). The group rule's one-sentence summary is for the plan before
+// it's added, and each rule says which moment it's for, so neither reads as
+// the other.
+function confirmRule(has: HasTool): string {
+  return compact([
+    '- After each change, confirm it from the tool result: the quantity, size and name of every line you added or changed, then the new total.',
+    has('add_items') &&
+      'After add_items, name every line it added, one by one ("two large cheese pizzas, three large pepperoni pizzas, six garlic knots, …"), a whole group plan included, even if it takes more than two sentences; never sum them up.',
+  ]).join(' ')
+}
+
+// What goes with something, and recommendations. With show_suggestions they go
+// on the card (SPEC.md, "Suggestions and group orders"): in step 5's Check the
+// agent twice said "The cheeseburger pairs great with fries and a fountain
+// soda" and showed nothing. A group's recommendation is plan_group_order's.
+function pairingRule(has: HasTool): string {
+  if (!has('show_suggestions')) {
+    return '- When asked what goes with something, answer from its pairsWith. When asked for a recommendation, pick from popular items.'
+  }
+  return [
+    '- When asked what goes with something, call show_suggestions with the items in its pairsWith, one of each, titled like "Goes with the Classic Cheeseburger", then name them in one short sentence.',
+    `When asked what you recommend, unless it's for a group, do the same with two or three popular items, titled "Our favourites".`,
+    'Never name pairings or recommendations without showing them.',
+  ].join(' ')
+}
+
 // For a group. With plan_group_order the code works out the plan and the agent
 // only sums it up: in the owner's run the agent did the math itself, proposed
 // about twice the food for thirty people, and took three long sentences to say
-// so. Without it, the agent plans from each item's serves, as SPEC's draft said.
+// so. It asks one question at most, covering what the planner takes (in step
+// 5's Check it asked two before planning). Without the tool, the agent plans
+// from each item's serves, as SPEC's draft said.
 function groupRule(has: HasTool): string {
   if (!has('plan_group_order')) {
     return (
@@ -95,13 +133,22 @@ function groupRule(has: HasTool): string {
     )
   }
   return compact([
-    '- For a group, ask at most one short question about preferences, then call plan_group_order.',
-    `Sum up the plan from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say the total and that it's on screen.`,
-    'Never read out every line or do the math out loud.',
+    `- For a group, if the customer hasn't said what they like, ask one short question that covers it, such as "${groupQuestion()}", then call plan_group_order with what you know.`,
+    'Never ask a second question before the plan.',
+    `To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken and that it's on screen; don't list its lines or do the math out loud.`,
     has('show_suggestions') &&
       'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.',
-    has('add_items') ? 'Add it with add_items only after they agree.' : 'Tell them they can add it by tapping Add all on the card.',
+    has('add_items')
+      ? 'Add it with add_items only after they agree, then name every line it added, one by one, as after any change.'
+      : 'Tell them they can add it by tapping Add all on the card.',
   ]).join(' ')
+}
+
+// "Any vegetarians, and pizza, subs or a mix?": the vegetarians, and the mains
+// plan_group_order takes (tools.ts), so a shop with other mains asks about those.
+function groupQuestion(): string {
+  if (GROUP_MAINS.length < 2) return 'Any vegetarians?'
+  return `Any vegetarians, and ${orList(GROUP_MAINS.map((mains) => (mains === 'mix' ? 'a mix' : mains)))}?`
 }
 
 // What the agent can't do without its tools, so it says so instead of

@@ -41,6 +41,7 @@ import {
   categories,
   categoriesPlannedAs,
   defaultVariant,
+  findItem,
   findVariant,
   mainCategories,
   menu,
@@ -52,7 +53,7 @@ import {
   type Variant,
 } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
-import type { ItemQuantity, Quantities } from './cartSummary'
+import { quantityOf, type ItemQuantity, type Quantities } from './cartSummary'
 import { andList, orList, type Recovery } from './text'
 import { GROUP_MAINS, MAX_LINES_PER_CALL, type GroupMains } from './tools'
 
@@ -207,7 +208,7 @@ function readRequest(request: Record<string, unknown>, inCart: Quantities): Chec
     spicy,
     drinks: drinks || include.some((item) => DRINK_CATEGORIES.includes(item.category)),
     include,
-    room: (id) => Math.max(0, MAX_LINE_QUANTITY - (Object.hasOwn(inCart, id) ? inCart[id] : 0)),
+    room: (id) => Math.max(0, MAX_LINE_QUANTITY - quantityOf(inCart, id)),
   }
 }
 
@@ -420,7 +421,7 @@ function extras(
   const fits = (item: MenuItem | undefined): item is MenuItem =>
     item !== undefined && from.includes(item.category) && allowed(item, request)
   const asked = request.include.filter(fits)
-  const paired = unique(pairs.map((id) => menu.find((item) => item.id === id)).filter(fits))
+  const paired = unique(pairs.map(findItem).filter(fits))
   const rest = menu.filter(fits).sort((a, b) => Number(isPopular(b)) - Number(isPopular(a)))
   const wanted = Math.max(asked.length, Math.min(paired.length, pairedKinds), 1)
   const picked = pickKinds(count, wanted, asked, unique([...paired, ...rest]), (item) => request.room(defaultVariant(item).id))
@@ -522,7 +523,7 @@ function describePlan(lines: ItemQuantity[], request: CheckedRequest, sideCount:
 }
 
 function itemFor(id: string): MenuItem | undefined {
-  return menu.find((item) => item.id === id) ?? findVariant(id)?.item
+  return findItem(id) ?? findVariant(id)?.item
 }
 
 /** Spicy items only when someone likes it spicy, or they asked for that one. */

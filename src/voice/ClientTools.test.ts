@@ -20,7 +20,7 @@ describe('answerToolCall', () => {
       checkout: async () => ({ message: 'unused' }),
     })
 
-    expect(await answerToolCall(handlers.view_cart, call('view_cart', '{}'))).toBe('{"lines":[],"count":0,"total":"$0.00"}')
+    expect(await answerToolCall(handlers.view_cart, call('view_cart', '{}'))).toBe('{"lines":[],"count":0,"total":"$0.00","totalSpoken":"zero dollars"}')
     // A recovery is an answer too: the agent hears it and tries again.
     expect(JSON.parse(await answerToolCall(handlers.checkout, call('checkout', '{}')))).toEqual({
       message: 'The cart is empty.',

@@ -19,7 +19,7 @@
 //
 // It checks nothing: callers check ids and quantities first. The tool
 // handlers answer a bad call with a message (handlers.ts), and the suggestion
-// card checks its lines with checkLines. No React here: CartChangesProvider
+// card checks its lines with checkLinesToAdd. No React here: CartChangesProvider
 // wires it to the page, and cartChanges.test.ts runs it against a real core
 // ShoppingCart.
 

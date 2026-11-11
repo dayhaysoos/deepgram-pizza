@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
-import { useMenuUi } from '../agent/MenuUiProvider'
 import { defaultVariant, formatPrice, imagePath, productFor, type MenuItem } from '../menu/menu'
-import { useCartChanges } from '../pageContext'
+import { useCartChanges, useMenuUi } from '../pageContext'
 import { MAX_LINE_QUANTITY } from '../shop'
 
 /** How long the Add button says "Added ✓". */

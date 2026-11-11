@@ -1,47 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ShoppingCart } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
-import { findVariant, menu, products } from '../menu/menu'
-import { CURRENCY, LOCALE } from '../shop'
+import { menu, products } from '../menu/menu'
 import { createCartChanges } from './cartChanges'
-import { quantitiesOf, summarizeCart } from './cartSummary'
+import { summarizeCart } from './cartSummary'
 import { checkLinesToAdd, createToolHandlers, type ToolPorts } from './handlers'
 import { planGroupOrder } from './planGroupOrder'
+import { renderedStore } from './testing'
 import type { ToolName } from './tools'
 
 const SESSION_URL = 'https://checkout.stripe.com/c/pay/cs_test_fake'
 
-function product(id: string) {
-  const found = findVariant(id)
-  if (!found) throw new Error(`${id} isn't on the menu`)
-  return found.product
-}
-
 /**
  * The handlers with the page's cart changes (cartChanges.ts) over a real
- * use-shopping-cart store, behaving the way they will in React: the cart as
- * of the last render shows a change only after the next render (here, after
- * each `call`; `handlers` and `render` run calls that arrive before a render).
+ * use-shopping-cart store, behaving the way they will in React (renderedStore):
+ * the cart as of the last render shows a change only after the next render
+ * (here, after each `call`; `handlers` and `render` run calls that arrive before a render).
  * `cart` watches the cart port, so a test can check the change a handler asked
  * for, and compare the summary it returned with what the store holds.
  */
 function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESSION_URL })) {
-  const store = new ShoppingCart({ currency: CURRENCY, language: LOCALE, shouldPersist: false })
-  let rendered = store.getState().cartDetails
-  const render = () => {
-    rendered = store.getState().cartDetails
-  }
-
-  const cartChanges = createCartChanges({
-    store: {
-      cartDetails: () => rendered,
-      addItem: (item, options) => store.addItem(item, options),
-      setItemQuantity: (id, quantity) => store.setItemQuantity(id, quantity),
-      removeItem: (id) => store.removeItem(id),
-      clearCart: () => store.clearCart(),
-    },
-    tellAgent: () => {},
-  })
+  const { store, cartStore, render, given, holds } = renderedStore()
+  const cartChanges = createCartChanges({ store: cartStore, tellAgent: () => {} })
   const cart = {
     now: vi.fn(cartChanges.now),
     cartDetails: vi.fn(cartChanges.cartDetails),
@@ -63,15 +42,9 @@ function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESS
     return result
   }
 
-  /** Puts lines in the cart before the test, as if the customer had tapped them in. */
-  function given(lines: Record<string, number>) {
-    for (const [id, count] of Object.entries(lines)) store.addItem(product(id), { count })
-    render()
-  }
-
   /** The summary of what the store really holds now. */
   function storeSummary() {
-    return summarizeCart(quantitiesOf(store.getState().cartDetails))
+    return summarizeCart(holds())
   }
 
   function noCartChanges() {
@@ -94,6 +67,7 @@ describe('add_item', () => {
       lines: [{ id: 'margherita-pizza-large', name: 'Large Margherita Pizza', quantity: 2, total: '$41.98' }],
       count: 2,
       total: '$41.98',
+      totalSpoken: 'forty-one ninety-eight',
     })
     expect(result).toEqual(storeSummary())
   })
@@ -518,7 +492,7 @@ describe('view_cart', () => {
   it('returns the empty cart', async () => {
     const { call } = setup()
 
-    expect(await call('view_cart')).toEqual({ lines: [], count: 0, total: '$0.00' })
+    expect(await call('view_cart')).toEqual({ lines: [], count: 0, total: '$0.00', totalSpoken: 'zero dollars' })
   })
 })
 
@@ -530,7 +504,7 @@ describe('clear_cart', () => {
     const result = await call('clear_cart')
 
     expect(cart.change).toHaveBeenCalledExactlyOnceWith({ type: 'clear' })
-    expect(result).toEqual({ lines: [], count: 0, total: '$0.00' })
+    expect(result).toEqual({ lines: [], count: 0, total: '$0.00', totalSpoken: 'zero dollars' })
     expect(result).toEqual(storeSummary())
   })
 })
@@ -722,7 +696,8 @@ describe('show_suggestions', () => {
       ],
       total: '$7.48',
     })
-    expect(result).toEqual({ shown: true, total: '$7.48' })
+    // The card shows the written total; the agent gets the spoken one too.
+    expect(result).toEqual({ shown: true, total: '$7.48', totalSpoken: 'seven forty-eight' })
     noCartChanges()
   })
 
@@ -738,7 +713,7 @@ describe('show_suggestions', () => {
       ],
     })
 
-    expect(result).toEqual({ shown: true, total: '$177.91' })
+    expect(result).toEqual({ shown: true, total: '$177.91', totalSpoken: 'one hundred seventy-seven dollars and ninety-one cents' })
   })
 
   it('leaves out a missing reason and falls back to a plain title', async () => {
@@ -794,6 +769,7 @@ describe('show_suggestions', () => {
     expect(await call('show_suggestions', { title: 'More fries', items: [{ id: 'fries', quantity: 2 }] })).toEqual({
       shown: true,
       total: '$9.98',
+      totalSpoken: 'nine ninety-eight',
     })
   })
 })
@@ -817,6 +793,7 @@ describe('plan_group_order', () => {
       shown: true,
       summary: '8 large pizzas, 3 of them vegetarian, plus garlic knots and a drink each',
       total: priced.total,
+      totalSpoken: priced.totalSpoken,
       lines: priced.lines.map(({ id, name, quantity }) => ({ id, name, quantity })),
     })
     expect(result).toMatchObject({ lines: expect.arrayContaining([{ id: 'pepperoni-pizza-large', name: 'Large Pepperoni Pizza', quantity: 3 }]) })
@@ -1046,6 +1023,7 @@ describe('the golden path', () => {
       lines: [{ id: 'margherita-pizza-large', name: 'Large Margherita Pizza', quantity: 1, total: '$20.99' }],
       count: 1,
       total: '$20.99',
+      totalSpoken: 'twenty ninety-nine',
     })
     expect(JSON.parse(JSON.stringify(cart))).toEqual(cart)
 

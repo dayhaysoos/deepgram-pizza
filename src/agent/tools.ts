@@ -10,9 +10,11 @@
 // Tools that change the cart or leave the page set `defer_until_eot`: Deepgram
 // then calls them only once the customer's turn is over, not while they may
 // still be talking (https://developers.deepgram.com/docs/voice-agent-speculative-replies).
-// The others are called as soon as the LLM asks, which is quicker, and harmless
-// if the customer goes on talking: they only read the menu or the cart, or
-// change what's on screen, which the next call puts right.
+// view_cart sets it too: a call that doesn't wait runs before the deferred
+// ones in the same turn, so "add fries, what's my total?" would read the cart
+// without the fries. The others are called as soon as the LLM asks, which is
+// quicker, and harmless if the customer goes on talking: they read the menu,
+// or change what's on screen, which the next call puts right.
 
 import { categories, mainCategories, menu, products, tags, type MainCategory } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
@@ -101,7 +103,7 @@ export const toolDefinitions = [
   tool({
     name: 'find_menu_items',
     description:
-      'Find menu items that match what the customer is looking for, such as vegetarian, spicy, drinks or under ten dollars. The matching items light up on screen.',
+      "Find menu items that match what the customer is looking for, such as vegetarian, spicy, drinks or under ten dollars. The matching items light up on screen, which is enough: don't also show them with show_suggestions.",
     parameters: {
       type: 'object',
       properties: {
@@ -119,11 +121,11 @@ export const toolDefinitions = [
   tool({
     name: 'show_suggestions',
     description:
-      "Show suggested items on a card on screen: pairings, recommendations, or a group plan with the customer's changes. It doesn't add anything to the cart.",
+      "Show suggested items on a card on screen: what goes with an item, recommendations, or a group plan with the customer's changes. It doesn't add anything to the cart.",
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'A short heading, such as "Party of 20" or "Goes with the cheeseburger".' },
+        title: { type: 'string', description: 'A short heading, such as "Party of 20" or "Goes with the Classic Cheeseburger".' },
         items: lines,
         reason: { type: 'string', description: 'One short line on why these, such as "Two veggie pies for the vegetarians".' },
       },
@@ -133,7 +135,7 @@ export const toolDefinitions = [
   tool({
     name: 'plan_group_order',
     description:
-      "Plan food for a group and show it on the card on screen: mains for about one serving per person, sides to share and a drink each, worked out from the menu. Call it once you know how many people are eating. It doesn't add anything to the cart. The card already shows the plan, so don't call show_suggestions after it unless the customer asks for a change.",
+      "Plan food for a group and show it on the card on screen: mains for about one serving per person, sides to share and a drink each, worked out from the menu. Call it once you know how many people are eating, after one short question about what they like at most. It doesn't add anything to the cart. The card already shows the plan, so don't call show_suggestions after it unless the customer asks for a change.",
     parameters: {
       type: 'object',
       properties: {
@@ -165,7 +167,8 @@ export const toolDefinitions = [
   }),
   tool({
     name: 'add_items',
-    description: 'Add several items to the cart in one go, such as a group plan the customer agreed to.',
+    description:
+      'Add several items to the cart in one go, such as a group plan the customer agreed to. Then name every line it added, one by one, with quantity, size and name, and the new total.',
     parameters: { type: 'object', properties: { items: lines }, required: ['items'] },
     defer_until_eot: true,
   }),
@@ -186,6 +189,7 @@ export const toolDefinitions = [
     description:
       "Read what's in the cart and the total. Call it before answering any question about what's in the cart or the total, even right after you were told the customer tapped something.",
     parameters: noParameters,
+    defer_until_eot: true,
   }),
   tool({
     name: 'clear_cart',

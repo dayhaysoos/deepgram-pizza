@@ -140,11 +140,17 @@ export function defaultVariant(item: MenuItem): Variant {
 type FoundVariant = { item: MenuItem; variant: Variant; product: Product }
 
 // Built once at module load: the menu doesn't change while the app runs.
+const byItemId = new Map(menu.map((item) => [item.id, item]))
 const byVariantId = new Map<string, FoundVariant>()
 for (const item of menu) {
   for (const variant of item.variants) {
     byVariantId.set(variant.id, { item, variant, product: productFor(item, variant) })
   }
+}
+
+/** Looks up an item id ("pepperoni-pizza", not a variant id). */
+export function findItem(itemId: string): MenuItem | undefined {
+  return byItemId.get(itemId)
 }
 
 /** Looks up a variant id ("pepperoni-pizza-large") and returns it with its item and its cart product. */
