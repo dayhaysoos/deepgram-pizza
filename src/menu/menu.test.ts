@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   categories,
+  categoriesPlannedAs,
   defaultVariant,
   findItem,
   findVariant,
@@ -132,6 +133,17 @@ describe('menu.json', () => {
       item.pairsWith
         .filter((id) => id === item.id || !itemIds.includes(id))
         .map((id) => `${item.id} -> ${id}`),
+    )
+
+    expect(wrong).toEqual([])
+  })
+
+  // The suggestion card counts a card that keeps one of a plan's mains as a change to that
+  // plan (keepsAMainOf in src/agent/handlers.ts), so a pairing card must never hold one.
+  it('pairs items only with sides, drinks and the like, never a main', () => {
+    const mains = categoriesPlannedAs('main')
+    const wrong = menu.flatMap((item) =>
+      item.pairsWith.filter((id) => mains.some((category) => findItem(id)?.category === category)).map((id) => `${item.id} -> ${id}`),
     )
 
     expect(wrong).toEqual([])

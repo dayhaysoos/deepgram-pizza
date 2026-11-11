@@ -26,7 +26,7 @@ type MenuItem = {
 - `price` is in cents.
 - An item with one size has one variant whose `id` equals the item `id` and that has no `label`.
 - A sized variant's `id` is `<item-id>-<size>` (`pepperoni-pizza-large`).
-- `pairsWith` lists item ids. The agent uses them for suggestions.
+- `pairsWith` lists item ids. The agent uses them for suggestions. They're sides, drinks and the like, never a main (a pizza or a sub): a suggestion card holding a group plan's main counts as a change to that plan (see Decisions), and `menu.test.ts` checks it.
 - `spokenName` is how the agent says the item in a sentence, when its name doesn't read well aloud: `"garlic knots"` for "Garlic Knots (6)". Without it, the name in lower case.
 - `serves` is how many people one of that variant feeds. The group-order planner (`plan_group_order`) uses it:
 

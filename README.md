@@ -85,7 +85,7 @@ The page is for development only. A production build leaves the panel out, and `
 - Prices are in cents: `1599` is $15.99.
 - An item that comes in sizes has one variant per size. Each variant's id is `<item-id>-<size>` and it has a `label`, the size the customer sees.
 - An item with one size has one variant whose id is the item id, with no `label`.
-- `pairsWith` lists the ids of items that go well with this one.
+- `pairsWith` lists the ids of items that go well with this one: sides, drinks and the like, never a pizza or a sub (`pnpm test` checks it).
 - `serves` is how many people one of that variant feeds. The group-order planner reads it.
 - `spokenName` (optional) is how the agent says the item in a sentence when its name doesn't read well aloud, such as `"garlic knots"` for "Garlic Knots (6)". Without it, the agent uses the name in lower case.
 

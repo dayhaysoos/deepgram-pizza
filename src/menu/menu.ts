@@ -83,7 +83,11 @@ export type MenuItem = {
   description: string
   tags: Tag[]
   variants: Variant[]
-  /** Ids of items that go well with this one. */
+  /**
+   * Ids of items that go well with this one: sides, drinks and the like, never
+   * a main (a pizza or a sub), since a card holding a plan's main counts as a
+   * change to that plan. menu.test.ts checks it.
+   */
   pairsWith: string[]
   /**
    * How the agent says the item in a sentence, when its name doesn't read well

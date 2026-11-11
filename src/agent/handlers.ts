@@ -19,7 +19,7 @@
 import type { CartDetails } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
 import { isRecord } from '../isRecord'
-import { categories, findItem, findVariant, formatPrice, mainCategories, tags, type Category, type Product, type Tag } from '../menu/menu'
+import { categories, categoriesPlannedAs, findItem, findVariant, formatPrice, tags, type Category, type Product, type Tag } from '../menu/menu'
 import { isLineQuantity, isOrderType, MAX_LINE_QUANTITY, ORDER_TYPES, type OrderType } from '../shop'
 import type { CartChanges } from './cartChanges'
 import {
@@ -458,14 +458,15 @@ function notInCart(id: unknown, quantities: Quantities): Recovery {
 /**
  * Whether `lines` keep one of the mains in `plan`, in any size: a change to a
  * group plan does, and a pairing doesn't, since what an item goes with
- * (`pairsWith`) is never a main. Sides and drinks don't count: every plan has
+ * (`pairsWith`) is never a main (menu.test.ts checks it). Sides and drinks don't count: every plan has
  * the pizzas' pairings, garlic knots and soda.
  */
 function keepsAMainOf(lines: ItemQuantity[], plan: ItemQuantity[]): boolean {
+  const mains = categoriesPlannedAs('main')
   const mainsIn = (some: ItemQuantity[]) =>
     some.flatMap(({ id }) => {
       const found = findVariant(id)
-      return found && mainCategories.some((category) => category.id === found.item.category) ? [found.item.id] : []
+      return found && mains.includes(found.item.category) ? [found.item.id] : []
     })
   const planMains = mainsIn(plan)
   return mainsIn(lines).some((item) => planMains.includes(item))
