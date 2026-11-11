@@ -15,3 +15,18 @@ export function isLineQuantity(quantity: unknown): quantity is number {
 // formatter read these two, so server and browser format prices the same way.
 export const CURRENCY = 'USD' as const
 export const LOCALE = 'en-US'
+
+/** How the customer gets the order: they pick it up, or it's delivered. Asked on every order. */
+export const ORDER_TYPES = ['pickup', 'delivery'] as const
+export type OrderType = (typeof ORDER_TYPES)[number]
+
+/** Whether a value is one of ORDER_TYPES. */
+export function isOrderType(value: unknown): value is OrderType {
+  return typeof value === 'string' && (ORDER_TYPES as readonly string[]).includes(value)
+}
+
+/** The flat delivery fee, in cents of CURRENCY, added at checkout for delivery. */
+export const DELIVERY_FEE = 399
+
+/** The countries Stripe Checkout accepts delivery addresses in. */
+export const DELIVERY_COUNTRIES = ['US'] as const
