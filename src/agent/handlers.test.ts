@@ -933,22 +933,33 @@ describe('plan_group_order', () => {
     expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.objectContaining({ group: true }))
   })
 
-  // Review round 3: with a plan on screen, a pairing's card took the plan's delivery line.
-  it('shows a pairing asked for while a plan is on screen as a pairing: no group, no delivery total', async () => {
+  // Review rounds 3 and 4: with a plan on screen, a pairing's card took the plan's delivery line,
+  // even the pizzas' own pairing, garlic knots and soda, which every plan holds.
+  it.each([
+    ['the Buffalo Wing Dings', ['fries', 'soda']],
+    ['the Cheese Pizza', ['garlic-knots', 'soda']],
+  ])('shows what goes with %s, asked for while a plan is on screen, as a pairing: no group, no delivery total', async (_, ids) => {
     const { call, ui, orderType } = setup()
     orderType.set('delivery')
     await call('plan_group_order', { people: 8 })
 
-    const result = await call('show_suggestions', {
-      title: 'Goes with the Buffalo Wing Dings',
-      items: [
-        { id: 'fries', quantity: 1 },
-        { id: 'soda', quantity: 1 },
-      ],
-    })
+    const result = await call('show_suggestions', { title: 'Goes with it', items: ids.map((id) => ({ id, quantity: 1 })) })
 
     expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.not.objectContaining({ group: true }))
     expect(result).not.toHaveProperty('delivery')
+  })
+
+  it('keeps "make them all mediums" a change to the plan: the same pizzas in another size', async () => {
+    const { call, ui, orderType } = setup()
+    orderType.set('delivery')
+    const plan = await call('plan_group_order', { people: 20 })
+    if (!('lines' in plan) || !('summary' in plan)) throw new Error('No plan shown')
+
+    const mediums = plan.lines.map(({ id, quantity }) => ({ id: id.replace(/-large$/, '-medium'), quantity }))
+    const result = await call('show_suggestions', { title: 'For your party of 20', items: mediums })
+
+    expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.objectContaining({ group: true }))
+    expect(result).toHaveProperty('delivery')
   })
 
   it('shows other suggestions as they are: no group, and no delivery total, once no plan is on screen', async () => {
@@ -970,7 +981,7 @@ describe('plan_group_order', () => {
     expect(await call('plan_group_order', { people: 8 })).not.toHaveProperty('delivery')
     expect(await call('plan_group_order', { people: 8 })).not.toHaveProperty('budget')
     orderType.set('pickup')
-    expect(await call('plan_group_order', { people: 8, budget: 500 })).toMatchObject({ budget: "It's within the $500.00 budget as it is." })
+    expect(await call('plan_group_order', { people: 8, budget: 500 })).toMatchObject({ budget: "As it is, it's within the $500.00 budget." })
     expect(await call('plan_group_order', { people: 8, budget: 500 })).not.toHaveProperty('delivery')
   })
 

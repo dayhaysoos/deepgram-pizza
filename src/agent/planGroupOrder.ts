@@ -197,7 +197,7 @@ function fitBudget(request: CheckedRequest, budgetCents: number, normal: GroupPl
     budget: budgetNote,
   })
   const theBudget = `the ${budgetWords}`
-  if (costs(normal) <= budgetCents) return withinIt(normal, `It's within ${theBudget} as it is.`)
+  if (costs(normal) <= budgetCents) return withinIt(normal, `As it is, it's within ${theBudget}.`)
 
   const people = request.people
   const askedSides = request.include.filter((item) => SIDE_CATEGORIES.includes(item.category)).length
@@ -228,7 +228,8 @@ function fitBudget(request: CheckedRequest, budgetCents: number, normal: GroupPl
     message:
       `That's under what feeding ${people} can cost: the least is ${formatPrice(leastCost)}${withFee} ` +
       `(${spokenPrice(leastCost)}), with the cheapest ${mainsNoun(request)}${asked} and no other sides or drinks. ` +
-      'Tell the customer, and ask whether that works or whether to plan without the budget.',
+      // A budget of exactly the least gets the leanest plan, so "that works" has a call to make (review round 4).
+      `Tell the customer, and ask whether that works: if it does, call plan_group_order again with budget ${leastCost / 100}; if not, plan without the budget.`,
   }
 }
 

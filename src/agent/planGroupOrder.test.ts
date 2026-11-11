@@ -511,7 +511,7 @@ describe('planGroupOrder with a budget', () => {
     expect(result.lines).toEqual(normal.lines)
     expect(result.summary).toBe(normal.summary)
     expect(result.reason).toBe(`${normal.reason} Within your $300.00 budget.`)
-    expect(result.budget).toBe("It's within the $300.00 budget as it is.")
+    expect(result.budget).toBe("As it is, it's within the $300.00 budget.")
   })
 
   it("fits the owner's party of 30 into $250 with delivery: cheaper pizzas and sodas for 17, the same servings", () => {
@@ -536,7 +536,7 @@ describe('planGroupOrder with a budget', () => {
 
   it('counts the delivery fee unless it is pickup, leaving room for it before the customer has said', () => {
     // The plan costs $297.56: within $300 for pickup, over it with the $3.99 fee.
-    expect(planFor({ people: 30, vegetarians: 10, budget: 300 }, 'pickup').budget).toBe("It's within the $300.00 budget as it is.")
+    expect(planFor({ people: 30, vegetarians: 10, budget: 300 }, 'pickup').budget).toBe("As it is, it's within the $300.00 budget.")
     const delivery = planFor({ people: 30, vegetarians: 10, budget: 300 }, 'delivery')
     expect(delivery.budget).toMatch(/^To stay within the \$300\.00 budget, delivery included: /)
     expect(cost(delivery.lines) + DELIVERY_FEE).toBeLessThanOrEqual(30000)
@@ -610,12 +610,16 @@ describe('planGroupOrder with a budget', () => {
     // The cheapest 8 large pizzas that still give the vegetarians 3, $165.92, and the fee.
     expect(planGroupOrder({ people: 30, vegetarians: 10, budget: 150 }, {}, 'delivery')).toEqual({
       message:
-        "That's under what feeding 30 can cost: the least is $169.91 with delivery (one hundred sixty-nine dollars and ninety-one cents), with the cheapest pizzas and no other sides or drinks. Tell the customer, and ask whether that works or whether to plan without the budget.",
+        "That's under what feeding 30 can cost: the least is $169.91 with delivery (one hundred sixty-nine dollars and ninety-one cents), with the cheapest pizzas and no other sides or drinks. Tell the customer, and ask whether that works: if it does, call plan_group_order again with budget 169.91; if not, plan without the budget.",
     })
     expect(planGroupOrder({ people: 4, budget: 30 }, {}, 'pickup')).toEqual({
       message:
-        "That's under what feeding 4 can cost: the least is $33.98 (thirty-three ninety-eight), with the cheapest pizzas and no other sides or drinks. Tell the customer, and ask whether that works or whether to plan without the budget.",
+        "That's under what feeding 4 can cost: the least is $33.98 (thirty-three ninety-eight), with the cheapest pizzas and no other sides or drinks. Tell the customer, and ask whether that works: if it does, call plan_group_order again with budget 33.98; if not, plan without the budget.",
     })
+    // That budget gets the leanest plan, at exactly the least.
+    const leanest = planGroupOrder({ people: 30, vegetarians: 10, budget: 169.91 }, {}, 'delivery')
+    if ('message' in leanest) throw new Error(leanest.message)
+    expect(cost(leanest.lines) + DELIVERY_FEE).toBe(16991)
   })
 
   it('turns down a budget that is not an amount, and takes null as none', () => {

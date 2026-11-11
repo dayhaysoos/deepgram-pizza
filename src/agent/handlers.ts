@@ -19,7 +19,7 @@
 import type { CartDetails } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
 import { isRecord } from '../isRecord'
-import { categories, findItem, findVariant, formatPrice, tags, type Category, type Product, type Tag } from '../menu/menu'
+import { categories, findItem, findVariant, formatPrice, mainCategories, tags, type Category, type Product, type Tag } from '../menu/menu'
 import { isLineQuantity, isOrderType, MAX_LINE_QUANTITY, ORDER_TYPES, type OrderType } from '../shop'
 import type { CartChanges } from './cartChanges'
 import {
@@ -205,10 +205,11 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
   // set replaces the card, as SPEC's Screens says.
   let planned: ItemQuantity[] | null = null
   // The lines of the card shown last, when it's a group plan. While it's still
-  // up, a show_suggestions call that keeps most of its lines is the
-  // customer's change to it ("swap a pepperoni for a margherita"), so that
-  // card is a group plan too, delivery line and all (review round 2); a
-  // pairing asked for meanwhile isn't (review round 3).
+  // up, a show_suggestions call that keeps one of its mains is the customer's
+  // change to it ("swap a pepperoni for a margherita", "make them all
+  // mediums"), so that card is a group plan too, delivery line and all
+  // (review round 2); a pairing asked for meanwhile has no mains, so it isn't
+  // (review rounds 3 and 4).
   let groupLines: ItemQuantity[] | null = null
 
   /**
@@ -230,7 +231,7 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
     const { lines, total, totalSpoken } = summarizeLines(checked.lines)
     const reasonText = nonBlankText(reason)
     const group =
-      from === 'plan_group_order' || (groupLines !== null && ui.isShowingSuggestions() && keepsMostOf(checked.lines, groupLines))
+      from === 'plan_group_order' || (groupLines !== null && ui.isShowingSuggestions() && keepsAMainOf(checked.lines, groupLines))
     const suggestions: Suggestions = {
       title: nonBlankText(title) ?? 'Suggestions',
       ...(reasonText ? { reason: reasonText } : {}),
@@ -454,10 +455,20 @@ function notInCart(id: unknown, quantities: Quantities): Recovery {
   return { message: `That isn't in the cart. The cart has: ${listed}.` }
 }
 
-/** Whether `lines` keep at least half of `before`'s products, as a change to a plan does and a pairing doesn't. */
-function keepsMostOf(lines: ItemQuantity[], before: ItemQuantity[]): boolean {
-  const kept = before.filter((line) => lines.some((other) => other.id === line.id)).length
-  return kept * 2 >= before.length
+/**
+ * Whether `lines` keep one of the mains in `plan`, in any size: a change to a
+ * group plan does, and a pairing doesn't, since what an item goes with
+ * (`pairsWith`) is never a main. Sides and drinks don't count: every plan has
+ * the pizzas' pairings, garlic knots and soda.
+ */
+function keepsAMainOf(lines: ItemQuantity[], plan: ItemQuantity[]): boolean {
+  const mainsIn = (some: ItemQuantity[]) =>
+    some.flatMap(({ id }) => {
+      const found = findVariant(id)
+      return found && mainCategories.some((category) => category.id === found.item.category) ? [found.item.id] : []
+    })
+  const planMains = mainsIn(plan)
+  return mainsIn(lines).some((item) => planMains.includes(item))
 }
 
 /** Whether two lists of lines, one line per id, hold the same ids and quantities, in any order. */
