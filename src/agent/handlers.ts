@@ -31,6 +31,7 @@ import {
   type CartSummary,
   type ItemQuantity,
   type Quantities,
+  describeCart,
 } from './cartSummary'
 import { closeMatches, searchMenu, type MenuFilters } from './menuSearch'
 import type { OrderTypeStore } from './orderType'
@@ -109,8 +110,13 @@ export type PlanShown = SuggestionsShown & {
   lines: Array<{ id: string; name: string; quantity: number }>
 }
 
-/** What set_order_type returns once it has recorded the choice. */
-export type OrderTypeSet = { orderType: OrderType }
+/**
+ * What set_order_type returns once it has recorded the choice, and, when the
+ * cart isn't empty, the cart line as it stands now: the session may have
+ * started with a cart and no choice, so the line in its instructions had no
+ * delivery fee.
+ */
+export type OrderTypeSet = { orderType: OrderType; cart?: string }
 
 /**
  * What checkout returns once it's on the way to Stripe: what the customer
@@ -265,12 +271,17 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
 
     clear_cart: recovering(() => cart.change({ type: 'clear' })),
 
-    // Not a cart tool, so it returns the choice, not the cart: with the cart
-    // and its total, the agent would read them back after "delivery".
+    // Not a cart tool, so it returns the choice, not the cart summary: with
+    // the whole summary the agent would read it back after "delivery". A
+    // non-empty cart comes back as one line, the tap updates' words, so the
+    // agent has the total with the delivery fee (review round 6: a session
+    // that started with a cart and no choice had only the total without it).
     set_order_type: recovering(({ type }) => {
       if (!isOrderType(type)) return { message: BAD_ORDER_TYPE }
       orderType.set(type)
-      return { orderType: type }
+      const inCart = cart.now()
+      if (Object.keys(inCart).length === 0) return { orderType: type }
+      return { orderType: type, cart: describeCart(summarizeCart(inCart, type)) }
     }),
 
     checkout: recovering(async () => {

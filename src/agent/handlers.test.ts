@@ -1165,6 +1165,20 @@ describe('set_order_type', () => {
     expect(orderType.get()).toBe('pickup')
   })
 
+  it('returns the cart line with the delivery total when the cart has something in it', async () => {
+    const { call, given } = setup()
+    given({ 'pepperoni-pizza-large': 1 })
+
+    expect(await call('set_order_type', { type: 'delivery' })).toEqual({
+      orderType: 'delivery',
+      cart: 'Cart: 1 × Large Pepperoni Pizza. Total $20.99, $24.98 with delivery.',
+    })
+    expect(await call('set_order_type', { type: 'pickup' })).toEqual({
+      orderType: 'pickup',
+      cart: 'Cart: 1 × Large Pepperoni Pizza. Total $20.99.',
+    })
+  })
+
   it('lets checkout go ahead once it is set', async () => {
     const { call, given } = setup()
     given({ fries: 1 })
