@@ -125,7 +125,7 @@ const PAIRING_RULE_WITHOUT_CARD =
 const GROUP_QUESTION =
   '- For a group, if the customer hasn\'t said what they like, ask one short question that covers it, such as "Any vegetarians, and pizza, subs or a mix?", then call plan_group_order with what you know. Never ask a second question before the plan. When you call plan_group_order, say nothing with it: "Let me put something together." is said for you while it plans.'
 const PLAN_SUMMARY =
-  'To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken and that it\'s on screen; don\'t list its lines or do the math out loud.'
+  'To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken (for delivery, with the fee, as every delivery total) and that it\'s on screen; don\'t list its lines or do the math out loud.'
 // In the owner's run the agent had no way to plan to a budget, and called the same plan "the best estimate" (2026-11-11).
 const PLAN_BUDGET =
   "If they give a budget, before the plan or after it, call plan_group_order with it, then say in a few words what it took to fit, from the result's budget, and the total."

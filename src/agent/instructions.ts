@@ -196,7 +196,9 @@ function pairingRule(has: HasTool): string {
 // called $297.56 "the best estimate" (2026-11-11). The app says PLAN_LINE as
 // the plan starts (ClientTools.tsx), so the agent is told not to say a line of
 // its own with the call, which would come before it. Without the tool, the
-// agent plans from each item's serves, as SPEC's draft said.
+// agent plans from each item's serves, as SPEC's draft said. A delivery
+// plan's total names the fee: in the voice check the agent gave the plan's
+// $297.56 alone, though the result had the total with the fee.
 function groupRule(has: HasTool): string {
   if (!has('plan_group_order')) {
     return (
@@ -209,7 +211,7 @@ function groupRule(has: HasTool): string {
     `- For a group, if the customer hasn't said what they like, ask one short question that covers it, such as "${groupQuestion()}", then call plan_group_order with what you know.`,
     'Never ask a second question before the plan.',
     `When you call plan_group_order, say nothing with it: "${PLAN_LINE}" is said for you while it plans.`,
-    `To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken and that it's on screen; don't list its lines or do the math out loud.`,
+    `To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken (for delivery, with the fee, as every delivery total) and that it's on screen; don't list its lines or do the math out loud.`,
     "If they give a budget, before the plan or after it, call plan_group_order with it, then say in a few words what it took to fit, from the result's budget, and the total.",
     has('show_suggestions') &&
       'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.',
