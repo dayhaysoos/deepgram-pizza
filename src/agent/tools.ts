@@ -152,7 +152,7 @@ export const toolDefinitions = [
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'A short heading, such as "Party of 20" or "Goes with the Classic Cheeseburger".' },
+        title: { type: 'string', description: 'A short heading, such as "For your party of 20" or "Goes with the Classic Cheeseburger".' },
         items: lines,
         reason: { type: 'string', description: 'One short line on why these, such as "Two veggie pies for the vegetarians".' },
       },
@@ -162,12 +162,17 @@ export const toolDefinitions = [
   tool({
     name: 'plan_group_order',
     description:
-      "Plan food for a group and show it on the card on screen: mains for about one serving per person, sides to share and a drink each, worked out from the menu. Call it once you know how many people are eating, after one short question about what they like at most. It doesn't add anything to the cart. The card already shows the plan, so don't call show_suggestions after it unless the customer asks for a change.",
+      "Plan food for a group and show it on the card on screen: mains for about one serving per person, sides to share and a drink each, worked out from the menu, and made leaner to fit a budget if they gave one. Call it once you know how many people are eating, after one short question about what they like at most, and again when they give a budget. It doesn't add anything to the cart. The card already shows the plan, so don't call show_suggestions after it unless the customer asks for a change.",
     parameters: {
       type: 'object',
       properties: {
         people: { type: 'integer', minimum: 1, description: 'How many people are eating.' },
         vegetarians: { type: 'integer', minimum: 0, description: 'How many of them are vegetarian. Leave out if none.' },
+        budget: {
+          type: 'number',
+          description:
+            'The most the customer wants to spend, in dollars, only if they said: 250 for "about two fifty". For delivery it counts the delivery fee.',
+        },
         preferences: {
           type: 'object',
           description: 'Only what the customer said. Leave out the rest.',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { categories, findItem, findVariant, mainCategories, menu, spokenName, type Category } from '../menu/menu'
-import { MAX_LINE_QUANTITY } from '../shop'
+import { DELIVERY_FEE, MAX_LINE_QUANTITY } from '../shop'
 import type { ItemQuantity, Quantities } from './cartSummary'
 import { checkLinesToAdd } from './handlers'
 import { planGroupOrder, sizesOf, type GroupOrderRequest, type GroupPlan } from './planGroupOrder'
@@ -72,7 +72,7 @@ describe('planGroupOrder', () => {
     expect(count(result.lines.filter(inCategory('drinks')))).toBe(30)
 
     expect(result).toEqual({
-      title: 'Party of 30',
+      title: 'For your party of 30',
       reason: 'Mains for 32 (12 vegetarian), sides to share and a drink each.',
       summary: '8 large pizzas, 3 of them vegetarian, plus garlic knots and a drink each',
       lines: [
@@ -89,7 +89,7 @@ describe('planGroupOrder', () => {
 
   it('plans a party of 20 with no vegetarians as 5 large pizzas of four kinds, the popular ones first', () => {
     expect(plan({ people: 20 })).toEqual({
-      title: 'Party of 20',
+      title: 'For your party of 20',
       reason: 'Mains for 20, sides to share and a drink each.',
       summary: '5 large pizzas, plus garlic knots and a drink each',
       lines: [
@@ -115,7 +115,7 @@ describe('planGroupOrder', () => {
 
   it('plans 4 as two medium pizzas of two kinds, which feed as many as one large', () => {
     expect(plan({ people: 4 })).toEqual({
-      title: 'Party of 4',
+      title: 'For your party of 4',
       reason: 'Mains for 4, a side and a drink each.',
       summary: '2 medium pizzas, plus garlic knots and a drink each',
       lines: [
@@ -144,7 +144,7 @@ describe('planGroupOrder', () => {
 
   it('plans 1 as a medium, the smallest size, rather than a large', () => {
     expect(plan({ people: 1 })).toEqual({
-      title: 'Party of 1',
+      title: 'Just for you',
       reason: 'Mains for 2, a side and a drink.',
       summary: '1 medium pizza, plus garlic knots and a drink',
       lines: [
@@ -489,5 +489,134 @@ describe("planGroupOrder's words come from the menu", () => {
     )
     const roles = new Map(categories.map((category) => [category.id as Category, 'plan' in category ? category.plan : undefined]))
     for (const category of planned) expect(roles.get(category), category).toBeDefined()
+  })
+})
+
+describe('planGroupOrder with a budget', () => {
+  /** What the lines cost, in cents, at menu prices. */
+  function cost(lines: ItemQuantity[]): number {
+    return lines.reduce((sum, line) => sum + found(line.id).variant.price * line.quantity, 0)
+  }
+
+  function planFor(request: GroupOrderRequest, orderType: 'pickup' | 'delivery'): GroupPlan {
+    const result = planGroupOrder(request, {}, orderType)
+    if ('message' in result) throw new Error(`No plan for ${JSON.stringify(request)}: ${result.message}`)
+    return result
+  }
+
+  it('leaves the plan as it is when it fits, and says so', () => {
+    const result = planFor({ people: 30, vegetarians: 10, budget: 300 }, 'pickup')
+    const normal = plan({ people: 30, vegetarians: 10 })
+
+    expect(result.lines).toEqual(normal.lines)
+    expect(result.summary).toBe(normal.summary)
+    expect(result.reason).toBe(`${normal.reason} Within your $300.00 budget.`)
+    expect(result.budget).toBe("It's within the $300.00 budget as it is.")
+  })
+
+  it("fits the owner's party of 30 into $250 with delivery: cheaper pizzas and sodas for 17, the same servings", () => {
+    const result = planFor({ people: 30, vegetarians: 10, budget: 250 }, 'delivery')
+
+    expect(result).toEqual({
+      title: 'For your party of 30',
+      reason: 'Mains for 32 (20 vegetarian), sides to share and drinks for 17. Within your $250.00 budget, delivery included.',
+      summary: '8 large pizzas, 5 of them vegetarian, plus garlic knots and drinks for 17',
+      lines: [
+        { id: 'cheese-pizza-large', quantity: 2 },
+        { id: 'pepperoni-pizza-large', quantity: 3 },
+        { id: 'margherita-pizza-large', quantity: 1 },
+        { id: 'white-pizza-large', quantity: 2 },
+        { id: 'garlic-knots', quantity: 6 },
+        { id: 'soda', quantity: 17 },
+      ],
+      budget: 'To stay within the $250.00 budget, delivery included: cheaper pizzas and drinks for 17 of the 30.',
+    })
+    expect(cost(result.lines) + DELIVERY_FEE).toBe(24818)
+  })
+
+  it('counts the delivery fee for delivery only', () => {
+    // The plan costs $297.56: within $300 for pickup, over it with the $3.99 fee.
+    expect(planFor({ people: 30, vegetarians: 10, budget: 300 }, 'pickup').budget).toBe("It's within the $300.00 budget as it is.")
+    const delivery = planFor({ people: 30, vegetarians: 10, budget: 300 }, 'delivery')
+    expect(delivery.budget).toMatch(/^To stay within the \$300\.00 budget, delivery included: /)
+    expect(cost(delivery.lines) + DELIVERY_FEE).toBeLessThanOrEqual(30000)
+  })
+
+  it("cuts in the owner's order: cheapest drink, cheaper mains, fewer drinks, then fewer sides, never the mains", () => {
+    const normal = plan({ people: 30, vegetarians: 10 })
+    const sides = (lines: ItemQuantity[]) => count(lines.filter(inCategory('sides')))
+    const drinks = (lines: ItemQuantity[]) => count(lines.filter(inCategory('drinks')))
+
+    for (let dollars = 170; dollars <= 310; dollars += 5) {
+      const label = `a $${dollars} budget`
+      const result = planGroupOrder({ people: 30, vegetarians: 10, budget: dollars }, {}, 'delivery')
+      if ('message' in result) throw new Error(`No plan for ${label}: ${result.message}`)
+      const mains = result.lines.filter(isMain)
+
+      expect(cost(result.lines) + DELIVERY_FEE, label).toBeLessThanOrEqual(dollars * 100)
+      expect(servings(mains), label).toBe(servings(normal.lines.filter(isMain)))
+      expect(servings(mains.filter(isVegetarian)), label).toBeGreaterThanOrEqual(10)
+      // Sides go only once the drinks have all gone.
+      if (sides(result.lines) < sides(normal.lines)) expect(drinks(result.lines), label).toBe(0)
+      // Fewer drinks than one each are the cheapest drink, as many as a line holds, then the next.
+      const drinkCount = drinks(result.lines)
+      if (drinkCount > 0 && drinkCount < 30) {
+        const sodas = Math.min(drinkCount, MAX_LINE_QUANTITY)
+        expect(result.lines.filter(inCategory('drinks')), label).toEqual([
+          { id: 'soda', quantity: sodas },
+          ...(drinkCount > sodas ? [{ id: 'lemonade', quantity: drinkCount - sodas }] : []),
+        ])
+      }
+    }
+  })
+
+  it('takes the cheapest drink as far as a line holds before the next, when that is enough', () => {
+    // The normal plan's 15 sodas and 15 lemonades cost $89.70; 20 sodas and 10 lemonades, $84.70.
+    const normal = plan({ people: 30, vegetarians: 10 })
+    const result = planFor({ people: 30, vegetarians: 10, budget: (cost(normal.lines) - 400) / 100 }, 'pickup')
+
+    expect(result.lines.filter(inCategory('drinks'))).toEqual([
+      { id: 'soda', quantity: 20 },
+      { id: 'lemonade', quantity: 10 },
+    ])
+    expect(result.lines.filter(isMain)).toEqual(normal.lines.filter(isMain))
+    expect(result.budget).toBe('To stay within the $293.56 budget: cheaper drinks.')
+  })
+
+  it('keeps what the customer asked for by name, however tight the budget', () => {
+    const result = planFor({ people: 10, budget: 70, preferences: { include: ['fries', 'lemonade'] } }, 'pickup')
+    const ids = result.lines.map(({ id }) => id)
+
+    expect(ids).toContain('fries')
+    expect(ids).toContain('lemonade')
+    expect(cost(result.lines)).toBeLessThanOrEqual(7000)
+  })
+
+  it('plans without drinks when they said no drinks, cutting only mains kinds and sides', () => {
+    const result = planFor({ people: 30, vegetarians: 10, budget: 200, preferences: { drinks: false } }, 'delivery')
+
+    expect(result.lines.filter(inCategory('drinks'))).toEqual([])
+    expect(result.budget).not.toContain('drinks')
+    expect(cost(result.lines) + DELIVERY_FEE).toBeLessThanOrEqual(20000)
+  })
+
+  it('says the least a plan can cost when the budget is under it, counting the fee for delivery', () => {
+    // The cheapest 8 large pizzas that still give the vegetarians 3, $165.92, and the fee.
+    expect(planGroupOrder({ people: 30, vegetarians: 10, budget: 150 }, {}, 'delivery')).toEqual({
+      message:
+        "That's under what feeding 30 can cost: the least is $169.91 with delivery (one hundred sixty-nine dollars and ninety-one cents), with the cheapest pizzas and no other sides or drinks. Tell the customer, and ask whether that works or whether to plan without the budget.",
+    })
+    expect(planGroupOrder({ people: 4, budget: 30 }, {}, 'pickup')).toEqual({
+      message:
+        "That's under what feeding 4 can cost: the least is $33.98 (thirty-three ninety-eight), with the cheapest pizzas and no other sides or drinks. Tell the customer, and ask whether that works or whether to plan without the budget.",
+    })
+  })
+
+  it('turns down a budget that is not an amount, and takes null as none', () => {
+    const bad = 'budget has to be the most they want to spend, in dollars above zero, such as 250.'
+    expect(message({ people: 20, budget: 0 })).toBe(bad)
+    expect(message({ people: 20, budget: -5 })).toBe(bad)
+    expect(planGroupOrder({ people: 20, budget: '250' })).toEqual({ message: bad })
+    expect(planGroupOrder({ people: 20, budget: null })).toEqual(plan({ people: 20 }))
   })
 })

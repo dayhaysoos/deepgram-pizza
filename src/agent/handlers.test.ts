@@ -3,7 +3,7 @@ import type { CheckoutResult } from '../checkout/checkout'
 import { menu, products } from '../menu/menu'
 import { createCartChanges } from './cartChanges'
 import { quantitiesOf, summarizeCart } from './cartSummary'
-import { checkLinesToAdd, createToolHandlers, type Suggestions, type ToolPorts, type ToolResult } from './handlers'
+import { checkLinesToAdd, createToolHandlers, PLAN_ON_SCREEN, type Suggestions, type ToolPorts, type ToolResult } from './handlers'
 import { createOrderTypeStore } from './orderType'
 import { planGroupOrder } from './planGroupOrder'
 import { renderedStore } from './testing'
@@ -855,13 +855,14 @@ describe('plan_group_order', () => {
     if ('message' in plan) throw new Error(plan.message)
     const priced = summarizeCart(Object.fromEntries(plan.lines.map(({ id, quantity }) => [id, quantity])))
     expect(ui.showSuggestions).toHaveBeenCalledWith({
-      title: 'Party of 30',
+      title: 'For your party of 30',
       reason: 'Mains for 32 (12 vegetarian), sides to share and a drink each.',
       lines: priced.lines,
       total: priced.total,
     })
     expect(result).toEqual({
       shown: true,
+      note: PLAN_ON_SCREEN,
       summary: '8 large pizzas, 3 of them vegetarian, plus garlic knots and a drink each',
       total: priced.total,
       totalSpoken: priced.totalSpoken,
@@ -869,6 +870,39 @@ describe('plan_group_order', () => {
     })
     expect(result).toMatchObject({ lines: expect.arrayContaining([{ id: 'pepperoni-pizza-large', name: 'Large Pepperoni Pizza', quantity: 3 }]) })
     noCartChanges()
+  })
+
+  // In the owner's run on 2026-11-11 the agent showed each plan again with show_suggestions, despite its rules.
+  it("says in its result that the card shows the plan, so the agent doesn't show it again", async () => {
+    const { call } = setup()
+    expect(PLAN_ON_SCREEN).toBe("The card on screen shows this plan now, so don't call show_suggestions for it.")
+    expect(await call('plan_group_order', { people: 8 })).toMatchObject({ note: PLAN_ON_SCREEN })
+  })
+
+  it('for delivery, gives the total with the fee too, and counts the fee against a budget', async () => {
+    const { call, orderType } = setup()
+    orderType.set('delivery')
+
+    const result = await call('plan_group_order', { people: 30, vegetarians: 10, budget: 250 })
+
+    const plan = planGroupOrder({ people: 30, vegetarians: 10, budget: 250 }, {}, 'delivery')
+    if ('message' in plan) throw new Error(plan.message)
+    const priced = summarizeCart(Object.fromEntries(plan.lines.map(({ id, quantity }) => [id, quantity])), 'delivery')
+    expect(result).toMatchObject({
+      budget: 'To stay within the $250.00 budget, delivery included: cheaper pizzas and drinks for 17 of the 30.',
+      total: '$244.19',
+      delivery: { fee: '$3.99', feeSpoken: 'three ninety-nine', totalWithDelivery: '$248.18', totalWithDeliverySpoken: 'two hundred forty-eight dollars and eighteen cents' },
+    })
+    expect(result).toMatchObject({ delivery: priced.delivery })
+  })
+
+  it('for pickup, or before the choice, has no delivery in its result, and no budget unless one was given', async () => {
+    const { call, orderType } = setup()
+    expect(await call('plan_group_order', { people: 8 })).not.toHaveProperty('delivery')
+    expect(await call('plan_group_order', { people: 8 })).not.toHaveProperty('budget')
+    orderType.set('pickup')
+    expect(await call('plan_group_order', { people: 8, budget: 500 })).toMatchObject({ budget: "It's within the $500.00 budget as it is." })
+    expect(await call('plan_group_order', { people: 8, budget: 500 })).not.toHaveProperty('delivery')
   })
 
   it("passes on the planner's message, and shows nothing, when it can't plan", async () => {

@@ -15,7 +15,8 @@ import type { ToolResult } from '../agent/handlers'
 import { planGroupOrder, type GroupOrderRequest } from '../agent/planGroupOrder'
 import { toolDefinitions, type ToolName } from '../agent/tools'
 import { defaultVariant, findItem } from '../menu/menu'
-import { useCartChanges, useToolHandlers } from '../pageContext'
+import { useCartChanges, useOrderTypeStore, useToolHandlers } from '../pageContext'
+import type { OrderType } from '../shop'
 import { SessionLogSection } from './SessionLogSection'
 import './ToolsPanel.css'
 
@@ -27,8 +28,8 @@ type Args = Record<string, unknown>
 type Preset = {
   label: string
   tool: ToolName
-  /** The arguments, or how to work them out from the cart as it is when the preset runs. */
-  args: Args | ((inCart: Quantities) => Args)
+  /** The arguments, or how to work them out from the cart and pickup or delivery as they are when the preset runs. */
+  args: Args | ((inCart: Quantities, orderType: OrderType | null) => Args)
   /** Runs only on an empty cart. With items in it, checkout would leave for Stripe. */
   needsEmptyCart?: boolean
 }
@@ -47,13 +48,16 @@ const pairingsTitle = `Goes great with the ${cheeseburger?.name ?? 'cheeseburger
 // each out from menu.json. Each one's Add all of that plans it again for the
 // cart as it is then, as the handler did (the plan leaves room for what's in
 // the cart), so it adds the lines on the card, which closes, as it does for
-// "add all of that" by voice.
+// "add all of that" by voice. The owner's group on a $250 budget, as they asked
+// for it in their next run: for delivery, the budget counts the fee, so it plans
+// for pickup or delivery as chosen then.
 const partyOf30: GroupOrderRequest = { people: 30, vegetarians: 10 }
+const partyOf30On250: GroupOrderRequest = { ...partyOf30, budget: 250 }
 const partyOf20: GroupOrderRequest = { people: 20 }
 
-function addAllOf(party: GroupOrderRequest): (inCart: Quantities) => Args {
-  return (inCart) => {
-    const plan = planGroupOrder(party, inCart)
+function addAllOf(party: GroupOrderRequest): (inCart: Quantities, orderType: OrderType | null) => Args {
+  return (inCart, orderType) => {
+    const plan = planGroupOrder(party, inCart, orderType)
     return { items: 'lines' in plan ? plan.lines : [] }
   }
 }
@@ -82,6 +86,8 @@ const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = 
       },
       { label: 'Party of 30, 10 vegetarian', tool: 'plan_group_order', args: partyOf30 },
       { label: 'Add all of that (30)', tool: 'add_items', args: addAllOf(partyOf30) },
+      { label: 'Party of 30, 10 vegetarian, $250', tool: 'plan_group_order', args: partyOf30On250 },
+      { label: 'Add all of that (30, $250)', tool: 'add_items', args: addAllOf(partyOf30On250) },
       { label: 'Party of 20', tool: 'plan_group_order', args: partyOf20 },
       { label: 'Add all of that (20)', tool: 'add_items', args: addAllOf(partyOf20) },
     ],
@@ -103,7 +109,7 @@ const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = 
 const examples: Record<ToolName, Args> = {
   find_menu_items: { tags: ['vegetarian'] },
   show_suggestions: { title: pairingsTitle, items: pairings },
-  plan_group_order: { people: 12, vegetarians: 3, preferences: { mains: 'mix', spicy: true } },
+  plan_group_order: { people: 12, vegetarians: 3, budget: 150, preferences: { mains: 'mix', spicy: true } },
   add_item: { id: 'margherita-pizza-large', quantity: 2 },
   add_items: { items: [{ id: 'fries', quantity: 1 }, { id: 'soda', quantity: 2 }] },
   set_quantity: { id: 'margherita-pizza-large', quantity: 1 },
@@ -122,6 +128,7 @@ const formatArgs = (args: Args) => JSON.stringify(args, null, 2)
 export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
   const handlers = useToolHandlers()
   const cartChanges = useCartChanges()
+  const orderType = useOrderTypeStore()
   const cartIsEmpty = useShoppingCart((cart) => cart.cartCount === 0)
   const [open, setOpen] = useState(true)
   const [tool, setTool] = useState<ToolName>('find_menu_items')
@@ -155,7 +162,7 @@ export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
   }
 
   function runPreset(preset: Preset) {
-    const text = formatArgs(typeof preset.args === 'function' ? preset.args(cartChanges.now()) : preset.args)
+    const text = formatArgs(typeof preset.args === 'function' ? preset.args(cartChanges.now(), orderType.get()) : preset.args)
     setTool(preset.tool)
     setArgsText(text)
     run(preset.tool, text)

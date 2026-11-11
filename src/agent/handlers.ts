@@ -29,6 +29,7 @@ import {
   quantityOf,
   summarizeCart,
   type CartSummary,
+  type DeliveryCharge,
   type ItemQuantity,
   type Quantities,
   describeCart,
@@ -105,10 +106,24 @@ export type SuggestionsShown = { shown: true } & Pick<CartSummary, 'total' | 'to
  * agent to sum it up in a sentence and to change it with show_suggestions.
  */
 export type PlanShown = SuggestionsShown & {
+  /** PLAN_ON_SCREEN: the card shows it, so the agent needn't show it again. */
+  note: string
   /** "8 large pizzas, 3 of them vegetarian, plus garlic knots and a drink each" */
   summary: string
+  /** With a budget: what it took to fit it (planGroupOrder.ts). */
+  budget?: string
+  /** For delivery: the fee and the plan's total with it, as the cart tools give them. */
+  delivery?: DeliveryCharge
   lines: Array<{ id: string; name: string; quantity: number }>
 }
+
+/**
+ * In plan_group_order's result, since the tool's description and the agent's
+ * rules weren't enough: in the owner's run on 2026-11-11 the agent still
+ * called show_suggestions with the plan's lines after both plans, and each
+ * repeat put a second or more of silence before it spoke.
+ */
+export const PLAN_ON_SCREEN = "The card on screen shows this plan now, so don't call show_suggestions for it."
 
 /**
  * What set_order_type returns once it has recorded the choice, and, when the
@@ -223,13 +238,26 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
     // The code works out the plan (planGroupOrder.ts) and the card shows it, as
     // show_suggestions would; the agent only sums it up. It doesn't change the
     // cart, but it leaves room for what's in it, so "add all of that" fits.
+    // For delivery, a budget counts the fee, and the result has the plan's
+    // total with it, as a cart tool's would.
     plan_group_order: recovering((args) => {
-      const plan = planGroupOrder(args, cart.now())
+      const type = orderType.get()
+      const plan = planGroupOrder(args, cart.now(), type)
       if ('message' in plan) return { message: `Nothing was shown. ${plan.message}` }
       const shown = suggest(plan.title, plan.reason, plan.lines, 'plan_group_order')
       if ('message' in shown) return shown
       const lines = shown.lines.map(({ id, name, quantity }) => ({ id, name, quantity }))
-      return { shown: true, summary: plan.summary, total: shown.total, totalSpoken: shown.totalSpoken, lines }
+      const { delivery } = summarizeCart(applyCartChange({}, { type: 'add', lines: plan.lines }), type)
+      return {
+        shown: true,
+        note: PLAN_ON_SCREEN,
+        summary: plan.summary,
+        ...(plan.budget !== undefined && { budget: plan.budget }),
+        total: shown.total,
+        totalSpoken: shown.totalSpoken,
+        ...(delivery && { delivery }),
+        lines,
+      }
     }),
 
     add_item: recovering((args) => {

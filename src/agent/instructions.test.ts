@@ -110,7 +110,7 @@ const SPOKEN_TOTAL_RULE =
   '- Say every total exactly as the totalSpoken in the tool result gives it, word for word, even a long one ("two hundred ninety-seven dollars and fifty-six cents"); never turn the digits in total into words yourself.'
 // The agent said "forty-one ninety-eight" for a delivery order, and Stripe charged $45.97.
 const DELIVERY_TOTAL_RULE =
-  '- For delivery, a cart in a tool result also has delivery. Every time you say its total, after a change too, name the fee and give the total with it, each word for word: "forty-one ninety-eight, plus three ninety-nine for delivery, forty-five ninety-seven in all" (totalSpoken, feeSpoken, totalWithDeliverySpoken).'
+  '- For delivery, a cart or a plan in a tool result also has delivery. Every time you say its total, after a change too, name the fee and give the total with it, each word for word: "forty-one ninety-eight, plus three ninety-nine for delivery, forty-five ninety-seven in all" (totalSpoken, feeSpoken, totalWithDeliverySpoken).'
 const SIZE_RULE = '- If a sized item has no size, ask which size before adding it.'
 const FIND_RULE_START =
   '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.'
@@ -125,11 +125,14 @@ const GROUP_QUESTION =
   '- For a group, if the customer hasn\'t said what they like, ask one short question that covers it, such as "Any vegetarians, and pizza, subs or a mix?", then call plan_group_order with what you know. Never ask a second question before the plan.'
 const PLAN_SUMMARY =
   'To present the plan, before anything is added, sum it up from its summary in one short sentence, the way a person would ("Eight large pizzas, three of them veggie, plus garlic knots and sodas"), then say its totalSpoken and that it\'s on screen; don\'t list its lines or do the math out loud.'
+// In the owner's run the agent had no way to plan to a budget, and called the same plan "the best estimate" (2026-11-11).
+const PLAN_BUDGET =
+  "If they give a budget, before the plan or after it, call plan_group_order with it, then say in a few words what it took to fit, from the result's budget, and the total."
 const PLAN_CHANGES =
   'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.'
 const PLAN_ADD = 'Add it with add_items only after they agree, then name every line it added, one by one, as after any change.'
 const PLAN_ADD_BY_TAPPING = 'Tell them they can add it by tapping Add all on the card.'
-const GROUP_RULE = [GROUP_QUESTION, PLAN_SUMMARY, PLAN_CHANGES, PLAN_ADD].join(' ')
+const GROUP_RULE = [GROUP_QUESTION, PLAN_SUMMARY, PLAN_BUDGET, PLAN_CHANGES, PLAN_ADD].join(' ')
 const OFFER_RULE =
   '- Offer one pairing on your own at most once per order, after the first item is added, in one short question. When the customer asks for suggestions, always help.'
 const VIEW_CART_RULE =
@@ -302,7 +305,7 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(rules[0]).toBe(
       "- You can't add, change or remove anything in the cart right now. If the customer asks, start by saying you can't do that yet, then tell them they can tap Add on the menu, all in one sentence. Never say you're adding, or that you did.",
     )
-    expect(rules).toContain([GROUP_QUESTION, PLAN_SUMMARY, PLAN_CHANGES, PLAN_ADD_BY_TAPPING].join(' '))
+    expect(rules).toContain([GROUP_QUESTION, PLAN_SUMMARY, PLAN_BUDGET, PLAN_CHANGES, PLAN_ADD_BY_TAPPING].join(' '))
     expect(rulesOf(agentInstructions(emptyCart, allBut('plan_group_order', ...CART_TOOLS)))).toContain(
       "- For a group, ask at most one question about preferences, then plan with each item's serves count: about one serving per person from mains, plus sides and drinks. Show the plan with show_suggestions, say the total, and tell them they can add it by tapping Add on the menu.",
     )
@@ -315,7 +318,7 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     // The rest of the prompt doesn't change with it.
     expect(agentInstructions(emptyCart, allBut('plan_group_order')).replace(GROUP_RULE_WITHOUT_PLANNER, GROUP_RULE)).toBe(fullPrompt)
     // Each part follows its own tool.
-    expect(groupRule(only('plan_group_order'))).toBe([GROUP_QUESTION, PLAN_SUMMARY, PLAN_ADD_BY_TAPPING].join(' '))
+    expect(groupRule(only('plan_group_order'))).toBe([GROUP_QUESTION, PLAN_SUMMARY, PLAN_BUDGET, PLAN_ADD_BY_TAPPING].join(' '))
   })
 
   // In step 5's Check the agent asked "how many vegetarians or spicy?", then "pizza, subs or a mix?", before planning.
@@ -411,11 +414,11 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(DELIVERY_TOTAL_RULE).toContain(
       `"${totalSpoken}, plus ${delivery?.feeSpoken} for delivery, ${delivery?.totalWithDeliverySpoken} in all"`,
     )
-    // Only with a tool that returns the cart; the card's totals have no fee.
-    for (const name of [...CART_TOOLS, 'view_cart'] as const) {
+    // Only with a tool that returns the cart, or a plan, which a budget counts the fee for; the card's totals have no fee.
+    for (const name of [...CART_TOOLS, 'view_cart', 'plan_group_order'] as const) {
       expect(rulesOf(agentInstructions(emptyCart, only(name))), name).toContain(DELIVERY_TOTAL_RULE)
     }
-    for (const tools of [[], only('show_suggestions', 'plan_group_order', 'find_menu_items', 'set_order_type', 'checkout')]) {
+    for (const tools of [[], only('show_suggestions', 'find_menu_items', 'set_order_type', 'checkout')]) {
       expect(rulesOf(agentInstructions(emptyCart, tools))).not.toContain(DELIVERY_TOTAL_RULE)
     }
   })
@@ -511,9 +514,11 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(toolDefinitions.find((tool) => tool.name === 'set_order_type')?.description).toContain('once the customer says which')
   })
 
-  // Deepgram's limit, with every product in the cart, is checked in src/voice/agentSettings.test.ts.
-  it('stays compact: under 12,000 characters with an empty cart', () => {
-    expect(prompt.length).toBeLessThan(12_000)
-    expect(fullPrompt.length).toBeLessThan(12_000)
+  // Deepgram's limit, with every product in the cart, is checked in src/voice/agentSettings.test.ts. This is
+  // our own guard against the rules growing unnoticed: 12,000 until the budget and the line said before a
+  // plan (2026-11-11) took the full prompt just past it.
+  it('stays compact: under 13,000 characters with an empty cart', () => {
+    expect(prompt.length).toBeLessThan(13_000)
+    expect(fullPrompt.length).toBeLessThan(13_000)
   })
 })
