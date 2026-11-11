@@ -11,9 +11,9 @@
 //
 // One session per press. AgentProvider creates its AgentSession once, from the
 // `config` of its first render, and ignores later changes. The agent's
-// instructions have to carry the cart as it is when the customer presses the
-// button, so each press mounts a new provider (a new `key`) with a config
-// built at that moment, and ending the session unmounts it, which hangs up and
+// instructions have to carry the cart, and its greeting pickup or delivery, as
+// they are when the customer presses the button, so each press mounts a new
+// provider (a new `key`) with a config built at that moment, and ending the session unmounts it, which hangs up and
 // stops the microphone and the speaker. Without a session there's no provider
 // at all: nothing connects, and nothing asks for the microphone, until a press.
 //
@@ -42,7 +42,7 @@ import {
 import { useShoppingCart } from 'use-shopping-cart'
 import { quantitiesOf, summarizeCart } from '../agent/cartSummary'
 import { toolDefinitions } from '../agent/tools'
-import { VoiceHandleContext, VoiceSessionControlsContext, useVoiceSessionControls } from '../pageContext'
+import { VoiceHandleContext, VoiceSessionControlsContext, useOrderTypeStore, useVoiceSessionControls } from '../pageContext'
 import { activityLabel } from './AgentActivity'
 import { agentSettings } from './agentSettings'
 import { Captions } from './Captions'
@@ -162,12 +162,13 @@ function DeepgramSession({ sessionNumber, agentSpeaking, onConversation, onLive 
     [onConversation, sessionNumber],
   )
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
+  const orderType = useOrderTypeStore()
   // Built once. This session mounts right after the press, so the agent
-  // starts with the cart as it is at the press. Its functions are the tools
-  // ClientTools registers below.
+  // starts with the cart and pickup or delivery as they are at the press. Its
+  // functions are the tools ClientTools registers below.
   const [config] = useState<AgentSessionConfig>(() => ({
     auth: { tokenFactory: () => fetchToken(send) },
-    agent: agentSettings(summarizeCart(quantitiesOf(cartDetails)), toolDefinitions),
+    agent: agentSettings(summarizeCart(quantitiesOf(cartDetails)), toolDefinitions, orderType.get()),
   }))
 
   return (

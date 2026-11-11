@@ -61,13 +61,14 @@ function addAllOf(party: GroupOrderRequest): (inCart: Quantities) => Args {
 const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = [
   {
     title: 'Golden path',
-    note: "Run them in order. Check out returns { ok: true } and goes straight to Stripe's test checkout: with voice, it will wait for the agent to finish speaking first.",
+    note: "Run them in order. Check out returns { ok: true } and goes straight to Stripe's test checkout: with voice, it will wait for the agent to finish speaking first. Without step 1 it asks for pickup or delivery instead.",
     presets: [
-      { label: "1. What's vegetarian?", tool: 'find_menu_items', args: { tags: ['vegetarian'] } },
-      { label: '2. Add two large margheritas', tool: 'add_item', args: { id: 'margherita-pizza-large', quantity: 2 } },
-      { label: '3. Make that one', tool: 'set_quantity', args: { id: 'margherita-pizza-large', quantity: 1 } },
-      { label: "4. What's my total?", tool: 'view_cart', args: {} },
-      { label: '5. Check out', tool: 'checkout', args: {} },
+      { label: '1. Delivery, please', tool: 'set_order_type', args: { type: 'delivery' } },
+      { label: "2. What's vegetarian?", tool: 'find_menu_items', args: { tags: ['vegetarian'] } },
+      { label: '3. Add two large margheritas', tool: 'add_item', args: { id: 'margherita-pizza-large', quantity: 2 } },
+      { label: '4. Make that one', tool: 'set_quantity', args: { id: 'margherita-pizza-large', quantity: 1 } },
+      { label: "5. What's my total?", tool: 'view_cart', args: {} },
+      { label: '6. Check out', tool: 'checkout', args: {} },
     ],
   },
   {
@@ -109,6 +110,7 @@ const examples: Record<ToolName, Args> = {
   remove_item: { id: 'margherita-pizza-large' },
   view_cart: {},
   clear_cart: {},
+  set_order_type: { type: 'delivery' },
   checkout: {},
 }
 
@@ -254,8 +256,8 @@ export default function ToolsPanel({ updates }: { updates: LoggedUpdate[] }) {
           <h3>Updates sent to the agent</h3>
           <p className="tools-panel-note">
             Each goes to the agent with UpdatePrompt while a voice session is on, and is logged here with a session
-            or without. Tap Add on a menu card, − or + or Remove in the cart, or Add or Add all on the suggestion
-            card.
+            or without. Tap Add on a menu card, − or + or Remove or Pickup or Delivery in the cart, or Add or Add all
+            on the suggestion card.
           </p>
           {updates.length === 0 ? (
             <p>None yet.</p>

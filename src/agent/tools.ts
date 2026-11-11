@@ -7,9 +7,10 @@
 // menu updates them. This module imports nothing from React or the server, so
 // evals can load it on its own.
 //
-// Tools that change the cart or leave the page set `defer_until_eot`: Deepgram
-// then calls them only once the customer's turn is over, not while they may
-// still be talking (https://developers.deepgram.com/docs/voice-agent-speculative-replies).
+// Tools that change the cart or pickup or delivery, or leave the page, set
+// `defer_until_eot`: Deepgram then calls them only once the customer's turn is
+// over, not while they may still be talking
+// (https://developers.deepgram.com/docs/voice-agent-speculative-replies).
 // view_cart and plan_group_order set it too, because they read the cart: a
 // call that doesn't wait runs before the deferred ones in the same turn, so
 // "add fries, what's my total?" would read the cart without the fries. The
@@ -18,7 +19,7 @@
 // screen, which the next call puts right.
 
 import { categories, mainCategories, menu, products, tags, type MainCategory } from '../menu/menu'
-import { MAX_LINE_QUANTITY } from '../shop'
+import { MAX_LINE_QUANTITY, ORDER_TYPES } from '../shop'
 import { orList } from './text'
 
 /** The most lines add_items and show_suggestions take in one call, and a group plan holds. */
@@ -197,6 +198,16 @@ export const toolDefinitions = [
     name: 'clear_cart',
     description: 'Empty the cart, when the customer wants to start over.',
     parameters: noParameters,
+    defer_until_eot: true,
+  }),
+  tool({
+    name: 'set_order_type',
+    description: 'Record whether the order is for pickup or delivery, once the customer says which. The cart on screen shows it.',
+    parameters: {
+      type: 'object',
+      properties: { type: { type: 'string', enum: [...ORDER_TYPES], description: 'pickup or delivery.' } },
+      required: ['type'],
+    },
     defer_until_eot: true,
   }),
   tool({

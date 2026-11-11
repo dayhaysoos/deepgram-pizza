@@ -17,6 +17,7 @@ describe('answerToolCall', () => {
     const handlers = createToolHandlers({
       cart: { now: () => ({}), cartDetails: () => ({}), change: () => summarizeCart({}) },
       ui: { highlight() {}, showSuggestions() {}, closeSuggestions() {}, isShowingSuggestions: () => false, openCart() {}, goToCheckout() {} },
+      orderType: { get: () => null, set() {} },
       checkout: async () => ({ message: 'unused' }),
     })
 

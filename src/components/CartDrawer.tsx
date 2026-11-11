@@ -4,6 +4,7 @@ import { findVariant, imagePath } from '../menu/menu'
 import { useCartChanges } from '../pageContext'
 import { MAX_LINE_QUANTITY } from '../shop'
 import { CheckoutButton } from './CheckoutButton'
+import { OrderTypeSwitch } from './OrderTypeSwitch'
 
 type CartDrawerProps = {
   /** Gets focus back when the drawer closes (the header's cart button). */
@@ -64,21 +65,25 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
             <p>Pick something from the menu and press Add.</p>
           </div>
         ) : (
-          <>
-            <ul className="cart-lines">
-              {lines.map((line) => (
-                <CartLine key={line.id} line={line} />
-              ))}
-            </ul>
-            <div className="drawer-footer">
+          <ul className="cart-lines">
+            {lines.map((line) => (
+              <CartLine key={line.id} line={line} />
+            ))}
+          </ul>
+        )}
+        {/* Pickup or delivery shows even with nothing in the cart: the agent asks it first. */}
+        <div className="drawer-footer">
+          <OrderTypeSwitch />
+          {lines.length > 0 && (
+            <>
               <p className="drawer-total">
                 <span>Total</span>
                 <span>{formattedTotalPrice}</span>
               </p>
               <CheckoutButton />
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

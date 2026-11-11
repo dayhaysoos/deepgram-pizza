@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { categories, mainCategories, menu, products, tags } from '../menu/menu'
-import { MAX_LINE_QUANTITY } from '../shop'
+import { MAX_LINE_QUANTITY, ORDER_TYPES } from '../shop'
 import { GROUP_MAINS, MAX_LINES_PER_CALL, toolDefinitions, type ToolDefinition } from './tools'
 
 function tool(name: string): ToolDefinition {
@@ -29,6 +29,7 @@ describe('toolDefinitions', () => {
       'remove_item',
       'view_cart',
       'clear_cart',
+      'set_order_type',
       'checkout',
     ])
   })
@@ -46,12 +47,23 @@ describe('toolDefinitions', () => {
     }
   })
 
-  it("waits for the end of the customer's turn on the tools that change or read the cart, or leave the page", () => {
+  it("waits for the end of the customer's turn on the tools that change state or read the cart, or leave the page", () => {
     // view_cart and plan_group_order wait too, since they read the cart: sent with a deferred add_item, they'd otherwise run before it and miss it.
     // Deepgram calls the others as soon as the LLM asks, even if the customer goes on talking:
     // they read the menu, or change what's on screen, which the next call puts right.
     const deferred = toolDefinitions.filter((definition) => definition.defer_until_eot === true).map(({ name }) => name)
-    expect(deferred).toEqual(['plan_group_order', 'add_item', 'add_items', 'set_quantity', 'remove_item', 'view_cart', 'clear_cart', 'checkout'])
+    // set_order_type changes state too: checkout reads it.
+    expect(deferred).toEqual([
+      'plan_group_order',
+      'add_item',
+      'add_items',
+      'set_quantity',
+      'remove_item',
+      'view_cart',
+      'clear_cart',
+      'set_order_type',
+      'checkout',
+    ])
     for (const definition of toolDefinitions) {
       if (!deferred.includes(definition.name)) expect(definition, definition.name).not.toHaveProperty('defer_until_eot')
     }
@@ -106,9 +118,15 @@ describe('toolDefinitions', () => {
     expect(tool('add_items').parameters.required).toEqual(['items'])
     expect(tool('set_quantity').parameters.required).toEqual(['id', 'quantity'])
     expect(tool('remove_item').parameters.required).toEqual(['id'])
+    expect(tool('set_order_type').parameters.required).toEqual(['type'])
     for (const name of ['view_cart', 'clear_cart', 'checkout']) {
       expect(tool(name).parameters).toEqual({ type: 'object', properties: {} })
     }
+  })
+
+  it('takes pickup or delivery, from the shop settings', () => {
+    expect(property('set_order_type', 'type')).toMatchObject({ type: 'string', enum: [...ORDER_TYPES] })
+    expect(ORDER_TYPES).toEqual(['pickup', 'delivery'])
   })
 
   it('plans a group from how many people, how many are vegetarian, and only the preferences the customer gave', () => {

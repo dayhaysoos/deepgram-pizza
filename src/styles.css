@@ -472,9 +472,10 @@ button:disabled {
   color: var(--popular-text);
 }
 
-/* Size picker: a radio group drawn as a segmented control. */
+/* A radio group drawn as a segmented control: the size picker on a menu card,
+   and pickup or delivery in the cart. */
 
-.size-picker {
+.segmented {
   display: flex;
   min-inline-size: 0;
   margin: 0;
@@ -482,12 +483,12 @@ button:disabled {
   border: 0;
 }
 
-.size-option {
+.segmented-option {
   position: relative;
   flex: 1;
 }
 
-.size-option input {
+.segmented-option input {
   position: absolute;
   inset: 0;
   margin: 0;
@@ -495,7 +496,7 @@ button:disabled {
   cursor: pointer;
 }
 
-.size-option span {
+.segmented-option span {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -506,24 +507,24 @@ button:disabled {
   font-weight: 700;
 }
 
-.size-option + .size-option span {
+.segmented-option + .segmented-option span {
   border-left-width: 0;
 }
 
-.size-option:first-of-type span {
+.segmented-option:first-of-type span {
   border-radius: var(--radius-small) 0 0 var(--radius-small);
 }
 
-.size-option:last-of-type span {
+.segmented-option:last-of-type span {
   border-radius: 0 var(--radius-small) var(--radius-small) 0;
 }
 
-.size-option input:checked + span {
+.segmented-option input:checked + span {
   background: var(--red);
   color: var(--white);
 }
 
-.size-option input:focus-visible + span {
+.segmented-option input:focus-visible + span {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
@@ -738,8 +739,9 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-/* The total, then any checkout message, then the Checkout button, with room
-   below it for the talk button, which moves into the cart while it's open. */
+/* Pickup or delivery, the total, then any checkout message, then the Checkout
+   button, with room below it for the talk button, which moves into the cart
+   while it's open. With an empty cart, only pickup or delivery. */
 .drawer-footer {
   display: flex;
   flex-direction: column;
@@ -756,6 +758,18 @@ button:disabled {
   font-size: 1.25rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+/* Pickup or delivery: the segmented control across the cart, and a note for delivery. */
+.order-type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.order-type-note {
+  color: var(--ink-soft);
+  font-size: 0.875rem;
 }
 
 /* Suggestion card: the show_suggestions sheet. It floats above the space kept

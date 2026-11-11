@@ -1,7 +1,9 @@
-// What the agent is told when the customer changes the cart by tapping while a
-// voice session is open, so it never answers from a stale cart (SPEC.md, "The
-// agent always works from the current cart"). The text is sent as a mid-session
-// context update.
+// What the agent is told when the customer changes the cart, or taps Pickup or
+// Delivery, while a voice session is open, so it never answers from a stale
+// cart (SPEC.md, "The agent always works from the current cart"). The text is
+// sent as a mid-session context update. After a reconnect the SDK sends only
+// the newest one, so each says the whole order: pickup or delivery, and the
+// cart.
 //
 // It ends by telling the agent to call view_cart before answering about the
 // cart: in the owner's run the agent answered "What's my total?" from the
@@ -10,21 +12,32 @@
 // view_cart (src/voice/VoiceSession.tsx passes every tool).
 
 import { findVariant } from '../menu/menu'
+import type { OrderType } from '../shop'
 import { describeCart, describeLine, type CartChange, type CartSummary } from './cartSummary'
+import { describeOrderType } from './orderType'
 
 /** The last sentence of every tap update. */
 export const CALL_VIEW_CART = 'Call view_cart before answering about the cart.'
 
 /**
- * "Customer added 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza,
- * 1 × Fries. Total $46.97. Call view_cart before answering about the cart."
+ * "Customer added 1 × Fries by tapping. Order type: delivery. Cart: 2 × Large
+ * Margherita Pizza, 1 × Fries. Total $46.97. Call view_cart before answering
+ * about the cart."
  *
  * The taps: add is Add on a menu card, or Add / Add all on the suggestion card;
  * quantity is − or + in the cart drawer, with the line's new quantity; remove
  * is Remove in the cart drawer.
  */
-export function describeTapChange(change: CartChange, cartAfter: CartSummary): string {
-  return `Customer ${describeChange(change)} by tapping. ${describeCart(cartAfter)} ${CALL_VIEW_CART}`
+export function describeTapChange(change: CartChange, cartAfter: CartSummary, orderType: OrderType | null): string {
+  return `Customer ${describeChange(change)} by tapping. ${describeOrderType(orderType)} ${describeCart(cartAfter)} ${CALL_VIEW_CART}`
+}
+
+/**
+ * Pickup or Delivery tapped in the cart drawer: "Customer chose delivery by
+ * tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart."
+ */
+export function describeOrderTypeTap(orderType: OrderType, cart: CartSummary): string {
+  return `Customer chose ${orderType} by tapping. ${describeCart(cart)} ${CALL_VIEW_CART}`
 }
 
 function describeChange(change: CartChange): string {

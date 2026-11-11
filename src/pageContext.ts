@@ -1,8 +1,8 @@
 // What the menu page's parts share through React context, and the hooks that
 // read it: the voice session's handle, what the voice tools change on screen,
-// the page's cart changes and its tool handlers. Each is provided once, near
-// the top of MenuPage (MenuPage.tsx says where), and the parts below read it
-// wherever they are.
+// pickup or delivery, the page's cart changes and its tool handlers. Each is
+// provided once, near the top of MenuPage (MenuPage.tsx says where), and the
+// parts below read it wherever they are.
 //
 // The contexts live here, apart from their providers, so this module imports
 // nothing but types. That keeps src/agent/ and src/voice/ from importing each
@@ -12,9 +12,11 @@
 // in `pnpm dev` doesn't make a new context that the components already on the
 // page can't read.
 
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useSyncExternalStore } from 'react'
 import type { CartChanges } from './agent/cartChanges'
 import type { Suggestions, ToolHandlers } from './agent/handlers'
+import type { OrderTypeStore } from './agent/orderType'
+import type { OrderType } from './shop'
 import type { PromptTarget, SessionHandle } from './voice/sessionHandle'
 import type { SessionEvent, SessionState } from './voice/sessionStatus'
 
@@ -55,6 +57,9 @@ export type MenuUi = {
 /** Provided by MenuUiProvider (src/agent/MenuUiProvider.tsx). */
 export const MenuUiContext = createContext<MenuUi | null>(null)
 
+/** Provided by OrderTypeProvider (src/agent/OrderTypeProvider.tsx). */
+export const OrderTypeContext = createContext<OrderTypeStore | null>(null)
+
 /** Provided by CartChangesProvider (src/agent/CartChangesProvider.tsx). */
 export const CartChangesContext = createContext<CartChanges | null>(null)
 
@@ -87,6 +92,30 @@ export function useVoiceSession(): SessionHandle {
 /** The highlighted menu cards and the suggestion card, and what changes them. */
 export function useMenuUi(): MenuUi {
   return required(useContext(MenuUiContext), 'useMenuUi', 'MenuUiProvider')
+}
+
+/**
+ * The page's pickup-or-delivery store (src/agent/orderType.ts), the same object
+ * for the page's lifetime: `get()` reads the choice at the moment it's called,
+ * for code that outlives renders (the tool handlers, the talk button's press).
+ */
+export function useOrderTypeStore(): OrderTypeStore {
+  return required(useContext(OrderTypeContext), 'useOrderTypeStore', 'OrderTypeProvider')
+}
+
+/**
+ * Pickup or delivery, or null before the customer has chosen. Re-renders when
+ * it changes. Null while the page hydrates, as the server rendered it, then
+ * the choice saved in the browser.
+ */
+export function useOrderType(): OrderType | null {
+  const store = useOrderTypeStore()
+  return useSyncExternalStore(store.subscribe, store.get, serverOrderType)
+}
+
+/** The server has no saved choice. */
+function serverOrderType(): OrderType | null {
+  return null
 }
 
 /**

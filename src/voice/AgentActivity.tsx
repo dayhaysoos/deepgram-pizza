@@ -24,6 +24,7 @@ export const TOOL_ACTIVITY: Record<ToolName, string> = {
   remove_item: 'Updating your cart…',
   clear_cart: 'Updating your cart…',
   view_cart: 'Checking your cart…',
+  set_order_type: 'Noting pickup or delivery…',
   checkout: 'Starting checkout…',
 }
 

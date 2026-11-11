@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSessionConfig, useAgentSession } from '@deepgram/react'
 import { summarizeCart } from '../agent/cartSummary'
-import { GREETING } from '../agent/instructions'
+import { greeting } from '../agent/instructions'
 import { agentSettings } from '../voice/agentSettings'
 import { CONNECTION_LOST, MIC_BLOCKED, NO_SESSION, type SessionEnd } from '../voice/sessionStatus'
 import { recordEnd, recordSession, recordSessionEnd, settingsPayload } from './recordSession'
@@ -357,7 +357,7 @@ describe('settingsPayload', () => {
   })
 
   it('restores the conversation so far after a reconnect, after any context of its own, and leaves out the greeting', () => {
-    const history: ContextMessage[] = [{ type: 'History', role: 'assistant', content: GREETING }]
+    const history: ContextMessage[] = [{ type: 'History', role: 'assistant', content: greeting(null) }]
     const earlier: ContextMessage = { type: 'History', role: 'user', content: 'Earlier.' }
     const payload = settingsPayload({ ...config, agent: { ...settings, context: { messages: [earlier] } } }, history)
 

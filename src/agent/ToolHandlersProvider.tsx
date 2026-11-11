@@ -1,6 +1,6 @@
 // The tool handlers, wired to the live page: the cart through the page's cart
 // changes (CartChangesProvider), the highlights and suggestion card from
-// MenuUiProvider, and checkout. The handlers themselves (handlers.ts) know
+// MenuUiProvider, pickup or delivery from OrderTypeProvider, and checkout. The handlers themselves (handlers.ts) know
 // nothing about React.
 //
 // The page gets one set of handlers for its lifetime, read with
@@ -16,15 +16,16 @@
 import { useState, type ReactNode } from 'react'
 import { redirectToCheckout, useShoppingCart } from 'use-shopping-cart'
 import { startCheckout } from '../checkout/startCheckout'
-import { ToolHandlersContext, useCartChanges, useMenuUi, useVoiceSession } from '../pageContext'
+import { ToolHandlersContext, useCartChanges, useMenuUi, useOrderTypeStore, useVoiceSession } from '../pageContext'
 import { createToolHandlers } from './handlers'
 
-/** Creates the page's tool handlers. Goes inside `CartChangesProvider`, `VoiceSessionProvider` and `MenuUiProvider`. */
+/** Creates the page's tool handlers. Goes inside `CartChangesProvider`, `VoiceSessionProvider`, `MenuUiProvider` and `OrderTypeProvider`. */
 export function ToolHandlersProvider({ children }: { children: ReactNode }) {
   const cartChanges = useCartChanges()
   // The cart library's only action that just opens the drawer (handleCartClick toggles).
   const openCart = useShoppingCart((cart) => cart.handleCartHover)
   const { highlight, showSuggestions, closeSuggestions, isShowingSuggestions } = useMenuUi()
+  const orderType = useOrderTypeStore()
   const voiceSession = useVoiceSession()
 
   const [handlers] = useState(() =>
@@ -40,7 +41,8 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
         // the agent can say it's taking the customer to checkout.
         goToCheckout: (url) => void voiceSession.leaveAfterSpeaking().then(() => redirectToCheckout(url)),
       },
-      checkout: startCheckout,
+      orderType,
+      checkout: (cartDetails, type) => startCheckout(cartDetails, type),
     }),
   )
 

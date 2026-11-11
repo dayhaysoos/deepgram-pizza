@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CartDetails } from 'use-shopping-cart'
-import { CHECKOUT_UNAVAILABLE, type CheckoutResult } from './checkout'
+import { CHECKOUT_UNAVAILABLE, CHOOSE_ORDER_TYPE, type CheckoutResult } from './checkout'
 import { createCheckoutSession } from './createCheckoutSession'
 import { startCheckout, type CallCheckoutServer } from './startCheckout'
 
@@ -39,17 +39,24 @@ describe('startCheckout', () => {
     vi.restoreAllMocks()
   })
 
-  it('sends the cart to the server and returns the Checkout url', async () => {
+  it('sends the cart and the order type to the server and returns the Checkout url', async () => {
     const callServer = fakeServer(async () => ({ url: SESSION_URL }))
 
-    await expect(startCheckout(cartDetails, callServer)).resolves.toEqual({ url: SESSION_URL })
-    expect(callServer).toHaveBeenCalledWith({ data: { cartDetails } })
+    await expect(startCheckout(cartDetails, 'delivery', callServer)).resolves.toEqual({ url: SESSION_URL })
+    expect(callServer).toHaveBeenCalledWith({ data: { cartDetails, orderType: 'delivery' } })
   })
 
   it("passes on the server's message when it turns the cart down", async () => {
     const callServer = fakeServer(async () => ({ message: 'The cart is empty.' }))
 
-    await expect(startCheckout(cartDetails, callServer)).resolves.toEqual({ message: 'The cart is empty.' })
+    await expect(startCheckout(cartDetails, 'pickup', callServer)).resolves.toEqual({ message: 'The cart is empty.' })
+  })
+
+  it("passes on the server's message when no order type was chosen", async () => {
+    const callServer = fakeServer(async () => ({ message: CHOOSE_ORDER_TYPE }))
+
+    await expect(startCheckout(cartDetails, undefined, callServer)).resolves.toEqual({ message: CHOOSE_ORDER_TYPE })
+    expect(callServer).toHaveBeenCalledWith({ data: { cartDetails, orderType: undefined } })
   })
 
   it('returns a message instead of throwing when the request fails', async () => {
@@ -57,14 +64,14 @@ describe('startCheckout', () => {
       throw new TypeError('Failed to fetch')
     })
 
-    await expect(startCheckout(cartDetails, callServer)).resolves.toEqual({ message: CHECKOUT_UNAVAILABLE })
+    await expect(startCheckout(cartDetails, 'pickup', callServer)).resolves.toEqual({ message: CHECKOUT_UNAVAILABLE })
     expect(console.error).toHaveBeenCalled()
   })
 
   it('calls the createCheckoutSession server function by default', async () => {
     vi.mocked(createCheckoutSession).mockResolvedValue({ url: SESSION_URL })
 
-    await expect(startCheckout(cartDetails)).resolves.toEqual({ url: SESSION_URL })
-    expect(createCheckoutSession).toHaveBeenCalledWith({ data: { cartDetails } })
+    await expect(startCheckout(cartDetails, 'pickup')).resolves.toEqual({ url: SESSION_URL })
+    expect(createCheckoutSession).toHaveBeenCalledWith({ data: { cartDetails, orderType: 'pickup' } })
   })
 })

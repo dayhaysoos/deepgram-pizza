@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { summarizeCart } from '../agent/cartSummary'
-import { agentInstructions, GREETING } from '../agent/instructions'
+import { agentInstructions, greeting } from '../agent/instructions'
 import { toolDefinitions } from '../agent/tools'
 import { menu, products, spokenName } from '../menu/menu'
 import { MAX_LINE_QUANTITY } from '../shop'
@@ -21,7 +21,22 @@ describe('agentSettings', () => {
 
   it('gives the agent its instructions with the cart from the press, and the greeting', () => {
     expect(settings.think).toMatchObject({ prompt: agentInstructions(cart) })
-    expect(settings.greeting).toBe(GREETING)
+    expect(settings.greeting).toBe(greeting(null))
+    expect(settings.greeting).toBe("Hey, welcome to Nick's Pizza! What can I get started for you?")
+  })
+
+  it('greets and instructs from pickup or delivery as it is at the press', () => {
+    const none = agentSettings(cart, toolDefinitions, null)
+    expect(none.greeting).toBe("Hey, welcome to Nick's Pizza! Is this for pickup or delivery?")
+    expect(none.think).toMatchObject({ prompt: agentInstructions(cart, toolDefinitions, null) })
+
+    const delivery = agentSettings(cart, toolDefinitions, 'delivery')
+    expect(delivery.greeting).toBe("Hey, welcome to Nick's Pizza! Still delivery today?")
+    expect(delivery.greeting).toBe(greeting('delivery', toolDefinitions))
+    expect(delivery.think).toMatchObject({ prompt: agentInstructions(cart, toolDefinitions, 'delivery') })
+    expect((delivery.think as { prompt: string }).prompt).toContain('Conversation started. Order type: delivery. Cart: ')
+    // Left out, it's not chosen yet.
+    expect(agentSettings(cart, toolDefinitions)).toEqual(none)
   })
 
   it('has no tools unless it is given some (step 4), and then sends no functions and the instructions for no tools', () => {

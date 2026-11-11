@@ -3,7 +3,9 @@
 // Remove in the cart drawer, Add or Add all on the suggestion card. A change
 // runs the use-shopping-cart action for it and returns the summary of the cart
 // after it. A tap also tells the voice agent, so it never answers from a stale
-// cart (SPEC.md, "The agent always works from the current cart").
+// cart (SPEC.md, "The agent always works from the current cart"). So does a
+// tap on Pickup or Delivery in the cart drawer (`tapOrderType`), and every
+// update says that choice too (tapUpdates.ts).
 //
 // Why it works out the cart itself: a use-shopping-cart action updates the
 // store at once, but the cart a React component holds stays as it was until
@@ -25,6 +27,7 @@
 
 import type { CartDetails } from 'use-shopping-cart/core'
 import { findVariant, type Product } from '../menu/menu'
+import type { OrderType } from '../shop'
 import {
   applyCartChange,
   quantitiesOf,
@@ -33,7 +36,8 @@ import {
   type CartSummary,
   type Quantities,
 } from './cartSummary'
-import { describeTapChange } from './tapUpdates'
+import type { OrderTypeStore } from './orderType'
+import { describeOrderTypeTap, describeTapChange } from './tapUpdates'
 
 /** use-shopping-cart: the cart as of the last render, and the actions that change it. */
 export type CartStore = {
@@ -47,6 +51,8 @@ export type CartStore = {
 
 export type CartChangesPorts = {
   store: CartStore
+  /** Pickup or delivery (orderType.ts): every tap update says it, and `tapOrderType` changes it. */
+  orderType: Pick<OrderTypeStore, 'get' | 'set'>
   /** Tells the voice agent about a tap: the voice session's `tell`, which does nothing without a session. */
   tellAgent(text: string): void
   /** Also hears each tap update. The dev tools panel logs them. */
@@ -65,10 +71,15 @@ export type CartChanges = {
    * "Customer added 1 × Fries by tapping. Cart: …" (tapUpdates.ts).
    */
   tap(change: CartChange): CartSummary
+  /**
+   * Records Pickup or Delivery tapped in the cart drawer, and tells the agent:
+   * "Customer chose delivery by tapping. Cart: …". Nothing, if it's the choice already made.
+   */
+  tapOrderType(type: OrderType): void
 }
 
 /** Creates the page's cart changes. A page makes one and shares it, since it remembers the last change. */
-export function createCartChanges({ store, tellAgent, onTapUpdate }: CartChangesPorts): CartChanges {
+export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: CartChangesPorts): CartChanges {
   // The cart after the last change, and the rendered cart it was based on.
   let last: { basedOn: CartDetails; cartAfter: Quantities } | null = null
 
@@ -84,17 +95,25 @@ export function createCartChanges({ store, tellAgent, onTapUpdate }: CartChanges
     return summarizeCart(cartAfter)
   }
 
+  function tellAboutTap(text: string) {
+    tellAgent(text)
+    onTapUpdate?.(text)
+  }
+
   return {
     now: () => cartAt(store.cartDetails()),
     cartDetails: () => store.cartDetails(),
     change,
     tap(tapped) {
       const cartAfter = change(tapped)
-      // Every update carries the whole cart: the SDK sends only the newest after a reconnect.
-      const text = describeTapChange(tapped, cartAfter)
-      tellAgent(text)
-      onTapUpdate?.(text)
+      // Every update carries the whole order: the SDK sends only the newest after a reconnect.
+      tellAboutTap(describeTapChange(tapped, cartAfter, orderType.get()))
       return cartAfter
+    },
+    tapOrderType(type) {
+      if (orderType.get() === type) return
+      orderType.set(type)
+      tellAboutTap(describeOrderTypeTap(type, summarizeCart(cartAt(store.cartDetails()))))
     },
   }
 }

@@ -10,7 +10,7 @@ What to build, and in what order, is in `SPEC.md`: the menu, the tools, the agen
 
 This conversation is the product. Every change keeps it working:
 
-1. Press the talk button.
+1. Press the talk button. The agent asks "Is this for pickup or delivery?" "Delivery." The cart's switch shows Delivery.
 2. "What's vegetarian?" The agent answers from the menu.
 3. "Add two large margheritas." The cart badge and drawer update while the agent confirms out loud.
 4. "Actually, make that one." The quantity changes.
@@ -71,7 +71,7 @@ Add a dependency outside this table only after asking.
 ## use-shopping-cart
 
 - In components, read state through selectors: `useShoppingCart((cart) => cart.cartCount)`.
-- On the menu page, change the cart through the page's cart changes (`src/agent/cartChanges.ts`), not with a use-shopping-cart action. A tap calls `useCartChanges().tap(change)` with a `CartChange` (`{ type: 'add', lines: [{ id, quantity }] }`, `quantity`, `remove` or `clear`); the tool handlers get the same object as their cart port (`now()`, `change(change)`, and `cartDetails()` for checkout). It runs the action, returns the summary of the cart after it, and on a tap also tells the agent, so no tap can leave the agent with a stale cart. It checks nothing: check ids and quantities first (lines to add with `checkLinesToAdd` from `src/agent/handlers.ts`).
+- On the menu page, change the cart through the page's cart changes (`src/agent/cartChanges.ts`), not with a use-shopping-cart action. A tap calls `useCartChanges().tap(change)` with a `CartChange` (`{ type: 'add', lines: [{ id, quantity }] }`, `quantity`, `remove` or `clear`), and Pickup or Delivery in the drawer calls `tapOrderType(type)`; the tool handlers get the same object as their cart port (`now()`, `change(change)`, and `cartDetails()` for checkout). It runs the action, returns the summary of the cart after it, and on a tap also tells the agent, so no tap can leave the agent with a stale cart. It checks nothing: check ids and quantities first (lines to add with `checkLinesToAdd` from `src/agent/handlers.ts`).
 - Select actions the same way as state: `useShoppingCart((cart) => cart.addItem)`, so a component doesn't re-render on every cart change. To open the drawer from code, call `handleCartHover()`; `handleCartClick()` toggles and `handleCloseCart()` closes. See `LIBRARY_FEEDBACK.md`.
 - Code can't read the cart back right after calling an action: the hook shows the new cart only after the next render, and has no `getState()`. So the cart changes work out the cart after each change themselves (`applyCartChange` in `src/agent/cartSummary.ts`), and remember it until `cartDetails()` changes, since several tool calls, or a tap and a tool call, can come before React renders. `src/agent/cartChanges.test.ts` checks this against a real core `ShoppingCart`. Code that needs the cart right after a change reads `now()`, or the summary `change()` or `tap()` returned.
 - Checkout: the client posts `cartDetails` to the checkout server function. The server keeps only each line's id and quantity (`{ [id]: { quantity } }`), rebuilds the line items with `validateCartItems(products, …)` from `use-shopping-cart/utilities`, creates the session, and returns `session.url`. Passing the posted `cartDetails` straight through would let the browser's `product_data.metadata` reach Stripe (see `LIBRARY_FEEDBACK.md`). The client then calls `redirectToCheckout(url)`. Prices come from `menu.json` on the server, never from the browser.
@@ -79,9 +79,9 @@ Add a dependency outside this table only after asking.
 
 ## Scope
 
-v1 has the golden path and the parts that support it: a menu page, a cart drawer, the talk button, the tools and test-mode checkout.
+v1 has the golden path and the parts that support it: a menu page, a cart drawer, the talk button, the tools and test-mode checkout, for pickup or delivery. Delivery addresses are in v1 since the owner chose it on 2026-11-10: Stripe Checkout collects them (US only), never the agent by voice.
 
-Later, not v1: accounts, delivery addresses, toppings and other customization, order history, payments outside test mode, and a CMS for the menu. Keeping the menu in one JSON file is what makes the CMS swap easy later.
+Later, not v1: accounts, toppings and other customization, order history, payments outside test mode, and a CMS for the menu. Keeping the menu in one JSON file is what makes the CMS swap easy later.
 
 Evals are planned: checking that the agent picks the right tool with the right arguments. Don't build them yet. Keep the tool definitions and the agent instructions in their own modules, so evals can import them later.
 

@@ -7,20 +7,25 @@ import { getRequest } from '@tanstack/react-start/server'
 import { env } from 'cloudflare:workers'
 import Stripe from 'stripe'
 import type { CartDetails } from 'use-shopping-cart'
+import type { OrderType } from '../shop'
 import { checkoutCart, parseCheckoutRequest, type SessionParams } from './checkout'
 
 /**
  * Starts Stripe Checkout for the cart. Returns `{ url }` to pass to
  * `redirectToCheckout`, or `{ message }` to show or say instead.
  *
- * Call it with the cart: `createCheckoutSession({ data: { cartDetails } })`.
+ * Call it with the cart and the order type:
+ * `createCheckoutSession({ data: { cartDetails, orderType: 'delivery' } })`.
+ * The validator re-checks the order type; a missing or unknown one gets a
+ * message asking for pickup or delivery.
  */
 export const createCheckoutSession = createServerFn({ method: 'POST' })
-  .validator((data: { cartDetails: CartDetails }) => parseCheckoutRequest(data))
+  .validator((data: { cartDetails: CartDetails; orderType: OrderType | undefined }) => parseCheckoutRequest(data))
   .handler(({ data }) =>
     checkoutCart(
       {
         cartDetails: data.cartDetails,
+        orderType: data.orderType,
         origin: new URL(getRequest().url).origin,
         secretKey: env.STRIPE_SECRET_KEY,
       },

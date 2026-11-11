@@ -68,10 +68,10 @@ export function MenuCard({ item }: { item: MenuItem }) {
 
         <div className="menu-card-order">
           {item.variants.length > 1 && (
-            <fieldset className="size-picker">
+            <fieldset className="segmented">
               <legend className="visually-hidden">Size</legend>
               {item.variants.map((v) => (
-                <label key={v.id} className="size-option">
+                <label key={v.id} className="segmented-option">
                   <input
                     type="radio"
                     name={`${item.id}-size`}

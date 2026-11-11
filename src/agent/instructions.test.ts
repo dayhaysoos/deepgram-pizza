@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { categories, findItem, formatPrice, menu, products, type MenuItem } from '../menu/menu'
-import { SHOP_NAME } from '../shop'
+import { DELIVERY_FEE, SHOP_NAME } from '../shop'
 import { describeCart, summarizeCart } from './cartSummary'
-import { agentInstructions, describeMenu, GREETING } from './instructions'
+import { agentInstructions, describeMenu, greeting } from './instructions'
+import { describeOrderType } from './orderType'
+import { spokenPrice } from './spokenPrice'
 import { CALL_VIEW_CART, describeTapChange } from './tapUpdates'
 import { GROUP_MAINS, toolDefinitions, type ToolDefinition, type ToolName } from './tools'
 
@@ -17,9 +19,23 @@ function lineOf(item: MenuItem): string {
   return found[0]
 }
 
-describe('GREETING', () => {
-  it('welcomes the customer to the shop by name', () => {
-    expect(GREETING).toBe(`Hey, welcome to ${SHOP_NAME}! What can I get started for you?`)
+describe('greeting', () => {
+  // The owner's greeting (2026-11-10, .build/step-5b.md): it asks every time.
+  it('welcomes the customer to the shop by name and asks pickup or delivery', () => {
+    expect(greeting(null, toolDefinitions)).toBe(`Hey, welcome to ${SHOP_NAME}! Is this for pickup or delivery?`)
+    expect(greeting(null, toolDefinitions)).toBe("Hey, welcome to Nick's Pizza! Is this for pickup or delivery?")
+  })
+
+  it('asks to confirm the choice already made, in the cart or an earlier session', () => {
+    expect(greeting('delivery', toolDefinitions)).toBe("Hey, welcome to Nick's Pizza! Still delivery today?")
+    expect(greeting('pickup', toolDefinitions)).toBe("Hey, welcome to Nick's Pizza! Still pickup today?")
+  })
+
+  it("without set_order_type, doesn't ask what it can't record", () => {
+    for (const orderType of [null, 'delivery'] as const) {
+      expect(greeting(orderType, allBut('set_order_type'))).toBe(`Hey, welcome to ${SHOP_NAME}! What can I get started for you?`)
+      expect(greeting(orderType)).toBe(`Hey, welcome to ${SHOP_NAME}! What can I get started for you?`)
+    }
   })
 })
 
@@ -72,6 +88,11 @@ describe('describeMenu', () => {
 
 // The rules in SPEC.md's "Agent instructions (first draft)", word for word,
 // with the wording recorded under Decisions since the first draft.
+const ORDER_TYPE_RULE_START = '- Every order is pickup or delivery. When the customer says which, call set_order_type, then say one short line like "Great, delivery it is. What can I get you?"'
+const ORDER_TYPE_RULE_CHECKOUT = ', or if they were checking out, call checkout next.'
+const ORDER_TYPE_RULE_END =
+  ' If they start ordering without saying, take the order and ask "Pickup or delivery?" before they check out. For delivery, never take an address by voice: if one comes up, say "You\'ll enter the delivery address at checkout." If asked about fees, delivery adds a flat three ninety-nine at checkout.'
+const ORDER_TYPE_RULE = ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT + ORDER_TYPE_RULE_END
 const CHANGE_RULE =
   '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.'
 const CONFIRM_RULE_START =
@@ -106,6 +127,7 @@ const DONE_RULE =
   '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm and say "Taking you to checkout now so you can pay." Never say the order is placed, done or confirmed: it isn\'t until they pay.'
 
 const SPEC_DRAFT_RULES = [
+  ORDER_TYPE_RULE,
   CHANGE_RULE,
   CONFIRM_RULE,
   SPOKEN_TOTAL_RULE,
@@ -145,9 +167,10 @@ function allBut(...names: ToolName[]): ToolDefinition[] {
 }
 
 // The tool names a prompt mentions, as whole words: `add_item` isn't found in
-// `add_items`, and the Checkout button isn't the `checkout` tool.
+// `add_items`, and neither the Checkout button nor paying "at checkout" is the
+// `checkout` tool.
 function toolsNamedIn(text: string): string[] {
-  return toolNames.filter((name) => new RegExp(`\\b${name}\\b`).test(text))
+  return toolNames.filter((name) => new RegExp(`(?<!at )\\b${name}\\b`).test(text))
 }
 
 function rulesOf(text: string): string[] {
@@ -167,7 +190,7 @@ ${describeMenu()}
 Rules:
 ${[...SPEC_DRAFT_RULES, NO_STALLS_WITH_TOOLS].join('\n')}
 
-Conversation started. Cart: empty.`)
+Conversation started. Order type: not chosen yet. Cart: empty.`)
   })
 
   it('with no tools (step 4), names no tool and says what the agent can do instead', () => {
@@ -196,6 +219,7 @@ Conversation started. Cart: empty.`)
       'plan_group_order',
       'add_items',
       'view_cart',
+      'set_order_type',
       'checkout',
     ])
   })
@@ -217,6 +241,9 @@ Conversation started. Cart: empty.`)
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart')))).toContain(VIEW_CART_RULE)
     expect(rulesOf(agentInstructions(emptyCart, allBut('view_cart')))).not.toContain(VIEW_CART_RULE)
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart', 'checkout')))).toContain(DONE_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout')))).toContain(ORDER_TYPE_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type')))).toContain(ORDER_TYPE_RULE_START + '.' + ORDER_TYPE_RULE_END)
+    expect(rulesOf(agentInstructions(emptyCart, allBut('set_order_type'))).join('\n')).not.toContain('pickup or delivery')
   })
 
   it.each(CART_TOOLS)('keeps the cart-change rules, and drops the cart from the safeguard, with %s', (name) => {
@@ -329,8 +356,8 @@ Conversation started. Cart: empty.`)
     expect(toolDefinitions.find((tool) => tool.name === 'view_cart')?.description).toBe(
       "Read what's in the cart and the total. Call it before answering any question about what's in the cart or the total, even right after you were told the customer tapped something.",
     )
-    expect(describeTapChange({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] }, summarizeCart({ fries: 1 }))).toBe(
-      'Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.',
+    expect(describeTapChange({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] }, summarizeCart({ fries: 1 }), null)).toBe(
+      'Customer added 1 × Fries by tapping. Order type: not chosen yet. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.',
     )
   })
 
@@ -356,18 +383,36 @@ Conversation started. Cart: empty.`)
     expect(agentInstructions(emptyCart, tools)).not.toMatch(/\{\{|\}\}|undefined|false/)
   })
 
-  it('ends with the cart as the session starts, in the words the tap updates use', () => {
+  it('ends with the order as the session starts, in the words the tap updates use', () => {
     expect(prompt.endsWith('\n\nConversation started. Cart: empty.')).toBe(true)
 
     const cart = summarizeCart({ 'margherita-pizza-large': 1 })
-    for (const tools of [[], toolDefinitions]) {
-      const lastLine = agentInstructions(cart, tools).split('\n').at(-1)
-      expect(lastLine).toBe('Conversation started. Cart: 1 × Large Margherita Pizza. Total $20.99.')
-      expect(lastLine).toBe(`Conversation started. ${describeCart(cart)}`)
+    const lastLine = (tools: ToolDefinition[], orderType: 'pickup' | 'delivery' | null = null) =>
+      agentInstructions(cart, tools, orderType).split('\n').at(-1)
+    expect(lastLine(toolDefinitions)).toBe('Conversation started. Order type: not chosen yet. Cart: 1 × Large Margherita Pizza. Total $20.99.')
+    expect(lastLine(toolDefinitions, 'delivery')).toBe('Conversation started. Order type: delivery. Cart: 1 × Large Margherita Pizza. Total $20.99.')
+    expect(lastLine(toolDefinitions, 'pickup')).toBe(`Conversation started. ${describeOrderType('pickup')} ${describeCart(cart)}`)
+    // Pickup or delivery only with the tool that records it.
+    for (const tools of [[], allBut('set_order_type')]) {
+      expect(lastLine(tools, 'delivery')).toBe('Conversation started. Cart: 1 × Large Margherita Pizza. Total $20.99.')
     }
-    expect(describeTapChange({ type: 'remove', id: 'fries' }, cart)).toBe(
-      `Customer removed Fries by tapping. ${describeCart(cart)} ${CALL_VIEW_CART}`,
+    expect(describeTapChange({ type: 'remove', id: 'fries' }, cart, 'delivery')).toBe(
+      `Customer removed Fries by tapping. ${describeOrderType('delivery')} ${describeCart(cart)} ${CALL_VIEW_CART}`,
     )
+  })
+
+  it('asks pickup or delivery, records it with set_order_type, and never takes an address by voice', () => {
+    expect(rulesOf(fullPrompt)[0]).toBe(ORDER_TYPE_RULE)
+    // The owner's lines (.build/step-5b.md).
+    expect(ORDER_TYPE_RULE).toContain('"Great, delivery it is. What can I get you?"')
+    expect(ORDER_TYPE_RULE).toContain('"You\'ll enter the delivery address at checkout."')
+    expect(ORDER_TYPE_RULE).toContain('never take an address by voice')
+    // After checkout asked for it, the answer goes on to checkout, which the tool refuses until it's set.
+    expect(ORDER_TYPE_RULE).toContain('if they were checking out, call checkout next.')
+    // The fee, from the shop settings, said the way the totals are.
+    expect(spokenPrice(DELIVERY_FEE)).toBe('three ninety-nine')
+    expect(ORDER_TYPE_RULE).toContain(`delivery adds a flat ${spokenPrice(DELIVERY_FEE)} at checkout.`)
+    expect(toolDefinitions.find((tool) => tool.name === 'set_order_type')?.description).toContain('once the customer says which')
   })
 
   // Deepgram's limit, with every product in the cart, is checked in src/voice/agentSettings.test.ts.

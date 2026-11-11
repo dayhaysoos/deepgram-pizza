@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createCartChanges } from './cartChanges'
 import { summarizeCart, type CartChange } from './cartSummary'
+import { createOrderTypeStore } from './orderType'
 import { renderedStore } from './testing'
 
 /**
@@ -13,12 +14,14 @@ function setup() {
   const { store, cartStore, render, given, holds } = renderedStore()
   const tellAgent = vi.fn<(text: string) => void>()
   const onTapUpdate = vi.fn<(text: string) => void>()
-  const cart = createCartChanges({ store: cartStore, tellAgent, onTapUpdate })
+  // In memory: no storage in Node.
+  const orderType = createOrderTypeStore(null)
+  const cart = createCartChanges({ store: cartStore, orderType, tellAgent, onTapUpdate })
 
   /** What the store really holds now, in its order. */
   const inStore = () => Object.entries(holds())
 
-  return { store, cart, render, given, tellAgent, onTapUpdate, inStore, holds }
+  return { store, cart, render, given, orderType, tellAgent, onTapUpdate, inStore, holds }
 }
 
 // Every kind of change, with lines added to, set, removed, and added back.
@@ -105,27 +108,27 @@ describe('tap', () => {
     [
       'Add on a menu card',
       { type: 'add', lines: [{ id: 'soda', quantity: 1 }] },
-      'Customer added 1 × Fountain Soda by tapping. Cart: 2 × Large Margherita Pizza, 1 × Fries, 1 × Fountain Soda. Total $49.46. Call view_cart before answering about the cart.',
+      'Customer added 1 × Fountain Soda by tapping. Order type: not chosen yet. Cart: 2 × Large Margherita Pizza, 1 × Fries, 1 × Fountain Soda. Total $49.46. Call view_cart before answering about the cart.',
     ],
     [
       '− in the cart drawer',
       { type: 'quantity', id: 'margherita-pizza-large', quantity: 1 },
-      'Customer changed Large Margherita Pizza to 1 by tapping. Cart: 1 × Large Margherita Pizza, 1 × Fries. Total $25.98. Call view_cart before answering about the cart.',
+      'Customer changed Large Margherita Pizza to 1 by tapping. Order type: not chosen yet. Cart: 1 × Large Margherita Pizza, 1 × Fries. Total $25.98. Call view_cart before answering about the cart.',
     ],
     [
       '+ in the cart drawer',
       { type: 'quantity', id: 'fries', quantity: 2 },
-      'Customer changed Fries to 2 by tapping. Cart: 2 × Large Margherita Pizza, 2 × Fries. Total $51.96. Call view_cart before answering about the cart.',
+      'Customer changed Fries to 2 by tapping. Order type: not chosen yet. Cart: 2 × Large Margherita Pizza, 2 × Fries. Total $51.96. Call view_cart before answering about the cart.',
     ],
     [
       'Remove in the cart drawer',
       { type: 'remove', id: 'margherita-pizza-large' },
-      'Customer removed Large Margherita Pizza by tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.',
+      'Customer removed Large Margherita Pizza by tapping. Order type: not chosen yet. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.',
     ],
     [
       'Add all on the suggestion card',
       { type: 'add', lines: [{ id: 'garlic-knots', quantity: 1 }, { id: 'fries', quantity: 1 }] },
-      'Customer added 1 × Garlic Knots (6), 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza, 2 × Fries, 1 × Garlic Knots (6). Total $57.95. Call view_cart before answering about the cart.',
+      'Customer added 1 × Garlic Knots (6), 1 × Fries by tapping. Order type: not chosen yet. Cart: 2 × Large Margherita Pizza, 2 × Fries, 1 × Garlic Knots (6). Total $57.95. Call view_cart before answering about the cart.',
     ],
   ])('%s: makes the change and tells the agent and the observer, with the cart after it', (_tap, change, told) => {
     const { cart, given, tellAgent, onTapUpdate, holds } = setup()
@@ -140,11 +143,65 @@ describe('tap', () => {
 
   it('tells the agent without an observer', () => {
     const tellAgent = vi.fn<(text: string) => void>()
-    const cart = createCartChanges({ store: renderedStore().cartStore, tellAgent })
+    const cart = createCartChanges({ store: renderedStore().cartStore, orderType: createOrderTypeStore(null), tellAgent })
 
     cart.tap({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
 
-    expect(tellAgent).toHaveBeenCalledExactlyOnceWith('Customer added 1 × Fries by tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.')
+    expect(tellAgent).toHaveBeenCalledExactlyOnceWith('Customer added 1 × Fries by tapping. Order type: not chosen yet. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.')
+  })
+})
+
+describe('tapOrderType', () => {
+  it('records Pickup or Delivery tapped in the cart and tells the agent and the observer, with the cart', () => {
+    const { cart, given, orderType, tellAgent, onTapUpdate } = setup()
+    given({ fries: 1 })
+
+    cart.tapOrderType('delivery')
+
+    expect(orderType.get()).toBe('delivery')
+    const told = 'Customer chose delivery by tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.'
+    expect(tellAgent).toHaveBeenCalledExactlyOnceWith(told)
+    expect(onTapUpdate).toHaveBeenCalledExactlyOnceWith(told)
+  })
+
+  it('says the cart as it is now, counting a change the last render does not show yet', () => {
+    const { cart, tellAgent } = setup()
+
+    cart.change({ type: 'add', lines: [{ id: 'fries', quantity: 2 }] })
+    cart.tapOrderType('pickup')
+
+    expect(tellAgent).toHaveBeenCalledExactlyOnceWith(
+      'Customer chose pickup by tapping. Cart: 2 × Fries. Total $9.98. Call view_cart before answering about the cart.',
+    )
+  })
+
+  it('tells the agent nothing when the choice is the one already made', () => {
+    const { cart, orderType, tellAgent } = setup()
+    orderType.set('pickup')
+
+    cart.tapOrderType('pickup')
+
+    expect(tellAgent).not.toHaveBeenCalled()
+  })
+
+  it('changes nothing in the cart', () => {
+    const { cart, given, inStore } = setup()
+    given({ fries: 1 })
+
+    cart.tapOrderType('delivery')
+
+    expect(inStore()).toEqual([['fries', 1]])
+  })
+
+  it('makes every later cart update say the choice', () => {
+    const { cart, tellAgent } = setup()
+
+    cart.tapOrderType('delivery')
+    cart.tap({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
+
+    expect(tellAgent).toHaveBeenLastCalledWith(
+      'Customer added 1 × Fries by tapping. Order type: delivery. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.',
+    )
   })
 })
 
@@ -168,7 +225,7 @@ describe('taps and tool calls before React renders', () => {
     const summary = cart.tap({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
 
     expect(tellAgent).toHaveBeenCalledExactlyOnceWith(
-      'Customer added 1 × Fries by tapping. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97. Call view_cart before answering about the cart.',
+      'Customer added 1 × Fries by tapping. Order type: not chosen yet. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97. Call view_cart before answering about the cart.',
     )
     expect(summary).toEqual(summarizeCart(holds()))
   })

@@ -28,27 +28,33 @@
 
 import type { AgentSettingsObject } from '@deepgram/react'
 import type { CartSummary } from '../agent/cartSummary'
-import { agentInstructions, GREETING } from '../agent/instructions'
+import { agentInstructions, greeting } from '../agent/instructions'
 import type { ToolDefinition } from '../agent/tools'
 import { menu, spokenName } from '../menu/menu'
+import type { OrderType } from '../shop'
 
 /** Deepgram's limit on `think.prompt` for managed LLMs, in characters. */
 export const MANAGED_PROMPT_LIMIT = 25_000
 
 /**
- * The agent's settings for a session that starts with this cart and can call
- * these tools: pass `summarizeCart(quantitiesOf(cartDetails))`, read when the
- * customer presses the talk button, and the tools the browser handles (none
- * in step 4, `toolDefinitions` from step 5).
+ * The agent's settings for a session that starts with this cart and
+ * pickup-or-delivery choice, and can call these tools: pass
+ * `summarizeCart(quantitiesOf(cartDetails))` and the choice (null before
+ * there is one), both read when the customer presses the talk button, and the
+ * tools the browser handles (none in step 4, `toolDefinitions` from step 5).
  */
-export function agentSettings(cart: CartSummary, tools: readonly ToolDefinition[] = []): AgentSettingsObject {
+export function agentSettings(
+  cart: CartSummary,
+  tools: readonly ToolDefinition[] = [],
+  orderType: OrderType | null = null,
+): AgentSettingsObject {
   return {
     listen: {
       provider: { type: 'deepgram', version: 'v2', model: 'flux-general-en', keyterms: menuKeyterms() },
     },
     think: {
       provider: { type: 'open_ai', model: 'gpt-4.1-mini' },
-      prompt: agentInstructions(cart, tools),
+      prompt: agentInstructions(cart, tools, orderType),
       // A session without tools sends no `functions` at all, rather than an
       // empty list, so it's the same request step 4 was tested with.
       ...(tools.length > 0 ? { functions: [...tools] } : {}),
@@ -56,7 +62,7 @@ export function agentSettings(cart: CartSummary, tools: readonly ToolDefinition[
     speak: {
       provider: { type: 'deepgram', version: 'v2', model: 'flux-cole-en' },
     },
-    greeting: GREETING,
+    greeting: greeting(orderType, tools),
   }
 }
 

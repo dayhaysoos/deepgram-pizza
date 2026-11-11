@@ -1,7 +1,9 @@
 // What the voice agent is told: its greeting, and its instructions (who it is,
 // how it talks, the menu it knows and the rules it follows). The voice session
-// sends both when it connects. Like tools.ts beside it, this module imports
-// nothing from React, Deepgram or the server, so evals can load it on its own.
+// builds both from the cart and the pickup-or-delivery choice when the
+// customer presses the talk button, and sends them when it connects. Like
+// tools.ts beside it, this module imports nothing from React, Deepgram or the
+// server, so evals can load it on its own.
 //
 // The rules follow the session's tools: a rule that names a tool is there only
 // when the session has that tool, and whatever the agent can't do without its
@@ -15,13 +17,24 @@
 // Keep the rules that name tools in step with tools.ts.
 
 import { categories, formatPrice, menu, type CategoryInfo, type MenuItem, type Variant } from '../menu/menu'
-import { SHOP_NAME } from '../shop'
+import { DELIVERY_FEE, SHOP_NAME, type OrderType } from '../shop'
 import { describeCart, type CartSummary } from './cartSummary'
+import { describeOrderType } from './orderType'
+import { spokenPrice } from './spokenPrice'
 import { orList } from './text'
 import { GROUP_MAINS, NOT_PLACED_YET, TO_CHECKOUT, type ToolDefinition, type ToolName } from './tools'
 
-/** What the agent says first, as soon as the session opens. */
-export const GREETING = `Hey, welcome to ${SHOP_NAME}! What can I get started for you?`
+/**
+ * What the agent says first, as soon as the session opens: the owner wants it
+ * to ask pickup or delivery every time, or to confirm the choice already made
+ * (in the cart, or in an earlier session). Without set_order_type to record
+ * the answer, it doesn't ask.
+ */
+export function greeting(orderType: OrderType | null, tools: readonly ToolDefinition[] = []): string {
+  const welcome = `Hey, welcome to ${SHOP_NAME}!`
+  if (!tools.some((tool) => tool.name === 'set_order_type')) return `${welcome} What can I get started for you?`
+  return orderType ? `${welcome} Still ${orderType} today?` : `${welcome} Is this for pickup or delivery?`
+}
 
 /** The tools that change the cart. With any of them, the cart-change rules apply. */
 const CART_TOOLS: readonly ToolName[] = ['add_item', 'add_items', 'set_quantity', 'remove_item', 'clear_cart']
@@ -32,13 +45,18 @@ const TOTAL_TOOLS: readonly ToolName[] = [...CART_TOOLS, 'view_cart', 'show_sugg
 type HasTool = (name: ToolName) => boolean
 
 /**
- * The agent's instructions for a session that starts with this cart and can
- * call these tools: pass `summarizeCart(quantitiesOf(cartDetails))`, and the
- * tools the session sends as functions (none in step 4, `toolDefinitions`
- * from step 5). They end with the cart in the words the tap updates use, so
- * the updates sent mid-session read as what happened next.
+ * The agent's instructions for a session that starts with this cart and
+ * pickup-or-delivery choice, and can call these tools: pass
+ * `summarizeCart(quantitiesOf(cartDetails))`, the tools the session sends as
+ * functions (none in step 4, `toolDefinitions` from step 5), and the choice
+ * (null before there is one). They end with the order in the words the tap
+ * updates use, so the updates sent mid-session read as what happened next.
  */
-export function agentInstructions(cart: CartSummary, tools: readonly ToolDefinition[] = []): string {
+export function agentInstructions(
+  cart: CartSummary,
+  tools: readonly ToolDefinition[] = [],
+  orderType: OrderType | null = null,
+): string {
   const names = new Set<string>(tools.map((tool) => tool.name))
   const has: HasTool = (name) => names.has(name)
   const changesCart = CART_TOOLS.some(has)
@@ -47,6 +65,7 @@ export function agentInstructions(cart: CartSummary, tools: readonly ToolDefinit
   // the session has that tool; some have a version for a session without it.
   const rules = compact([
     safeguardRule(has, changesCart),
+    has('set_order_type') && orderTypeRule(has),
     changesCart && '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.',
     changesCart && confirmRule(has),
     // In step 5's Check the agent wrote $20.99 as "twenty oh nine nine".
@@ -87,7 +106,22 @@ ${describeMenu()}
 Rules:
 ${rules.join('\n')}
 
-Conversation started. ${describeCart(cart)}`
+Conversation started. ${has('set_order_type') ? `${describeOrderType(orderType)} ` : ''}${describeCart(cart)}`
+}
+
+// Pickup or delivery (the owner's flow, .build/step-5b.md): the greeting
+// asks, and the answer is recorded with set_order_type, then one short line
+// moves on to the order. checkout refuses until it's set, so an answer given
+// at that point goes straight back to checkout. No address by voice: Stripe's
+// page asks for it. The fee is said only if asked, from the shop settings.
+function orderTypeRule(has: HasTool): string {
+  return [
+    '- Every order is pickup or delivery. When the customer says which, call set_order_type, then say one short line like "Great, delivery it is. What can I get you?"' +
+      (has('checkout') ? ', or if they were checking out, call checkout next.' : '.'),
+    'If they start ordering without saying, take the order and ask "Pickup or delivery?" before they check out.',
+    `For delivery, never take an address by voice: if one comes up, say "You'll enter the delivery address at checkout."`,
+    `If asked about fees, delivery adds a flat ${spokenPrice(DELIVERY_FEE)} at checkout.`,
+  ].join(' ')
 }
 
 // After a change, every line it made, add_items included: the owner wants a

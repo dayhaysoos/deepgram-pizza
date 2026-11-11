@@ -4,6 +4,7 @@ import { menu, products } from '../menu/menu'
 import { createCartChanges } from './cartChanges'
 import { summarizeCart } from './cartSummary'
 import { checkLinesToAdd, createToolHandlers, type Suggestions, type ToolPorts } from './handlers'
+import { createOrderTypeStore } from './orderType'
 import { planGroupOrder } from './planGroupOrder'
 import { renderedStore } from './testing'
 import type { ToolName } from './tools'
@@ -20,7 +21,9 @@ const SESSION_URL = 'https://checkout.stripe.com/c/pay/cs_test_fake'
  */
 function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESSION_URL })) {
   const { store, cartStore, render, given, holds } = renderedStore()
-  const cartChanges = createCartChanges({ store: cartStore, tellAgent: () => {} })
+  // Pickup or delivery, in memory: no storage in Node.
+  const orderType = createOrderTypeStore(null)
+  const cartChanges = createCartChanges({ store: cartStore, orderType, tellAgent: () => {} })
   const cart = {
     now: vi.fn(cartChanges.now),
     cartDetails: vi.fn(cartChanges.cartDetails),
@@ -41,7 +44,7 @@ function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESS
     goToCheckout: vi.fn(),
   }
   const checkout = vi.fn<ToolPorts['checkout']>(respond)
-  const handlers = createToolHandlers({ cart, ui, checkout })
+  const handlers = createToolHandlers({ cart, ui, checkout, orderType })
 
   async function call(name: ToolName, args: unknown = {}) {
     const result = await handlers[name](args)
@@ -58,7 +61,7 @@ function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESS
     expect(cart.change).not.toHaveBeenCalled()
   }
 
-  return { store, cart, ui, checkout, handlers, render, call, given, storeSummary, noCartChanges }
+  return { store, cart, ui, checkout, orderType, handlers, render, call, given, storeSummary, noCartChanges }
 }
 
 const BAD_QUANTITY = 'The quantity has to be a whole number from 1 to 20.'
@@ -960,18 +963,33 @@ describe('checkout', () => {
     expect(ui.goToCheckout).not.toHaveBeenCalled()
   })
 
-  it("checks out the cart and goes to Stripe's page", async () => {
-    const { call, checkout, given, store, ui } = setup()
+  it("checks out the cart, for pickup or delivery, and goes to Stripe's page", async () => {
+    const { call, checkout, given, orderType, store, ui } = setup()
     given({ 'margherita-pizza-large': 1 })
+    orderType.set('delivery')
 
     expect(await call('checkout')).toEqual({ ok: true })
-    expect(checkout).toHaveBeenCalledWith(store.getState().cartDetails)
+    expect(checkout).toHaveBeenCalledExactlyOnceWith(store.getState().cartDetails, 'delivery')
     expect(ui.goToCheckout).toHaveBeenCalledWith(SESSION_URL)
   })
 
-  it('passes on the message when checkout says no', async () => {
-    const { call, given, ui } = setup(async () => ({ message: "Checkout isn't set up on this shop yet." }))
+  it('asks for pickup or delivery first, instead of starting checkout without it', async () => {
+    const { call, checkout, given, ui } = setup()
     given({ fries: 1 })
+
+    expect(await call('checkout')).toEqual({ message: "Ask whether it's pickup or delivery first." })
+    expect(checkout).not.toHaveBeenCalled()
+    expect(ui.goToCheckout).not.toHaveBeenCalled()
+  })
+
+  it('says the cart is empty before asking about pickup or delivery', async () => {
+    expect(await setup().call('checkout')).toEqual({ message: 'The cart is empty.' })
+  })
+
+  it('passes on the message when checkout says no', async () => {
+    const { call, given, orderType, ui } = setup(async () => ({ message: "Checkout isn't set up on this shop yet." }))
+    given({ fries: 1 })
+    orderType.set('pickup')
 
     expect(await call('checkout')).toEqual({ message: "Checkout isn't set up on this shop yet." })
     expect(ui.goToCheckout).not.toHaveBeenCalled()
@@ -981,10 +999,11 @@ describe('checkout', () => {
   // into CHECKOUT_UNAVAILABLE), but a port that breaks that promise still
   // can't silence the agent.
   it('still returns a message, without throwing, if the checkout port rejects', async () => {
-    const { call, given, ui } = setup(async () => {
+    const { call, given, orderType, ui } = setup(async () => {
       throw new Error('offline')
     })
     given({ fries: 1 })
+    orderType.set('pickup')
 
     expect(await call('checkout')).toEqual({
       message: "That didn't work. Call view_cart to see the cart, then try again.",
@@ -1013,9 +1032,50 @@ describe('when something unexpected throws', () => {
   })
 })
 
+describe('set_order_type', () => {
+  it('records pickup or delivery and returns it, without touching the cart', async () => {
+    const { call, orderType, noCartChanges } = setup()
+
+    expect(await call('set_order_type', { type: 'delivery' })).toEqual({ orderType: 'delivery' })
+    expect(orderType.get()).toBe('delivery')
+    expect(await call('set_order_type', { type: 'pickup' })).toEqual({ orderType: 'pickup' })
+    expect(orderType.get()).toBe('pickup')
+    noCartChanges()
+  })
+
+  it('takes the JSON string Deepgram sends', async () => {
+    const { handlers, orderType } = setup()
+
+    expect(await handlers.set_order_type('{"type":"pickup"}')).toEqual({ orderType: 'pickup' })
+    expect(orderType.get()).toBe('pickup')
+  })
+
+  it('says what it takes when the type is missing or something else, and keeps the choice it had', async () => {
+    const { call, orderType } = setup()
+    orderType.set('pickup')
+    const message = 'The type has to be "pickup" or "delivery". Ask which, if the customer hasn\'t said.'
+
+    for (const args of [{}, { type: 'takeout' }, { type: 'Delivery' }, { type: null }, { type: ['delivery'] }]) {
+      expect(await call('set_order_type', args), JSON.stringify(args)).toEqual({ message })
+    }
+    expect(orderType.get()).toBe('pickup')
+  })
+
+  it('lets checkout go ahead once it is set', async () => {
+    const { call, given } = setup()
+    given({ fries: 1 })
+
+    expect(await call('checkout')).toEqual({ message: "Ask whether it's pickup or delivery first." })
+    await call('set_order_type', { type: 'pickup' })
+    expect(await call('checkout')).toEqual({ ok: true })
+  })
+})
+
 describe('the golden path', () => {
   it('runs as tool calls', async () => {
     const { call, ui } = setup()
+
+    expect(await call('set_order_type', { type: 'delivery' })).toEqual({ orderType: 'delivery' })
 
     const vegetarian = await call('find_menu_items', { tags: ['vegetarian'] })
     expect(vegetarian).toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: 'margherita-pizza' })]) })

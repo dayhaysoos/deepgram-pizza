@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { products } from '../menu/menu'
-import { MAX_LINE_QUANTITY } from '../shop'
+import { DELIVERY_FEE, MAX_LINE_QUANTITY } from '../shop'
 import {
   CHECKOUT_UNAVAILABLE,
   checkoutCart,
+  CHOOSE_ORDER_TYPE,
   orderNumber,
   parseCheckoutRequest,
   type CheckoutInput,
@@ -28,7 +29,10 @@ function fakeStripe(respond: () => Promise<{ url: string | null }> = async () =>
 }
 
 function checkout(input: Partial<CheckoutInput>, stripe = fakeStripe()) {
-  return checkoutCart({ cartDetails: {}, origin: ORIGIN, secretKey: TEST_KEY, ...input }, stripe.createSession)
+  return checkoutCart(
+    { cartDetails: {}, orderType: 'pickup', origin: ORIGIN, secretKey: TEST_KEY, ...input },
+    stripe.createSession,
+  )
 }
 
 // A cart line the way the browser posts it: use-shopping-cart's full entry.
@@ -83,8 +87,62 @@ describe('checkoutCart', () => {
 
     const { params } = stripe.calls[0]
     expect(params.mode).toBe('payment')
-    expect(params.success_url).toBe(`${ORIGIN}/order/success?session_id={CHECKOUT_SESSION_ID}`)
+    expect(params.success_url).toBe(`${ORIGIN}/order/success?session_id={CHECKOUT_SESSION_ID}&type=pickup`)
     expect(params.cancel_url).toBe(`${ORIGIN}/?checkout=cancelled`)
+  })
+
+  it('asks for the phone number on a pickup order, and no address', async () => {
+    const stripe = fakeStripe()
+
+    await checkout({ cartDetails: { [first.id]: cartLine(first, 1) }, orderType: 'pickup' }, stripe)
+
+    expect(stripe.calls[0].params).toStrictEqual({
+      mode: 'payment',
+      line_items: expect.any(Array),
+      success_url: `${ORIGIN}/order/success?session_id={CHECKOUT_SESSION_ID}&type=pickup`,
+      cancel_url: `${ORIGIN}/?checkout=cancelled`,
+      phone_number_collection: { enabled: true },
+    })
+  })
+
+  it('asks for a US address and the phone number on a delivery order, and adds the delivery fee', async () => {
+    const stripe = fakeStripe()
+
+    await checkout({ cartDetails: { [first.id]: cartLine(first, 1) }, orderType: 'delivery' }, stripe)
+
+    expect(stripe.calls[0].params).toStrictEqual({
+      mode: 'payment',
+      line_items: expect.any(Array),
+      success_url: `${ORIGIN}/order/success?session_id={CHECKOUT_SESSION_ID}&type=delivery`,
+      cancel_url: `${ORIGIN}/?checkout=cancelled`,
+      phone_number_collection: { enabled: true },
+      shipping_address_collection: { allowed_countries: ['US'] },
+      shipping_options: [
+        {
+          shipping_rate_data: {
+            type: 'fixed_amount',
+            fixed_amount: { amount: DELIVERY_FEE, currency: 'usd' },
+            display_name: 'Delivery',
+          },
+        },
+      ],
+    })
+  })
+
+  it('asks for pickup or delivery when the order type is missing', async () => {
+    const stripe = fakeStripe()
+
+    const result = await checkout({ cartDetails: { [first.id]: cartLine(first, 1) }, orderType: undefined }, stripe)
+
+    expect(result).toEqual({ message: CHOOSE_ORDER_TYPE })
+    expect(CHOOSE_ORDER_TYPE).toBe('Choose pickup or delivery first.')
+    expect(stripe.calls).toEqual([])
+  })
+
+  it('checks the cart before the order type', async () => {
+    const result = await checkout({ cartDetails: {}, orderType: undefined })
+
+    expect(result).toEqual({ message: 'The cart is empty.' })
   })
 
   it('passes the secret key to Stripe', async () => {
@@ -190,16 +248,24 @@ describe('checkoutCart', () => {
 })
 
 describe('parseCheckoutRequest', () => {
-  it('keeps cartDetails', () => {
+  it.each(['pickup', 'delivery'])('keeps cartDetails and the order type %j', (orderType) => {
     const cartDetails = { [first.id]: cartLine(first, 1) }
 
-    expect(parseCheckoutRequest({ cartDetails, extra: true })).toEqual({ cartDetails })
+    expect(parseCheckoutRequest({ cartDetails, orderType, extra: true })).toStrictEqual({ cartDetails, orderType })
+  })
+
+  // A missing or unknown order type isn't a malformed request: checkoutCart
+  // turns it into a message asking for pickup or delivery.
+  it.each([undefined, null, '', 'Pickup', 'drive-thru', 1, {}])('leaves out the order type %j', (orderType) => {
+    const cartDetails = { [first.id]: cartLine(first, 1) }
+
+    expect(parseCheckoutRequest({ cartDetails, orderType })).toStrictEqual({ cartDetails, orderType: undefined })
   })
 
   it.each([undefined, null, 'cart', [], { cartDetails: null }, { cartDetails: [] }, { cartDetails: 'cart' }, {}])(
     'rejects %j',
     (data) => {
-      expect(() => parseCheckoutRequest(data)).toThrow('Expected { cartDetails }')
+      expect(() => parseCheckoutRequest(data)).toThrow('Expected { cartDetails, orderType }')
     },
   )
 })

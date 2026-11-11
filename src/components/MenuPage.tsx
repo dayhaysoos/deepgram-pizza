@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
 import { CartChangesProvider } from '../agent/CartChangesProvider'
 import { MenuUiProvider } from '../agent/MenuUiProvider'
+import { OrderTypeProvider } from '../agent/OrderTypeProvider'
 import { ToolHandlersProvider } from '../agent/ToolHandlersProvider'
 import { categories, menu } from '../menu/menu'
 import { VoiceSession, VoiceSessionProvider } from '../voice/VoiceSession'
@@ -30,17 +31,20 @@ type MenuPageProps = {
  */
 export function MenuPage(props: MenuPageProps) {
   // The voice session, first, so everything below can reach it; what the
-  // voice tools change on screen (useMenuUi); the cart changes, which taps and
-  // tools both go through and which tell the agent about taps; and the tool
-  // handlers. src/pageContext.ts has the hooks that read the others.
+  // voice tools change on screen (useMenuUi); pickup or delivery
+  // (useOrderType); the cart changes, which taps and tools both go through and
+  // which tell the agent about taps; and the tool handlers. src/pageContext.ts
+  // has the hooks that read the others.
   return (
     <VoiceSessionProvider>
       <MenuUiProvider>
-        <CartChangesProvider>
-          <ToolHandlersProvider>
-            <MenuLayout {...props} />
-          </ToolHandlersProvider>
-        </CartChangesProvider>
+        <OrderTypeProvider>
+          <CartChangesProvider>
+            <ToolHandlersProvider>
+              <MenuLayout {...props} />
+            </ToolHandlersProvider>
+          </CartChangesProvider>
+        </OrderTypeProvider>
       </MenuUiProvider>
     </VoiceSessionProvider>
   )

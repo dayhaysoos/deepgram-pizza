@@ -16,7 +16,7 @@ import type { CartDetails } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
 import { isRecord } from '../isRecord'
 import { categories, findItem, findVariant, formatPrice, tags, type Category, type Product, type Tag } from '../menu/menu'
-import { isLineQuantity, MAX_LINE_QUANTITY } from '../shop'
+import { isLineQuantity, isOrderType, MAX_LINE_QUANTITY, ORDER_TYPES, type OrderType } from '../shop'
 import type { CartChanges } from './cartChanges'
 import {
   applyCartChange,
@@ -28,6 +28,7 @@ import {
   type Quantities,
 } from './cartSummary'
 import { closeMatches, searchMenu, type MenuFilters } from './menuSearch'
+import type { OrderTypeStore } from './orderType'
 import { planGroupOrder } from './planGroupOrder'
 import { orList, type Recovery } from './text'
 import { MAX_LINES_PER_CALL, type ToolName } from './tools'
@@ -66,11 +67,14 @@ export type Suggestions = {
 export type ToolPorts = {
   cart: CartPort
   ui: UiPort
+  /** Pickup or delivery: set_order_type records it, and checkout needs it. In the app it's the page's store (orderType.ts). */
+  orderType: Pick<OrderTypeStore, 'get' | 'set'>
   /**
-   * Starts checkout for the cart. It never rejects: a failed request comes back
-   * as `{ message }`. In the app it's `startCheckout`, which guarantees that.
+   * Starts checkout for the cart, for pickup or delivery. It never rejects: a
+   * failed request comes back as `{ message }`. In the app it's
+   * `startCheckout`, which guarantees that.
    */
-  checkout(cartDetails: CartDetails): Promise<CheckoutResult>
+  checkout(cartDetails: CartDetails, orderType: OrderType): Promise<CheckoutResult>
 }
 
 /** What find_menu_items returns. */
@@ -100,7 +104,10 @@ export type PlanShown = SuggestionsShown & {
   lines: Array<{ id: string; name: string; quantity: number }>
 }
 
-export type ToolResult = CartSummary | Recovery | FoundItems | SuggestionsShown | PlanShown | { ok: true }
+/** What set_order_type returns once it has recorded the choice. */
+export type OrderTypeSet = { orderType: OrderType }
+
+export type ToolResult = CartSummary | Recovery | FoundItems | SuggestionsShown | PlanShown | OrderTypeSet | { ok: true }
 
 /**
  * Runs one tool. Takes the arguments the agent sent, as an object or as the
@@ -113,9 +120,11 @@ export type ToolHandlers = Record<ToolName, ToolHandler>
 
 const BAD_QUANTITY = `The quantity has to be a whole number from 1 to ${MAX_LINE_QUANTITY}.`
 const EMPTY_CART = 'The cart is empty.'
+const ASK_ORDER_TYPE = "Ask whether it's pickup or delivery first."
+const BAD_ORDER_TYPE = `The type has to be ${orList(ORDER_TYPES.map((type) => `"${type}"`))}. Ask which, if the customer hasn't said.`
 
 /** Creates the handlers. A page makes one set and shares it, since the set remembers what it did. */
-export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandlers {
+export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts): ToolHandlers {
   // The drawer opens on its own the first time a voice change adds an item, so
   // the customer sees it happen. After that it's theirs to open and close.
   let drawerOpened = false
@@ -242,12 +251,22 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
 
     clear_cart: recovering(() => cart.change({ type: 'clear' })),
 
+    // Not a cart tool, so it returns the choice, not the cart: with the cart
+    // and its total, the agent would read them back after "delivery".
+    set_order_type: recovering(({ type }) => {
+      if (!isOrderType(type)) return { message: BAD_ORDER_TYPE }
+      orderType.set(type)
+      return { orderType: type }
+    }),
+
     checkout: recovering(async () => {
       // The rendered cart, not cart.now(): checkout needs full cart entries. The agent
       // checks out only once the customer confirms the order, a turn after any change.
       const cartDetails = cart.cartDetails()
       if (Object.keys(cartDetails).length === 0) return { message: EMPTY_CART }
-      const result = await checkout(cartDetails)
+      const type = orderType.get()
+      if (type === null) return { message: ASK_ORDER_TYPE }
+      const result = await checkout(cartDetails, type)
       if ('message' in result) return result
       ui.goToCheckout(result.url)
       return { ok: true }

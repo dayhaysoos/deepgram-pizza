@@ -1,15 +1,16 @@
-// The page's cart changes (cartChanges.ts), wired to use-shopping-cart, the
-// voice session and the dev tools panel. Every tap that changes the cart, and
-// every tool call, goes through the one set made here: useCartChanges().
+// The page's cart changes (cartChanges.ts), wired to use-shopping-cart,
+// pickup or delivery, the voice session and the dev tools panel. Every tap
+// that changes the cart or chooses pickup or delivery, and every tool call
+// that changes the cart, goes through the one set made here: useCartChanges().
 
 import { useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
-import { CartChangesContext, TapUpdateSinkContext, useVoiceSession } from '../pageContext'
+import { CartChangesContext, TapUpdateSinkContext, useOrderTypeStore, useVoiceSession } from '../pageContext'
 import { createCartChanges } from './cartChanges'
 
 /**
- * Gives the components below `useCartChanges()`. Goes inside `CartProvider`
- * and `VoiceSessionProvider`. The cart is read here, once, so menu cards that
+ * Gives the components below `useCartChanges()`. Goes inside `CartProvider`,
+ * `VoiceSessionProvider` and `OrderTypeProvider`. The cart is read here, once, so menu cards that
  * change it don't re-render on every cart change.
  */
 export function CartChangesProvider({ children }: { children: ReactNode }) {
@@ -19,6 +20,7 @@ export function CartChangesProvider({ children }: { children: ReactNode }) {
   const setItemQuantity = useShoppingCart((cart) => cart.setItemQuantity)
   const removeItem = useShoppingCart((cart) => cart.removeItem)
   const clearCart = useShoppingCart((cart) => cart.clearCart)
+  const orderType = useOrderTypeStore()
   const voiceSession = useVoiceSession()
   const sink = useContext(TapUpdateSinkContext)
 
@@ -35,6 +37,7 @@ export function CartChangesProvider({ children }: { children: ReactNode }) {
   const [cartChanges] = useState(() =>
     createCartChanges({
       store: { cartDetails: () => latest.current.cartDetails, addItem, setItemQuantity, removeItem, clearCart },
+      orderType,
       tellAgent: (text) => voiceSession.tell(text),
       onTapUpdate: (text) => latest.current.sink(text),
     }),
