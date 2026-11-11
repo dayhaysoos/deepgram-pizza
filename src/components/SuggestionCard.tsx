@@ -1,5 +1,5 @@
 import { useId, useState, type RefObject } from 'react'
-import { applyCartChange, describeLine, summarizeCart } from '../agent/cartSummary'
+import { describeLine, summarizeLines } from '../agent/cartSummary'
 import { checkLinesToAdd, type Suggestions } from '../agent/handlers'
 import { useCartChanges, useMenuUi, useOrderType } from '../pageContext'
 
@@ -46,9 +46,9 @@ function SuggestionSheet({ suggestions, onClose }: { suggestions: Suggestions; o
   const cartChanges = useCartChanges()
   const [notice, setNotice] = useState<{ text: string; refused: boolean } | null>(null)
   const titleId = useId()
-  // For delivery, what the lines come to with the fee, as the agent says a plan's total.
+  // For a group plan and delivery, what it comes to with the fee, as the agent says a plan's total.
   const orderType = useOrderType()
-  const { delivery } = summarizeCart(applyCartChange({}, { type: 'add', lines: suggestions.lines }), orderType)
+  const delivery = suggestions.group ? summarizeLines(suggestions.lines, orderType).delivery : undefined
 
   // Add and Add all check lines exactly as the add_items tool does: all or nothing,
   // at most MAX_LINE_QUANTITY per line counting the cart. Returns whether the

@@ -104,6 +104,15 @@ export function applyCartChange(quantities: Quantities, change: CartChange): Qua
 }
 
 /**
+ * These lines priced on their own, as a cart holding only them: the
+ * suggestion card's lines and a group plan. For delivery, with the fee, as
+ * summarizeCart gives it.
+ */
+export function summarizeLines(lines: ItemQuantity[], orderType: OrderType | null = null): CartSummary {
+  return summarizeCart(applyCartChange({}, { type: 'add', lines }), orderType)
+}
+
+/**
  * The summary of a cart. Names and prices come from the menu. A line whose
  * product is no longer on the menu (a cart saved before menu.json changed) is
  * left out, since there's no price to give for it; checkout turns it down too.

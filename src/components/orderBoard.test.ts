@@ -246,6 +246,20 @@ describe('the order board during a voice session', () => {
     expect(ids()).toEqual(['fries', 'soda'])
   })
 
+  it("shows a tap made while the agent's lines key in at once, and the agent's lines carry on at their pace", () => {
+    const { voice, agentStartsSpeaking } = liveVoice()
+    const { change, ids, shown } = setUp({}, voice)
+    change(plan, 'agent')
+    agentStartsSpeaking()
+
+    change({ ...plan, fries: 1 }, 'tap')
+
+    expect(ids()).toEqual(['cheese-pizza-large', 'fries'])
+    expect(shown()[1]).toEqual({ id: 'fries', quantity: 1, mark: 'new' })
+    vi.advanceTimersByTime(readBackMs({ id: 'cheese-pizza-large', quantity: 2 }))
+    expect(ids()).toEqual(['cheese-pizza-large', 'pepperoni-pizza-large', 'fries'])
+  })
+
   it("keys in what the agent adds quickly when no session is on, as the dev tools panel's calls do", () => {
     const { change, ids } = setUp()
     change({ fries: 1, soda: 2 }, 'agent')

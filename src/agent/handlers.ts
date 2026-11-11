@@ -23,11 +23,11 @@ import { categories, findItem, findVariant, formatPrice, tags, type Category, ty
 import { isLineQuantity, isOrderType, MAX_LINE_QUANTITY, ORDER_TYPES, type OrderType } from '../shop'
 import type { CartChanges } from './cartChanges'
 import {
-  applyCartChange,
   describeLine,
   quantitiesOf,
   quantityOf,
   summarizeCart,
+  summarizeLines,
   type CartSummary,
   type DeliveryCharge,
   type ItemQuantity,
@@ -72,6 +72,8 @@ export type Suggestions = {
   lines: CartSummary['lines']
   /** What every line together costs. */
   total: string
+  /** A group plan (plan_group_order's): for delivery, the card also gives what it comes to with the fee, as the agent says it. */
+  group?: true
 }
 
 export type ToolPorts = {
@@ -89,6 +91,8 @@ export type ToolPorts = {
 
 /** What find_menu_items returns. */
 export type FoundItems = {
+  /** FOUND_ON_SCREEN, when something matched: the cards are lit up, so the agent needn't show them again. */
+  note?: string
   items: Array<{
     id: string
     name: string
@@ -127,6 +131,14 @@ export type PlanShown = SuggestionsShown & {
  * repeat put a second or more of silence before it spoke.
  */
 export const PLAN_ON_SCREEN = "The card on screen shows this plan now, so don't call show_suggestions for it."
+
+/**
+ * In find_menu_items' result, for the same reason: in the voice check of
+ * 2026-11-11, "What's vegetarian?" lit up the cards and the agent opened a
+ * card of three pizzas next to them too, which the rule and the tool's
+ * description both say not to do (step 5 saw it in text runs).
+ */
+export const FOUND_ON_SCREEN = "They're lit up on screen now, so don't call show_suggestions for them."
 
 /**
  * What set_order_type returns once it has recorded the choice, and, when the
@@ -198,9 +210,15 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
     const checked = checkLines(items, {})
     if ('message' in checked) return { message: `Nothing was shown. ${checked.message}` }
     // Priced as a cart holding only these lines, so summarizeCart is the one place that prices lines.
-    const { lines, total, totalSpoken } = summarizeCart(applyCartChange({}, { type: 'add', lines: checked.lines }))
+    const { lines, total, totalSpoken } = summarizeLines(checked.lines)
     const reasonText = nonBlankText(reason)
-    const suggestions = { title: nonBlankText(title) ?? 'Suggestions', ...(reasonText ? { reason: reasonText } : {}), lines, total }
+    const suggestions: Suggestions = {
+      title: nonBlankText(title) ?? 'Suggestions',
+      ...(reasonText ? { reason: reasonText } : {}),
+      lines,
+      total,
+      ...(from === 'plan_group_order' && { group: true }),
+    }
     const repeatsPlan = from === 'show_suggestions' && planned && ui.isShowingSuggestions() && sameLines(checked.lines, planned)
     if (!repeatsPlan) {
       ui.showSuggestions(suggestions)
@@ -229,7 +247,7 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
           serves: variant.serves,
         })),
       }))
-      if (items.length > 0) return { items }
+      if (items.length > 0) return { note: FOUND_ON_SCREEN, items }
       return { items, message: 'Nothing on the menu matches. Try fewer filters, or offer the closest thing we have.' }
     }),
 
@@ -250,7 +268,7 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
       const shown = suggest(plan.title, plan.reason, plan.lines, 'plan_group_order')
       if ('message' in shown) return shown
       const lines = shown.lines.map(({ id, name, quantity }) => ({ id, name, quantity }))
-      const { delivery } = summarizeCart(applyCartChange({}, { type: 'add', lines: plan.lines }), type)
+      const { delivery } = summarizeLines(plan.lines, type)
       return {
         shown: true,
         note: PLAN_ON_SCREEN,

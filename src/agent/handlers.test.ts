@@ -3,7 +3,15 @@ import type { CheckoutResult } from '../checkout/checkout'
 import { menu, products } from '../menu/menu'
 import { createCartChanges } from './cartChanges'
 import { quantitiesOf, summarizeCart } from './cartSummary'
-import { checkLinesToAdd, createToolHandlers, PLAN_ON_SCREEN, type Suggestions, type ToolPorts, type ToolResult } from './handlers'
+import {
+  checkLinesToAdd,
+  createToolHandlers,
+  FOUND_ON_SCREEN,
+  PLAN_ON_SCREEN,
+  type Suggestions,
+  type ToolPorts,
+  type ToolResult,
+} from './handlers'
 import { createOrderTypeStore } from './orderType'
 import { planGroupOrder } from './planGroupOrder'
 import { renderedStore } from './testing'
@@ -598,10 +606,19 @@ describe('find_menu_items', () => {
     noCartChanges()
   })
 
+  // In the voice check of 2026-11-11 the agent opened a card next to the highlights, against its rules.
+  it("says in its result that the cards are lit up, so the agent doesn't show them again; not when nothing matched", async () => {
+    const { call } = setup()
+    expect(FOUND_ON_SCREEN).toBe("They're lit up on screen now, so don't call show_suggestions for them.")
+    expect(await call('find_menu_items', { tags: ['vegetarian'] })).toMatchObject({ note: FOUND_ON_SCREEN })
+    expect(await call('find_menu_items', { query: 'sushi' })).not.toHaveProperty('note')
+  })
+
   it('returns each match with its variants and prices', async () => {
     const { call } = setup()
 
     expect(await call('find_menu_items', { query: 'margherita' })).toEqual({
+      note: FOUND_ON_SCREEN,
       items: [
         {
           id: 'margherita-pizza',
@@ -859,6 +876,7 @@ describe('plan_group_order', () => {
       reason: 'Mains for 32 (12 vegetarian), sides to share and a drink each.',
       lines: priced.lines,
       total: priced.total,
+      group: true,
     })
     expect(result).toEqual({
       shown: true,

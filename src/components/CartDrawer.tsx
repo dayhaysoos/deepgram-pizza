@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
-import { findVariant, formatPrice, imagePath } from '../menu/menu'
+import { findVariant, formatPrice, imagePath, productName } from '../menu/menu'
 import { useCartChanges } from '../pageContext'
 import { MAX_LINE_QUANTITY } from '../shop'
 import { CheckoutButton } from './CheckoutButton'
@@ -24,11 +24,14 @@ type CartDrawerProps = {
 // The drawer is the order board (the owner, 2026-11-11): its lines come from
 // the board, so the lines a change adds key in one by one, lit as they land,
 // a changed line lights up, and a line taken out is struck through as it
-// fades. The total counts the lines keyed in so far; for delivery it has the
-// fee in it, as Stripe charges it and the agent says it (summarizeCart).
+// fades. The total is the cart's, with the fee for delivery, as Stripe
+// charges it and the agent says it (summarizeCart). It says the cart is
+// empty only when it is: not while the agent's lines wait for its voice, nor
+// while the last lines fade.
 export function CartDrawer({ returnFocusRef, closeButtonRef, board }: CartDrawerProps) {
   const open = useShoppingCart((cart) => cart.shouldDisplayCart)
-  const { lines, latest, total, delivery } = useOrderBoardView(board)
+  const count = useShoppingCart((cart) => cart.cartCount)
+  const { lines, anyKeyedIn, latest, delivery, toPay } = useOrderBoardView(board)
   const close = useShoppingCart((cart) => cart.handleCloseCart)
   const listRef = useRef<HTMLUListElement>(null)
 
@@ -75,7 +78,7 @@ export function CartDrawer({ returnFocusRef, closeButtonRef, board }: CartDrawer
           </button>
         </div>
 
-        {lines.length === 0 ? (
+        {lines.length === 0 && count === 0 ? (
           <div className="drawer-empty">
             <p className="drawer-empty-title">Your cart is empty</p>
             <p>Pick something from the menu and press Add.</p>
@@ -90,7 +93,7 @@ export function CartDrawer({ returnFocusRef, closeButtonRef, board }: CartDrawer
         {/* Pickup or delivery shows even with nothing in the cart: the agent asks it first. */}
         <div className="drawer-footer">
           <OrderTypeSwitch />
-          {lines.length > 0 && (
+          {anyKeyedIn && (
             <>
               {delivery && (
                 <p className="drawer-fee">
@@ -100,7 +103,7 @@ export function CartDrawer({ returnFocusRef, closeButtonRef, board }: CartDrawer
               )}
               <p className="drawer-total">
                 <span>Total</span>
-                <span>{delivery ? delivery.totalWithDelivery : total}</span>
+                <span>{toPay}</span>
               </p>
               <CheckoutButton />
             </>
@@ -117,7 +120,7 @@ function CartLine({ line }: { line: BoardLine }) {
   // Name, price and photo come from the menu, as the agent's cart summary's do;
   // a line on its way out is no longer in the cart.
   const found = findVariant(line.id)
-  const name = found?.product.name ?? line.id
+  const name = productName(line.id)
   const price = found?.variant.price ?? 0
   const leaving = line.mark === 'leaving'
 

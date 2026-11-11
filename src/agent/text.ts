@@ -21,3 +21,8 @@ export function andList(words: readonly string[]): string {
 function joinList(words: readonly string[], conjunction: 'and' | 'or'): string {
   return words.length <= 2 ? words.join(` ${conjunction} `) : `${words.slice(0, -1).join(', ')} ${conjunction} ${words.at(-1)}`
 }
+
+/** The phrases that are there: `cond && 'text'` leaves false, and an optional phrase undefined, when it isn't. */
+export function compact(phrases: ReadonlyArray<string | false | undefined>): string[] {
+  return phrases.filter((phrase) => typeof phrase === 'string')
+}

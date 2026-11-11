@@ -92,8 +92,11 @@ export type CartChanges = {
   subscribe(listener: CartChangeListener): () => void
 }
 
+/** Who made a change: the agent, through a tool, or the customer, by tapping. */
+export type ChangedBy = 'agent' | 'tap'
+
 /** Hears a change: the cart before it and after it, and who made it. */
-export type CartChangeListener = (before: Quantities, after: Quantities, by: 'agent' | 'tap') => void
+export type CartChangeListener = (before: Quantities, after: Quantities, by: ChangedBy) => void
 
 /** Creates the page's cart changes. A page makes one and shares it, since it remembers the last change. */
 export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: CartChangesPorts): CartChanges {
@@ -105,7 +108,7 @@ export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: 
     return last?.basedOn === rendered ? last.cartAfter : quantitiesOf(rendered)
   }
 
-  function change(cartChange: CartChange, by: 'agent' | 'tap' = 'agent'): CartSummary {
+  function change(cartChange: CartChange, by: ChangedBy = 'agent'): CartSummary {
     const rendered = store.cartDetails()
     const cartBefore = cartAt(rendered)
     const cartAfter = applyCartChange(cartBefore, cartChange)

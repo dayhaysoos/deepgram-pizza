@@ -26,11 +26,14 @@ export function useOrderBoardStore(): OrderBoard {
 export type OrderBoardView = {
   /** The lines, as the board shows them: keyed in so far, with the ones on their way out. */
   lines: BoardLine[]
+  /** Whether a line is in, not on its way out: the total and Checkout show only then. */
+  anyKeyedIn: boolean
   /** The last line keyed in, changed or taken out, if the page has changed the cart. */
   latest: LatestLine | null
-  /** What the lines keyed in so far cost, written, with the delivery fee for delivery. */
-  total: string
+  /** For delivery, the fee and the cart's total with it. */
   delivery?: DeliveryCharge
+  /** What Checkout charges for the cart: its total, with the fee for delivery. It doesn't wait for lines to key in. */
+  toPay: string
 }
 
 /** The board as it is now, for this cart and pickup or delivery. Re-renders as lines key in. */
@@ -39,11 +42,18 @@ export function useOrderBoardView(board: OrderBoard): OrderBoardView {
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
   const orderType = useOrderType()
   return useMemo(() => {
-    const lines = boardLines(state, quantitiesOf(cartDetails))
-    // The total climbs as lines key in, like a drive-thru board's.
-    const keyedIn = Object.fromEntries(lines.filter(({ mark }) => mark !== 'leaving').map(({ id, quantity }) => [id, quantity]))
-    const { total, delivery } = summarizeCart(keyedIn, orderType)
-    return { lines, latest: state.latest, total, ...(delivery && { delivery }) }
+    const cart = quantitiesOf(cartDetails)
+    const lines = boardLines(state, cart)
+    // The cart's total, the same figures the agent says and Stripe charges (summarizeCart),
+    // so Checkout never charges more than the board shows, even while lines key in.
+    const { total, delivery } = summarizeCart(cart, orderType)
+    return {
+      lines,
+      anyKeyedIn: lines.some(({ mark }) => mark !== 'leaving'),
+      latest: state.latest,
+      ...(delivery && { delivery }),
+      toPay: delivery ? delivery.totalWithDelivery : total,
+    }
   }, [state, cartDetails, orderType])
 }
 

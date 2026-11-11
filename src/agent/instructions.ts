@@ -21,7 +21,7 @@ import { DELIVERY_FEE, SHOP_NAME, type OrderType } from '../shop'
 import { describeCart, type CartSummary } from './cartSummary'
 import { describeOrderType } from './orderType'
 import { spokenPrice } from './spokenPrice'
-import { orList } from './text'
+import { compact, orList } from './text'
 import {
   EXAMPLE_CART_CENTS,
   GROUP_MAINS,
@@ -256,11 +256,6 @@ function safeguardRule(has: HasTool, changesCart: boolean): string | undefined {
     `If the customer asks, start by saying you can't do that yet${tapInstead}.`,
     pretending.length > 0 && `Never say you're ${orList(pretending)}, or that you did.`,
   ]).join(' ')
-}
-
-// The phrases whose condition held: `cond && 'text'` leaves false when it didn't.
-function compact(phrases: Array<string | false | undefined>): string[] {
-  return phrases.filter((phrase) => typeof phrase === 'string')
 }
 
 /**

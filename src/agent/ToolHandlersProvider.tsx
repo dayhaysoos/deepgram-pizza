@@ -37,9 +37,11 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
         showSuggestions,
         closeSuggestions,
         isShowingSuggestions,
-        // On phones the full-screen cart would cover the menu: the order strip shows the change instead.
+        // With the agent's voice, as its lines key in (review round 1: opened at once, it showed an
+        // empty cart until then). On phones the full-screen cart would cover the menu: the order strip
+        // shows the change instead.
         openCart: () => {
-          if (!window.matchMedia(PHONE_WIDTH).matches) openCart()
+          if (!window.matchMedia(PHONE_WIDTH).matches) voiceSession.showWithVoice(openCart)
         },
         // Doesn't wait itself: the checkout tool answers now, with the amount
         // to pay, so the agent can say it's taking the customer to checkout.

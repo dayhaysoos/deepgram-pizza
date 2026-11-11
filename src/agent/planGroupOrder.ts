@@ -68,7 +68,7 @@ import {
 import { DELIVERY_FEE, MAX_LINE_QUANTITY, type OrderType } from '../shop'
 import { quantityOf, type ItemQuantity, type Quantities } from './cartSummary'
 import { spokenPrice } from './spokenPrice'
-import { andList, orList, type Recovery } from './text'
+import { andList, compact, orList, type Recovery } from './text'
 import { GROUP_MAINS, MAX_LINES_PER_CALL, type GroupMains } from './tools'
 
 /** Mains may feed this share more than the group, when the sizes allow. */
@@ -145,7 +145,7 @@ export function planGroupOrder(
   const plan = buildPlan(read)
   if (!plan) return tooBig(read, inCart)
   if (read.budget === undefined) return plan
-  return fitBudget(read, read.budget, plan, orderType === 'delivery' ? DELIVERY_FEE : 0)
+  return fitBudget(read, read.budget, plan, orderType)
 }
 
 /** Too big for one order: the largest group that fits, keeping everything else. */
@@ -180,19 +180,23 @@ function tooBig(read: CheckedRequest, inCart: Quantities): Recovery {
 }
 
 /**
- * The plan made lean enough for `budget` (cents), counting `fee` (the delivery
- * fee, or 0), in the owner's order (the header says it), with what it took in
- * `budget` and on the card's line; or the least it can cost, as a message.
- * `normal` is the plan with no budget.
+ * The plan made lean enough for `budget` (cents), in the owner's order (the
+ * header says it), with what it took in `budget` and on the card's line; or
+ * the least it can cost, as a message. `normal` is the plan with no budget.
+ * The delivery fee counts unless it's pickup: before the customer has said
+ * which, the plan leaves room for it, so it still fits if they say delivery.
  */
-function fitBudget(request: CheckedRequest, budget: number, normal: GroupPlan, fee: number): GroupPlan | Recovery {
+function fitBudget(request: CheckedRequest, budget: number, normal: GroupPlan, orderType: OrderType | null): GroupPlan | Recovery {
+  const fee = orderType === 'pickup' ? 0 : DELIVERY_FEE
   const costs = (plan: GroupPlan) => costOf(plan.lines) + fee
-  const theBudget = `the ${formatPrice(budget)} budget${fee > 0 ? ', delivery included' : ''}`
+  const feeWords = { pickup: '', delivery: ', delivery included', none: ', leaving room for delivery' }[orderType ?? 'none']
+  const budgetWords = `${formatPrice(budget)} budget${feeWords}`
   const withinIt = (plan: GroupPlan, budgetNote: string): GroupPlan => ({
     ...plan,
-    reason: `${plan.reason} Within your ${formatPrice(budget)} budget${fee > 0 ? ', delivery included' : ''}.`,
+    reason: `${plan.reason} Within your ${budgetWords}.`,
     budget: budgetNote,
   })
+  const theBudget = `the ${budgetWords}`
   if (costs(normal) <= budget) return withinIt(normal, `It's within ${theBudget} as it is.`)
 
   const people = request.people
@@ -217,14 +221,13 @@ function fitBudget(request: CheckedRequest, budget: number, normal: GroupPlan, f
   }
 
   const least = buildPlan(request, leanest)
-  const mains = request.mains.length === 1 ? request.mains[0].noun[1] : 'mains'
   const asked = askedSides + askedDrinks > 0 ? ', what they asked for by name' : ''
   if (!least) return { message: `That's under what feeding ${people} can cost. Ask whether to plan without the budget.` }
   const leastCost = costs(least)
   return {
     message:
       `That's under what feeding ${people} can cost: the least is ${formatPrice(leastCost)}${fee > 0 ? ' with delivery' : ''} ` +
-      `(${spokenPrice(leastCost)}), with the cheapest ${mains}${asked} and no other sides or drinks. ` +
+      `(${spokenPrice(leastCost)}), with the cheapest ${mainsNoun(request)}${asked} and no other sides or drinks. ` +
       'Tell the customer, and ask whether that works or whether to plan without the budget.',
   }
 }
@@ -239,16 +242,20 @@ function changesFrom(normal: GroupPlan, plan: GroupPlan, request: CheckedRequest
       .map((line) => `${line.quantity} ${line.id}`)
       .join()
   const mainCategoryIds = request.mains.map((category) => category.id)
-  const mains = request.mains.length === 1 ? request.mains[0].noun[1] : 'mains'
   const drinks = countIn(plan.lines, DRINK_CATEGORIES)
   const sides = countIn(plan.lines, SIDE_CATEGORIES)
 
   const changes: string[] = []
-  if (linesIn(plan.lines, mainCategoryIds) !== linesIn(normal.lines, mainCategoryIds)) changes.push(`cheaper ${mains}`)
+  if (linesIn(plan.lines, mainCategoryIds) !== linesIn(normal.lines, mainCategoryIds)) changes.push(`cheaper ${mainsNoun(request)}`)
   if (drinks < countIn(normal.lines, DRINK_CATEGORIES)) changes.push(drinks === 0 ? 'no drinks' : `drinks for ${drinks} of the ${request.people}`)
   else if (linesIn(plan.lines, DRINK_CATEGORIES) !== linesIn(normal.lines, DRINK_CATEGORIES)) changes.push('cheaper drinks')
   if (sides < countIn(normal.lines, SIDE_CATEGORIES)) changes.push(sides === 0 ? 'no sides' : 'fewer sides')
   return changes
+}
+
+/** What the plan's mains are, as a plural: "pizzas", "subs", or "mains" for a mix. */
+function mainsNoun(request: CheckedRequest): string {
+  return request.mains.length === 1 ? request.mains[0].noun[1] : 'mains'
 }
 
 /** Whether a line's item is in one of these categories. */
@@ -407,17 +414,18 @@ function buildPlan(request: CheckedRequest, shape: PlanShape = NORMAL): GroupPla
   const kinds = kindsPerSlot(
     slots,
     slots.map((slot) => mustFor(slot).length),
-    slots.map((slot) => poolFor(slot, request, new Set(), false).length),
+    slots.map((slot) => poolFor(slot, request, new Set(), { cheapest: false }).length),
   )
   const used = new Set<MenuItem>()
   const lines: ItemQuantity[] = []
   const mains: Array<{ item: MenuItem; count: number }> = []
   for (const [index, slot] of slots.entries()) {
-    const pool = poolFor(slot, request, used, shape.cheapMains)
+    const pool = poolFor(slot, request, used, { cheapest: shape.cheapMains })
     const must = mustFor(slot).filter((item) => pool.includes(item))
     // Room on the size most of them are; a small size given with larges is checked with the lines below.
     const roomServes = slot.largest.count > 0 ? slot.largest.serves : slot.smallest.serves
-    const picked = pickKinds(unitsIn(slot), kinds[index], must, pool, (item) => request.room(sizeOf(item, roomServes).id), false)
+    const room = (item: MenuItem) => request.room(sizeOf(item, roomServes).id)
+    const picked = pickKinds(unitsIn(slot), kinds[index], must, pool, room, { fillFirst: false })
     if (!picked) return undefined
 
     // The large sizes go to the first kinds, the small ones to the last.
@@ -437,8 +445,9 @@ function buildPlan(request: CheckedRequest, shape: PlanShape = NORMAL): GroupPla
     .sort((a, b) => b.count - a.count || menu.indexOf(a.item) - menu.indexOf(b.item))
     .flatMap(({ item }) => item.pairsWith)
   const sideCount = shape.sides ?? Math.ceil(people / PEOPLE_PER_SIDE)
-  const sides = extras(SIDE_CATEGORIES, sideCount, MAX_SIDE_KINDS, pairs, request, false)
-  const drinks = request.drinks ? extras(DRINK_CATEGORIES, shape.drinks ?? people, 1, pairs, request, shape.cheapDrinks) : []
+  const sides = extras(SIDE_CATEGORIES, sideCount, MAX_SIDE_KINDS, pairs, request, { cheapest: false })
+  const drinkCount = shape.drinks ?? people
+  const drinks = request.drinks ? extras(DRINK_CATEGORIES, drinkCount, 1, pairs, request, { cheapest: shape.cheapDrinks }) : []
   if (!sides || !drinks) return undefined
   lines.push(...sides, ...drinks)
 
@@ -519,7 +528,7 @@ function kindsPerSlot(slots: Slot[], must: number[], poolSizes: number[]): numbe
  * it spicy or asked for one, and nothing another slot already has. Menu order
  * breaks ties.
  */
-function poolFor(slot: Slot, request: CheckedRequest, used: Set<MenuItem>, cheapest: boolean): MenuItem[] {
+function poolFor(slot: Slot, request: CheckedRequest, used: Set<MenuItem>, { cheapest }: { cheapest: boolean }): MenuItem[] {
   const rank = (item: MenuItem) => (isPopular(item) ? 0 : 2) + (isVegetarian(item) ? 1 : 0)
   const price = (item: MenuItem) => (cheapest ? sizeOf(item, slot.largest.serves).price : 0)
   return menu
@@ -566,7 +575,7 @@ function extras(
   pairedKinds: number,
   pairs: string[],
   request: CheckedRequest,
-  cheapest: boolean,
+  { cheapest }: { cheapest: boolean },
 ): ItemQuantity[] | undefined {
   const fits = (item: MenuItem | undefined): item is MenuItem =>
     item !== undefined && from.includes(item.category) && allowed(item, request)
@@ -576,12 +585,12 @@ function extras(
     picked?.map(({ item, count: quantity }) => ({ id: defaultVariant(item).id, quantity }))
   if (cheapest) {
     const byPrice = menu.filter(fits).sort((a, b) => defaultVariant(a).price - defaultVariant(b).price)
-    return toLines(pickKinds(count, Math.max(asked.length, 1), asked, unique([...asked, ...byPrice]), room, true))
+    return toLines(pickKinds(count, Math.max(asked.length, 1), asked, unique([...asked, ...byPrice]), room, { fillFirst: true }))
   }
   const paired = unique(pairs.map(findItem).filter(fits))
   const rest = menu.filter(fits).sort((a, b) => Number(isPopular(b)) - Number(isPopular(a)))
   const wanted = Math.max(asked.length, Math.min(paired.length, pairedKinds), 1)
-  return toLines(pickKinds(count, wanted, asked, unique([...paired, ...rest]), room, false))
+  return toLines(pickKinds(count, wanted, asked, unique([...paired, ...rest]), room, { fillFirst: false }))
 }
 
 /**
@@ -602,7 +611,7 @@ function pickKinds(
   must: MenuItem[],
   pool: MenuItem[],
   room: (item: MenuItem) => number,
-  fillFirst: boolean,
+  { fillFirst }: { fillFirst: boolean },
 ): Array<{ item: MenuItem; count: number }> | undefined {
   const candidates = unique([...must, ...pool]).filter((item) => room(item) > 0)
   let take = Math.min(count, Math.max(wanted, must.length), candidates.length)
@@ -696,10 +705,6 @@ function describePlan(lines: ItemQuantity[], request: CheckedRequest): Pick<Grou
   return { reason, summary }
 }
 
-/** The words that are there: leaves out undefined. */
-function compact(words: Array<string | undefined>): string[] {
-  return words.filter((word) => word !== undefined)
-}
 
 function itemFor(id: string): MenuItem | undefined {
   return findItem(id) ?? findVariant(id)?.item

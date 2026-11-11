@@ -158,6 +158,11 @@ export function findVariant(variantId: string): FoundVariant | undefined {
   return byVariantId.get(variantId)
 }
 
+/** The product's name for a variant id ("Large Pepperoni Pizza"), or the id itself when it isn't on the menu. */
+export function productName(variantId: string): string {
+  return findVariant(variantId)?.product.name ?? variantId
+}
+
 /** Photos live in public/images, named after the item id. */
 export function imagePath(item: MenuItem): string {
   return `/images/${item.id}.jpg`

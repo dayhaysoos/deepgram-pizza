@@ -534,12 +534,18 @@ describe('planGroupOrder with a budget', () => {
     expect(cost(result.lines) + DELIVERY_FEE).toBe(24818)
   })
 
-  it('counts the delivery fee for delivery only', () => {
+  it('counts the delivery fee unless it is pickup, leaving room for it before the customer has said', () => {
     // The plan costs $297.56: within $300 for pickup, over it with the $3.99 fee.
     expect(planFor({ people: 30, vegetarians: 10, budget: 300 }, 'pickup').budget).toBe("It's within the $300.00 budget as it is.")
     const delivery = planFor({ people: 30, vegetarians: 10, budget: 300 }, 'delivery')
     expect(delivery.budget).toMatch(/^To stay within the \$300\.00 budget, delivery included: /)
     expect(cost(delivery.lines) + DELIVERY_FEE).toBeLessThanOrEqual(30000)
+    // Before the choice: so a plan made then still fits when they say delivery (review round 1).
+    const notChosen = planGroupOrder({ people: 30, vegetarians: 10, budget: 300 })
+    if ('message' in notChosen) throw new Error(notChosen.message)
+    expect(notChosen.lines).toEqual(delivery.lines)
+    expect(notChosen.budget).toMatch(/^To stay within the \$300\.00 budget, leaving room for delivery: /)
+    expect(notChosen.reason).toMatch(/ Within your \$300\.00 budget, leaving room for delivery\.$/)
   })
 
   it("cuts in the owner's order: cheapest drink, cheaper mains, fewer drinks, then fewer sides, never the mains", () => {
