@@ -32,7 +32,7 @@
 //   too big for that gets a message with the largest group that fits.
 //
 // A budget (the owner's rules, 2026-11-11): when the customer gives one, the
-// plan has to come in at or under it, the delivery fee counted for delivery.
+// plan has to come in at or under it, the delivery fee counted unless it's pickup.
 // The plan above is tried first; if it costs too much, it gets leaner in this
 // order, stopping at the first that fits: the cheapest drink first, as many as
 // a line holds; then the cheapest kinds of mains, the vegetarians still fed
@@ -66,7 +66,7 @@ import {
   type Variant,
 } from '../menu/menu'
 import { MAX_LINE_QUANTITY, type OrderType } from '../shop'
-import { centsToPay, quantityOf, type ItemQuantity, type Quantities } from './cartSummary'
+import { applyCartChange, centsToPay, quantityOf, type ItemQuantity, type Quantities } from './cartSummary'
 import { spokenPrice } from './spokenPrice'
 import { andList, compact, orList, type Recovery } from './text'
 import { GROUP_MAINS, MAX_LINES_PER_CALL, type GroupMains } from './tools'
@@ -93,7 +93,7 @@ export type GroupOrderRequest = {
   /** How many of them are vegetarian. None when left out. */
   vegetarians?: number
   preferences?: GroupPreferences
-  /** The most the plan may cost, in dollars, the delivery fee counted for delivery. None when left out. */
+  /** The most the plan may cost, in dollars, the delivery fee counted unless it's pickup. None when left out. */
   budget?: number
 }
 
@@ -131,8 +131,8 @@ export type GroupPlan = {
  * what the agent sent (a `GroupOrderRequest`, if it got it right): every field
  * is checked at run time, since the agent can send anything. `inCart` is what's
  * in the cart now, by product id: the plan leaves room for it, so the cart can
- * take every line. `orderType` is pickup or delivery: for delivery, a budget
- * counts the delivery fee. It never throws, and the same request, cart and
+ * take every line. `orderType` is pickup or delivery, or null before the
+ * choice: a budget counts the delivery fee unless it's pickup. It never throws, and the same request, cart and
  * order type always get the same plan.
  */
 export function planGroupOrder(
@@ -187,10 +187,9 @@ function tooBig(read: CheckedRequest, inCart: Quantities): Recovery {
  * said which, the plan leaves room for it, so it still fits if they say delivery.
  */
 function fitBudget(request: CheckedRequest, budgetCents: number, normal: GroupPlan, orderType: OrderType | null): GroupPlan | Recovery {
-  const counted = orderType === 'pickup' ? 'pickup' : 'delivery'
+  const { pricedAs, feeWords, withFee } = BUDGET_FEE[orderType ?? 'notChosen']
   // What Stripe would charge for the plan, the fee priced where the cart's is (centsToPay).
-  const costs = (plan: GroupPlan) => centsToPay(Object.fromEntries(plan.lines.map(({ id, quantity }) => [id, quantity])), counted)
-  const feeWords = { pickup: '', delivery: ', delivery included', none: ', leaving room for delivery' }[orderType ?? 'none']
+  const costs = (plan: GroupPlan) => centsToPay(applyCartChange({}, { type: 'add', lines: plan.lines }), pricedAs)
   const budgetWords = `${formatPrice(budgetCents)} budget${feeWords}`
   const withinIt = (plan: GroupPlan, budgetNote: string): GroupPlan => ({
     ...plan,
@@ -227,10 +226,21 @@ function fitBudget(request: CheckedRequest, budgetCents: number, normal: GroupPl
   const leastCost = costs(least)
   return {
     message:
-      `That's under what feeding ${people} can cost: the least is ${formatPrice(leastCost)}${counted === 'delivery' ? ' with delivery' : ''} ` +
+      `That's under what feeding ${people} can cost: the least is ${formatPrice(leastCost)}${withFee} ` +
       `(${spokenPrice(leastCost)}), with the cheapest ${mainsNoun(request)}${asked} and no other sides or drinks. ` +
       'Tell the customer, and ask whether that works or whether to plan without the budget.',
   }
+}
+
+/**
+ * How a budget treats the delivery fee, by pickup or delivery: priced as
+ * delivery unless it's pickup, and how the card, the agent's note and the
+ * message for a budget too small say so.
+ */
+const BUDGET_FEE: Record<OrderType | 'notChosen', { pricedAs: OrderType; feeWords: string; withFee: string }> = {
+  pickup: { pricedAs: 'pickup', feeWords: '', withFee: '' },
+  delivery: { pricedAs: 'delivery', feeWords: ', delivery included', withFee: ' with delivery' },
+  notChosen: { pricedAs: 'delivery', feeWords: ', leaving room for delivery', withFee: ' with delivery' },
 }
 
 /** What a budget changed, in a few words: "cheaper pizzas", "drinks for 17 of the 30", "fewer sides". */

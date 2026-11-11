@@ -49,8 +49,8 @@ const pairingsTitle = `Goes great with the ${cheeseburger?.name ?? 'cheeseburger
 // cart as it is then, as the handler did (the plan leaves room for what's in
 // the cart), so it adds the lines on the card, which closes, as it does for
 // "add all of that" by voice. The owner's group on a $250 budget, as they asked
-// for it in their next run: for delivery, the budget counts the fee, so it plans
-// for pickup or delivery as chosen then.
+// for it in their next run: the budget counts the delivery fee unless it's
+// pickup, so it plans for pickup or delivery as chosen then.
 const partyOf30: GroupOrderRequest = { people: 30, vegetarians: 10 }
 const partyOf30On250: GroupOrderRequest = { ...partyOf30, budget: 250 }
 const partyOf20: GroupOrderRequest = { people: 20 }

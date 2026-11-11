@@ -204,11 +204,12 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
   // card is still up, the repeat leaves it as it is, reason and all. Any other
   // set replaces the card, as SPEC's Screens says.
   let planned: ItemQuantity[] | null = null
-  // Whether the card shown last is a group plan. While it's still up, a
-  // show_suggestions call is the customer's change to it (the group rule:
-  // "call show_suggestions only when the customer asks to change it"), so
-  // that card is a group plan too, delivery line and all (review round 2).
-  let groupShown = false
+  // The lines of the card shown last, when it's a group plan. While it's still
+  // up, a show_suggestions call that keeps most of its lines is the
+  // customer's change to it ("swap a pepperoni for a margherita"), so that
+  // card is a group plan too, delivery line and all (review round 2); a
+  // pairing asked for meanwhile isn't (review round 3).
+  let groupLines: ItemQuantity[] | null = null
 
   /**
    * Opens the suggestion card with these lines: show_suggestions and
@@ -228,7 +229,8 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
     // Priced as a cart holding only these lines, so summarizeCart is the one place that prices lines.
     const { lines, total, totalSpoken } = summarizeLines(checked.lines)
     const reasonText = nonBlankText(reason)
-    const group = from === 'plan_group_order' || (groupShown && ui.isShowingSuggestions())
+    const group =
+      from === 'plan_group_order' || (groupLines !== null && ui.isShowingSuggestions() && keepsMostOf(checked.lines, groupLines))
     const suggestions: Suggestions = {
       title: nonBlankText(title) ?? 'Suggestions',
       ...(reasonText ? { reason: reasonText } : {}),
@@ -241,7 +243,7 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
       ui.showSuggestions(suggestions)
       suggested = checked.lines
       planned = from === 'plan_group_order' ? checked.lines : null
-      groupShown = group
+      groupLines = group ? checked.lines : null
     }
     // For a group plan and delivery, what it comes to with the fee, as the card shows it.
     const { delivery } = group ? summarizeLines(checked.lines, orderType.get()) : {}
@@ -280,8 +282,8 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
     // The code works out the plan (planGroupOrder.ts) and the card shows it, as
     // show_suggestions would; the agent only sums it up. It doesn't change the
     // cart, but it leaves room for what's in it, so "add all of that" fits.
-    // For delivery, a budget counts the fee, and the result has the plan's
-    // total with it, as a cart tool's would.
+    // A budget counts the delivery fee unless it's pickup, and for delivery the
+    // result has the plan's total with it, as a cart tool's would.
     plan_group_order: recovering((args) => {
       const type = orderType.get()
       const plan = planGroupOrder(args, cart.now(), type)
@@ -450,6 +452,12 @@ function notInCart(id: unknown, quantities: Quantities): Recovery {
   if (lines.length === 0) return { message: `That isn't in the cart. ${EMPTY_CART}` }
   const listed = lines.map((line) => `${describeLine(line)} (${line.id})`).join(', ')
   return { message: `That isn't in the cart. The cart has: ${listed}.` }
+}
+
+/** Whether `lines` keep at least half of `before`'s products, as a change to a plan does and a pairing doesn't. */
+function keepsMostOf(lines: ItemQuantity[], before: ItemQuantity[]): boolean {
+  const kept = before.filter((line) => lines.some((other) => other.id === line.id)).length
+  return kept * 2 >= before.length
 }
 
 /** Whether two lists of lines, one line per id, hold the same ids and quantities, in any order. */

@@ -174,7 +174,10 @@ export function amountToPay({ total, totalSpoken, delivery }: CartSummary): Pick
 /**
  * The delivery fee a cart of `count` products pays: DELIVERY_FEE for a
  * delivery order with something in it, nothing otherwise. The one place the
- * fee is decided, so a new fee rule changes only this.
+ * browser decides it: the cart tools, the board, checkout's amount and the
+ * group planner's budget all come here. Stripe's own shipping rate is set on
+ * the server (`DELIVERY` in src/checkout/checkout.ts, flat DELIVERY_FEE), so a
+ * fee rule that isn't flat changes both.
  */
 function deliveryFee(count: number, orderType: OrderType | null): number {
   return orderType === 'delivery' && count > 0 ? DELIVERY_FEE : 0

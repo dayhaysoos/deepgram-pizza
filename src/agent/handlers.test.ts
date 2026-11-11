@@ -918,16 +918,37 @@ describe('plan_group_order', () => {
   it('keeps a change to the plan a group plan while it is on screen: the card and the result give the delivery total', async () => {
     const { call, ui, orderType } = setup()
     orderType.set('delivery')
-    await call('plan_group_order', { people: 8 })
+    const plan = await call('plan_group_order', { people: 8 })
+    if (!('lines' in plan) || !('summary' in plan)) throw new Error('No plan shown')
 
-    const swapped = [
-      { id: 'cheese-pizza-large', quantity: 1 },
-      { id: 'margherita-pizza-large', quantity: 1 },
-    ]
+    // "Swap the pepperoni for a margherita": every other line stays.
+    const swapped = plan.lines.map(({ id, quantity }) => ({ id: id === 'pepperoni-pizza-large' ? 'margherita-pizza-large' : id, quantity }))
     const result = await call('show_suggestions', { title: 'For your party of 8', items: swapped })
 
     expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.objectContaining({ group: true }))
-    expect(result).toMatchObject({ shown: true, total: '$39.98', delivery: { totalWithDelivery: '$43.97' } })
+    const priced = summarizeCart(Object.fromEntries(swapped.map(({ id, quantity }) => [id, quantity])), 'delivery')
+    expect(result).toMatchObject({ shown: true, total: priced.total, delivery: priced.delivery })
+    // A second change to it is still the plan.
+    await call('show_suggestions', { title: 'For your party of 8', items: swapped.slice(1) })
+    expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.objectContaining({ group: true }))
+  })
+
+  // Review round 3: with a plan on screen, a pairing's card took the plan's delivery line.
+  it('shows a pairing asked for while a plan is on screen as a pairing: no group, no delivery total', async () => {
+    const { call, ui, orderType } = setup()
+    orderType.set('delivery')
+    await call('plan_group_order', { people: 8 })
+
+    const result = await call('show_suggestions', {
+      title: 'Goes with the Buffalo Wing Dings',
+      items: [
+        { id: 'fries', quantity: 1 },
+        { id: 'soda', quantity: 1 },
+      ],
+    })
+
+    expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.not.objectContaining({ group: true }))
+    expect(result).not.toHaveProperty('delivery')
   })
 
   it('shows other suggestions as they are: no group, and no delivery total, once no plan is on screen', async () => {

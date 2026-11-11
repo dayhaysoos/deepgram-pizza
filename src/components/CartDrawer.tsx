@@ -121,7 +121,6 @@ function CartLine({ line }: { line: BoardLine }) {
   // a line on its way out is no longer in the cart.
   const found = findVariant(line.id)
   const name = productName(line.id)
-  const price = found?.variant.price ?? 0
   const leaving = line.mark === 'leaving'
 
   return (
@@ -134,7 +133,8 @@ function CartLine({ line }: { line: BoardLine }) {
       )}
       <div className="cart-line-info">
         <p className="cart-line-name">{name}</p>
-        <p className="cart-line-price">{formatPrice(price)} each</p>
+        {/* A line saved before menu.json changed has no price: checkout turns it down too. */}
+        <p className="cart-line-price">{found ? `${formatPrice(found.variant.price)} each` : 'No longer on the menu'}</p>
         {!leaving && <div className="cart-line-controls">
           <div className="quantity" role="group" aria-label={`Quantity of ${name}`}>
             <button
@@ -165,7 +165,7 @@ function CartLine({ line }: { line: BoardLine }) {
           </button>
         </div>}
       </div>
-      <p className="cart-line-total">{formatPrice(price * line.quantity)}</p>
+      <p className="cart-line-total">{found && formatPrice(found.variant.price * line.quantity)}</p>
     </li>
   )
 }
