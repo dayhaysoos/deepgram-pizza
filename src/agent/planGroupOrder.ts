@@ -65,8 +65,8 @@ import {
   type MenuItem,
   type Variant,
 } from '../menu/menu'
-import { DELIVERY_FEE, MAX_LINE_QUANTITY, type OrderType } from '../shop'
-import { quantityOf, type ItemQuantity, type Quantities } from './cartSummary'
+import { MAX_LINE_QUANTITY, type OrderType } from '../shop'
+import { centsToPay, quantityOf, type ItemQuantity, type Quantities } from './cartSummary'
 import { spokenPrice } from './spokenPrice'
 import { andList, compact, orList, type Recovery } from './text'
 import { GROUP_MAINS, MAX_LINES_PER_CALL, type GroupMains } from './tools'
@@ -144,8 +144,8 @@ export function planGroupOrder(
   if ('message' in read) return read
   const plan = buildPlan(read)
   if (!plan) return tooBig(read, inCart)
-  if (read.budget === undefined) return plan
-  return fitBudget(read, read.budget, plan, orderType)
+  if (read.budgetCents === undefined) return plan
+  return fitBudget(read, read.budgetCents, plan, orderType)
 }
 
 /** Too big for one order: the largest group that fits, keeping everything else. */
@@ -180,24 +180,25 @@ function tooBig(read: CheckedRequest, inCart: Quantities): Recovery {
 }
 
 /**
- * The plan made lean enough for `budget` (cents), in the owner's order (the
- * header says it), with what it took in `budget` and on the card's line; or
- * the least it can cost, as a message. `normal` is the plan with no budget.
- * The delivery fee counts unless it's pickup: before the customer has said
- * which, the plan leaves room for it, so it still fits if they say delivery.
+ * The plan made lean enough for `budgetCents`, in the owner's order (the
+ * header says it), with what it took in the plan's `budget` and on the card's
+ * line; or the least it can cost, as a message. `normal` is the plan with no
+ * budget. The delivery fee counts unless it's pickup: before the customer has
+ * said which, the plan leaves room for it, so it still fits if they say delivery.
  */
-function fitBudget(request: CheckedRequest, budget: number, normal: GroupPlan, orderType: OrderType | null): GroupPlan | Recovery {
-  const fee = orderType === 'pickup' ? 0 : DELIVERY_FEE
-  const costs = (plan: GroupPlan) => costOf(plan.lines) + fee
+function fitBudget(request: CheckedRequest, budgetCents: number, normal: GroupPlan, orderType: OrderType | null): GroupPlan | Recovery {
+  const counted = orderType === 'pickup' ? 'pickup' : 'delivery'
+  // What Stripe would charge for the plan, the fee priced where the cart's is (centsToPay).
+  const costs = (plan: GroupPlan) => centsToPay(Object.fromEntries(plan.lines.map(({ id, quantity }) => [id, quantity])), counted)
   const feeWords = { pickup: '', delivery: ', delivery included', none: ', leaving room for delivery' }[orderType ?? 'none']
-  const budgetWords = `${formatPrice(budget)} budget${feeWords}`
+  const budgetWords = `${formatPrice(budgetCents)} budget${feeWords}`
   const withinIt = (plan: GroupPlan, budgetNote: string): GroupPlan => ({
     ...plan,
     reason: `${plan.reason} Within your ${budgetWords}.`,
     budget: budgetNote,
   })
   const theBudget = `the ${budgetWords}`
-  if (costs(normal) <= budget) return withinIt(normal, `It's within ${theBudget} as it is.`)
+  if (costs(normal) <= budgetCents) return withinIt(normal, `It's within ${theBudget} as it is.`)
 
   const people = request.people
   const askedSides = request.include.filter((item) => SIDE_CATEGORIES.includes(item.category)).length
@@ -215,7 +216,7 @@ function fitBudget(request: CheckedRequest, budget: number, normal: GroupPlan, o
 
   for (const shape of shapes) {
     const plan = buildPlan(request, shape)
-    if (plan && costs(plan) <= budget) {
+    if (plan && costs(plan) <= budgetCents) {
       return withinIt(plan, `To stay within ${theBudget}: ${andList(changesFrom(normal, plan, request))}.`)
     }
   }
@@ -226,7 +227,7 @@ function fitBudget(request: CheckedRequest, budget: number, normal: GroupPlan, o
   const leastCost = costs(least)
   return {
     message:
-      `That's under what feeding ${people} can cost: the least is ${formatPrice(leastCost)}${fee > 0 ? ' with delivery' : ''} ` +
+      `That's under what feeding ${people} can cost: the least is ${formatPrice(leastCost)}${counted === 'delivery' ? ' with delivery' : ''} ` +
       `(${spokenPrice(leastCost)}), with the cheapest ${mainsNoun(request)}${asked} and no other sides or drinks. ` +
       'Tell the customer, and ask whether that works or whether to plan without the budget.',
   }
@@ -234,7 +235,6 @@ function fitBudget(request: CheckedRequest, budget: number, normal: GroupPlan, o
 
 /** What a budget changed, in a few words: "cheaper pizzas", "drinks for 17 of the 30", "fewer sides". */
 function changesFrom(normal: GroupPlan, plan: GroupPlan, request: CheckedRequest): string[] {
-  const countIn = (lines: ItemQuantity[], from: Category[]) => sum(lines.filter(inCategories(from)).map((line) => line.quantity))
   // The lines as text, to tell whether two plans' lines in these categories are the same.
   const linesIn = (lines: ItemQuantity[], from: Category[]) =>
     lines
@@ -266,9 +266,9 @@ function inCategories(from: Category[]): (line: ItemQuantity) => boolean {
   }
 }
 
-/** What these lines cost, in cents, at menu prices. */
-function costOf(lines: ItemQuantity[]): number {
-  return sum(lines.map((line) => (findVariant(line.id)?.variant.price ?? 0) * line.quantity))
+/** How many of these lines' products are in these categories: 6 sides, 17 drinks. */
+function countIn(lines: ItemQuantity[], from: Category[]): number {
+  return sum(lines.filter(inCategories(from)).map((line) => line.quantity))
 }
 
 /** A request that passed the checks, with its defaults filled in. */
@@ -282,8 +282,8 @@ type CheckedRequest = {
   include: MenuItem[]
   /** How many more of a product the cart can take: MAX_LINE_QUANTITY less what's in it. */
   room: (id: string) => number
-  /** The most the plan may cost, in cents, or undefined for no budget. */
-  budget?: number
+  /** The most the plan may cost, in cents (the request's budget is in dollars), or undefined for no budget. */
+  budgetCents?: number
 }
 
 /**
@@ -347,7 +347,7 @@ function readRequest(request: Record<string, unknown>, inCart: Quantities): Chec
 
   // A main asked for by name brings its category in: pizza plus a named sub is a mix.
   return {
-    ...(budget !== undefined && { budget: Math.round(budget * 100) }),
+    ...(budget !== undefined && { budgetCents: Math.round(budget * 100) }),
     people,
     vegetarians,
     mains: mainCategories.filter(
@@ -668,9 +668,8 @@ function describePlan(lines: ItemQuantity[], request: CheckedRequest): Pick<Grou
   const vegetarianFed = mains
     .filter(({ item }) => isVegetarian(item))
     .reduce((sum, line) => sum + line.variant.serves * line.quantity, 0)
-  const countOf = (from: Category[]) => sum(found.filter(({ item }) => from.includes(item.category)).map((line) => line.quantity))
-  const sideCount = countOf(SIDE_CATEGORIES)
-  const drinkCount = countOf(DRINK_CATEGORIES)
+  const sideCount = countIn(lines, SIDE_CATEGORIES)
+  const drinkCount = countIn(lines, DRINK_CATEGORIES)
   // One each, or how many there are when a budget left fewer.
   const drink =
     drinkCount === 0

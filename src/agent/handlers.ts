@@ -23,6 +23,7 @@ import { categories, findItem, findVariant, formatPrice, tags, type Category, ty
 import { isLineQuantity, isOrderType, MAX_LINE_QUANTITY, ORDER_TYPES, type OrderType } from '../shop'
 import type { CartChanges } from './cartChanges'
 import {
+  amountToPay,
   describeLine,
   quantitiesOf,
   quantityOf,
@@ -72,7 +73,11 @@ export type Suggestions = {
   lines: CartSummary['lines']
   /** What every line together costs. */
   total: string
-  /** A group plan (plan_group_order's): for delivery, the card also gives what it comes to with the fee, as the agent says it. */
+  /**
+   * A group plan: plan_group_order's, or show_suggestions changing one that's
+   * still on screen. For delivery, the card also gives what it comes to with
+   * the fee, as the agent says it.
+   */
   group?: true
 }
 
@@ -105,8 +110,12 @@ export type FoundItems = {
   message?: string
 }
 
-/** What show_suggestions returns once the card is open: what every line together costs, written and spoken. */
-export type SuggestionsShown = { shown: true } & Pick<CartSummary, 'total' | 'totalSpoken'>
+/**
+ * What show_suggestions returns once the card is open: what every line
+ * together costs, written and spoken, and for a changed group plan and
+ * delivery, the fee and the total with it, as plan_group_order gives them.
+ */
+export type SuggestionsShown = { shown: true; delivery?: DeliveryCharge } & Pick<CartSummary, 'total' | 'totalSpoken'>
 
 /**
  * What plan_group_order returns once the plan is on the card: enough for the
@@ -136,9 +145,11 @@ export const PLAN_ON_SCREEN = "The card on screen shows this plan now, so don't 
  * In find_menu_items' result, for the same reason: in the voice check of
  * 2026-11-11, "What's vegetarian?" lit up the cards and the agent opened a
  * card of three pizzas next to them too, which the rule and the tool's
- * description both say not to do (step 5 saw it in text runs).
+ * description both say not to do (step 5 saw it in text runs). With only
+ * that, the next check read out all fourteen, so it repeats the rule's
+ * "name two or three" too.
  */
-export const FOUND_ON_SCREEN = "They're lit up on screen now, so don't call show_suggestions for them."
+export const FOUND_ON_SCREEN = "They're lit up on screen now: name two or three of them, and don't call show_suggestions for them."
 
 /**
  * What set_order_type returns once it has recorded the choice, and, when the
@@ -193,6 +204,11 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
   // card is still up, the repeat leaves it as it is, reason and all. Any other
   // set replaces the card, as SPEC's Screens says.
   let planned: ItemQuantity[] | null = null
+  // Whether the card shown last is a group plan. While it's still up, a
+  // show_suggestions call is the customer's change to it (the group rule:
+  // "call show_suggestions only when the customer asks to change it"), so
+  // that card is a group plan too, delivery line and all (review round 2).
+  let groupShown = false
 
   /**
    * Opens the suggestion card with these lines: show_suggestions and
@@ -204,7 +220,7 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
     reason: unknown,
     items: unknown,
     from: 'show_suggestions' | 'plan_group_order',
-  ): (Suggestions & Pick<CartSummary, 'totalSpoken'>) | Recovery {
+  ): (Suggestions & Pick<CartSummary, 'totalSpoken'> & { delivery?: DeliveryCharge }) | Recovery {
     // Not checked against the cart: it can change before the customer taps
     // Add all, and Add all checks again then.
     const checked = checkLines(items, {})
@@ -212,20 +228,24 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
     // Priced as a cart holding only these lines, so summarizeCart is the one place that prices lines.
     const { lines, total, totalSpoken } = summarizeLines(checked.lines)
     const reasonText = nonBlankText(reason)
+    const group = from === 'plan_group_order' || (groupShown && ui.isShowingSuggestions())
     const suggestions: Suggestions = {
       title: nonBlankText(title) ?? 'Suggestions',
       ...(reasonText ? { reason: reasonText } : {}),
       lines,
       total,
-      ...(from === 'plan_group_order' && { group: true }),
+      ...(group && { group: true }),
     }
     const repeatsPlan = from === 'show_suggestions' && planned && ui.isShowingSuggestions() && sameLines(checked.lines, planned)
     if (!repeatsPlan) {
       ui.showSuggestions(suggestions)
       suggested = checked.lines
       planned = from === 'plan_group_order' ? checked.lines : null
+      groupShown = group
     }
-    return { ...suggestions, totalSpoken }
+    // For a group plan and delivery, what it comes to with the fee, as the card shows it.
+    const { delivery } = group ? summarizeLines(checked.lines, orderType.get()) : {}
+    return { ...suggestions, totalSpoken, ...(delivery && { delivery }) }
   }
 
   return {
@@ -253,7 +273,8 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
 
     show_suggestions: recovering((args) => {
       const shown = suggest(args.title, args.reason, args.items, 'show_suggestions')
-      return 'message' in shown ? shown : { shown: true, total: shown.total, totalSpoken: shown.totalSpoken }
+      if ('message' in shown) return shown
+      return { shown: true, total: shown.total, totalSpoken: shown.totalSpoken, ...(shown.delivery && { delivery: shown.delivery }) }
     }),
 
     // The code works out the plan (planGroupOrder.ts) and the card shows it, as
@@ -268,7 +289,7 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
       const shown = suggest(plan.title, plan.reason, plan.lines, 'plan_group_order')
       if ('message' in shown) return shown
       const lines = shown.lines.map(({ id, name, quantity }) => ({ id, name, quantity }))
-      const { delivery } = summarizeLines(plan.lines, type)
+      const { delivery } = shown
       return {
         shown: true,
         note: PLAN_ON_SCREEN,
@@ -343,7 +364,7 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
       const result = await checkout(cartDetails, type)
       if ('message' in result) return result
       ui.goToCheckout(result.url)
-      return { ok: true, ...amountToPay(quantitiesOf(cartDetails), type) }
+      return { ok: true, ...amountToPay(summarizeCart(quantitiesOf(cartDetails), type)) }
     }),
   }
 }
@@ -429,16 +450,6 @@ function notInCart(id: unknown, quantities: Quantities): Recovery {
   if (lines.length === 0) return { message: `That isn't in the cart. ${EMPTY_CART}` }
   const listed = lines.map((line) => `${describeLine(line)} (${line.id})`).join(', ')
   return { message: `That isn't in the cart. The cart has: ${listed}.` }
-}
-
-/**
- * What Stripe charges for this cart, written and spoken: the total, plus the
- * fee for delivery. From summarizeCart, as the drawer and the cart tools get it.
- */
-function amountToPay(quantities: Quantities, type: OrderType): Pick<CartSummary, 'total' | 'totalSpoken'> {
-  const { total, totalSpoken, delivery } = summarizeCart(quantities, type)
-  if (!delivery) return { total, totalSpoken }
-  return { total: delivery.totalWithDelivery, totalSpoken: delivery.totalWithDeliverySpoken }
 }
 
 /** Whether two lists of lines, one line per id, hold the same ids and quantities, in any order. */

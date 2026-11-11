@@ -586,7 +586,7 @@ button:disabled {
   }
 }
 
-/* On phones the drawer is a full-screen sheet. */
+/* On phones the drawer is a full-screen sheet. 30rem is PHONE_WIDTH in src/layout.ts, which the code reads too. */
 @media (max-width: 30rem) {
   .drawer-panel {
     width: 100%;
@@ -897,7 +897,7 @@ body:has(.drawer[data-open]) .suggestion-card {
   }
 }
 
-/* On phones it spans the screen width. */
+/* On phones it spans the screen width (PHONE_WIDTH, src/layout.ts). */
 @media (max-width: 30rem) {
   .suggestion-card {
     right: 0;
@@ -1033,6 +1033,7 @@ body:has(.drawer[data-open]) .suggestion-card {
   display: none;
 }
 
+/* Phones: PHONE_WIDTH in src/layout.ts. */
 @media (max-width: 30rem) {
   .order-strip {
     position: fixed;
@@ -1135,6 +1136,7 @@ body:has(.captions[data-open]) {
   --voice-strip-space: calc(var(--talk-button-space) + var(--conversation-space));
 }
 
+/* Phones: PHONE_WIDTH in src/layout.ts. */
 @media (max-width: 30rem) {
   body:has(.order-strip) {
     --order-strip-room: var(--order-strip-space);

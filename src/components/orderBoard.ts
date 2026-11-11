@@ -1,8 +1,8 @@
 // The cart as an order board, like a drive-thru's (the owner, 2026-11-11):
 // lines key in one by one as they're added, each lighting up as it lands; a
 // changed quantity lights its line up again; a line taken out is struck
-// through and fades. The board's total counts only the lines keyed in so far,
-// so it climbs with them.
+// through and fades. The total shown with it is the cart's (useOrderBoard.ts),
+// so the board never shows less than Checkout charges.
 //
 // What the agent adds during a voice session keys in at the pace the agent
 // reads it back, like a cashier keying in an order as they repeat it: the

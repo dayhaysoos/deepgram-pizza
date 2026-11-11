@@ -171,7 +171,7 @@ export const toolDefinitions = [
         budget: {
           type: 'number',
           description:
-            'The most the customer wants to spend, in dollars, only if they said: 250 for "about two fifty". For delivery it counts the delivery fee.',
+            'The most the customer wants to spend, in dollars, only if they said: 250 for "about two fifty". It counts the delivery fee unless the order is pickup.',
         },
         preferences: {
           type: 'object',

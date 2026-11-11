@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
-import { quantitiesOf, summarizeCart, type DeliveryCharge } from '../agent/cartSummary'
+import { amountToPay, quantitiesOf, summarizeCart, type DeliveryCharge } from '../agent/cartSummary'
 import { useCartChanges, useOrderType, useVoiceSession } from '../pageContext'
 import { boardLines, createOrderBoard, EMPTY_BOARD, type BoardLine, type LatestLine, type OrderBoard } from './orderBoard'
 
@@ -46,13 +46,13 @@ export function useOrderBoardView(board: OrderBoard): OrderBoardView {
     const lines = boardLines(state, cart)
     // The cart's total, the same figures the agent says and Stripe charges (summarizeCart),
     // so Checkout never charges more than the board shows, even while lines key in.
-    const { total, delivery } = summarizeCart(cart, orderType)
+    const summary = summarizeCart(cart, orderType)
     return {
       lines,
       anyKeyedIn: lines.some(({ mark }) => mark !== 'leaving'),
       latest: state.latest,
-      ...(delivery && { delivery }),
-      toPay: delivery ? delivery.totalWithDelivery : total,
+      ...(summary.delivery && { delivery: summary.delivery }),
+      toPay: amountToPay(summary).total,
     }
   }, [state, cartDetails, orderType])
 }

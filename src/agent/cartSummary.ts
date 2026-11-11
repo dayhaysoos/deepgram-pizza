@@ -124,6 +124,30 @@ export function summarizeLines(lines: ItemQuantity[], orderType: OrderType | nul
  * as the suggestion card's lines.
  */
 export function summarizeCart(quantities: Quantities, orderType: OrderType | null = null): CartSummary {
+  const { lines, count, cents } = price(quantities)
+  const summary: CartSummary = { lines, count, total: formatPrice(cents), totalSpoken: spokenPrice(cents) }
+  const fee = deliveryFee(count, orderType)
+  if (fee === 0) return summary
+  const delivery: DeliveryCharge = {
+    fee: formatPrice(fee),
+    feeSpoken: spokenPrice(fee),
+    totalWithDelivery: formatPrice(cents + fee),
+    totalWithDeliverySpoken: spokenPrice(cents + fee),
+  }
+  return { ...summary, delivery }
+}
+
+/**
+ * What Stripe charges for these quantities, in cents: their total, plus the
+ * delivery fee for a delivery order. The group planner fits a budget to it.
+ */
+export function centsToPay(quantities: Quantities, orderType: OrderType | null): number {
+  const { count, cents } = price(quantities)
+  return cents + deliveryFee(count, orderType)
+}
+
+/** The lines at menu prices, how many products, and their total in cents. A product no longer on the menu is left out. */
+function price(quantities: Quantities): { lines: CartSummary['lines']; count: number; cents: number } {
   const lines: CartSummary['lines'] = []
   let count = 0
   let cents = 0
@@ -135,13 +159,23 @@ export function summarizeCart(quantities: Quantities, orderType: OrderType | nul
     count += quantity
     cents += lineCents
   }
-  const summary: CartSummary = { lines, count, total: formatPrice(cents), totalSpoken: spokenPrice(cents) }
-  if (orderType !== 'delivery' || count === 0) return summary
-  const delivery: DeliveryCharge = {
-    fee: formatPrice(DELIVERY_FEE),
-    feeSpoken: spokenPrice(DELIVERY_FEE),
-    totalWithDelivery: formatPrice(cents + DELIVERY_FEE),
-    totalWithDeliverySpoken: spokenPrice(cents + DELIVERY_FEE),
-  }
-  return { ...summary, delivery }
+  return { lines, count, cents }
+}
+
+/**
+ * What Stripe charges for a summarized cart, written and spoken: the total,
+ * or for delivery the total with the fee. The agent says it at checkout, and
+ * the order board shows it.
+ */
+export function amountToPay({ total, totalSpoken, delivery }: CartSummary): Pick<CartSummary, 'total' | 'totalSpoken'> {
+  return delivery ? { total: delivery.totalWithDelivery, totalSpoken: delivery.totalWithDeliverySpoken } : { total, totalSpoken }
+}
+
+/**
+ * The delivery fee a cart of `count` products pays: DELIVERY_FEE for a
+ * delivery order with something in it, nothing otherwise. The one place the
+ * fee is decided, so a new fee rule changes only this.
+ */
+function deliveryFee(count: number, orderType: OrderType | null): number {
+  return orderType === 'delivery' && count > 0 ? DELIVERY_FEE : 0
 }

@@ -609,7 +609,7 @@ describe('find_menu_items', () => {
   // In the voice check of 2026-11-11 the agent opened a card next to the highlights, against its rules.
   it("says in its result that the cards are lit up, so the agent doesn't show them again; not when nothing matched", async () => {
     const { call } = setup()
-    expect(FOUND_ON_SCREEN).toBe("They're lit up on screen now, so don't call show_suggestions for them.")
+    expect(FOUND_ON_SCREEN).toBe("They're lit up on screen now: name two or three of them, and don't call show_suggestions for them.")
     expect(await call('find_menu_items', { tags: ['vegetarian'] })).toMatchObject({ note: FOUND_ON_SCREEN })
     expect(await call('find_menu_items', { query: 'sushi' })).not.toHaveProperty('note')
   })
@@ -912,6 +912,36 @@ describe('plan_group_order', () => {
       delivery: { fee: '$3.99', feeSpoken: 'three ninety-nine', totalWithDelivery: '$248.18', totalWithDeliverySpoken: 'two hundred forty-eight dollars and eighteen cents' },
     })
     expect(result).toMatchObject({ delivery: priced.delivery })
+  })
+
+  // Review round 2: a swapped plan lost its delivery total, on the card and in what the agent said.
+  it('keeps a change to the plan a group plan while it is on screen: the card and the result give the delivery total', async () => {
+    const { call, ui, orderType } = setup()
+    orderType.set('delivery')
+    await call('plan_group_order', { people: 8 })
+
+    const swapped = [
+      { id: 'cheese-pizza-large', quantity: 1 },
+      { id: 'margherita-pizza-large', quantity: 1 },
+    ]
+    const result = await call('show_suggestions', { title: 'For your party of 8', items: swapped })
+
+    expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.objectContaining({ group: true }))
+    expect(result).toMatchObject({ shown: true, total: '$39.98', delivery: { totalWithDelivery: '$43.97' } })
+  })
+
+  it('shows other suggestions as they are: no group, and no delivery total, once no plan is on screen', async () => {
+    const { call, ui, orderType } = setup()
+    orderType.set('delivery')
+    const pairing = { title: 'Goes with the Classic Cheeseburger', items: [{ id: 'fries', quantity: 1 }] }
+
+    expect(await call('show_suggestions', pairing)).not.toHaveProperty('delivery')
+    expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.not.objectContaining({ group: true }))
+
+    await call('plan_group_order', { people: 8 })
+    ui.closeSuggestions()
+    expect(await call('show_suggestions', pairing)).not.toHaveProperty('delivery')
+    expect(ui.showSuggestions).toHaveBeenLastCalledWith(expect.not.objectContaining({ group: true }))
   })
 
   it('for pickup, or before the choice, has no delivery in its result, and no budget unless one was given', async () => {

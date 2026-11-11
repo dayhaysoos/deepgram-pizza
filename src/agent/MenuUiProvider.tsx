@@ -6,9 +6,10 @@
 // The card and the highlights come up with the agent's voice, not before it
 // (`showWithVoice` on the voice session's handle): the owner found the card
 // popping up in silence, a couple of seconds before the agent spoke,
-// disjointed (2026-11-11). With no session they come up at once. Cart changes
-// don't wait: the cart is the order as it stands, like a drive-thru's order
-// board, and the agent reads it back right after.
+// disjointed (2026-11-11). With no session they come up at once. The cart
+// itself changes at once (its state, the badge, the total); what the order
+// board keys in, and the drawer opening, follow the voice the same way
+// (src/components/orderBoard.ts, ToolHandlersProvider.tsx).
 
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { MenuUiContext, useVoiceSession, type ShownSuggestions } from '../pageContext'
