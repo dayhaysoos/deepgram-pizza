@@ -173,7 +173,8 @@ describe('tapOrderType', () => {
     cart.tapOrderType('delivery')
 
     expect(orderType.get()).toBe('delivery')
-    const told = 'Customer chose delivery by tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.'
+    // For delivery, the cart line gives the total with the fee as well.
+    const told = 'Customer chose delivery by tapping. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart before answering about the cart.'
     expect(tellAgent).toHaveBeenCalledExactlyOnceWith(told)
     expect(onTapUpdate).toHaveBeenCalledExactlyOnceWith(told)
   })
@@ -214,7 +215,7 @@ describe('tapOrderType', () => {
     cart.tap({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
 
     expect(tellAgent).toHaveBeenLastCalledWith(
-      'Customer added 1 × Fries by tapping. Order type: delivery. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart.',
+      'Customer added 1 × Fries by tapping. Order type: delivery. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart before answering about the cart.',
     )
   })
 })

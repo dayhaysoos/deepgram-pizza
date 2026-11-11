@@ -59,11 +59,16 @@ export function describeLine({ name, quantity }: { name: string; quantity: numbe
 
 /**
  * "Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97." or "Cart: empty.":
- * how the tap updates and the agent's instructions give the whole cart.
+ * how the tap updates and the agent's instructions give the whole cart. For
+ * delivery (a summary with `delivery`), the total with the fee follows:
+ * "Total $46.97, $50.96 with delivery.", since that's what Stripe charges. In
+ * the voice check of checkout paths the agent gave a delivery order's total
+ * without the fee from the session's first cart line (.build/step-5b.md).
  */
 export function describeCart(cart: CartSummary): string {
   if (cart.lines.length === 0) return 'Cart: empty.'
-  return `Cart: ${cart.lines.map(describeLine).join(', ')}. Total ${cart.total}.`
+  const withDelivery = cart.delivery ? `, ${cart.delivery.totalWithDelivery} with delivery` : ''
+  return `Cart: ${cart.lines.map(describeLine).join(', ')}. Total ${cart.total}${withDelivery}.`
 }
 
 /** Reads id → quantity from use-shopping-cart's `cartDetails`. Nothing else in an entry is trusted. */

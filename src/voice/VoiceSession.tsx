@@ -167,10 +167,14 @@ function DeepgramSession({ sessionNumber, agentSpeaking, onConversation, onLive 
   // Built once. This session mounts right after the press, so the agent
   // starts with the cart and pickup or delivery as they are at the press. Its
   // functions are the tools ClientTools registers below.
-  const [config] = useState<AgentSessionConfig>(() => ({
-    auth: { tokenFactory: () => fetchToken(send) },
-    agent: agentSettings(summarizeCart(quantitiesOf(cartDetails)), toolDefinitions, orderType.get()),
-  }))
+  const [config] = useState<AgentSessionConfig>(() => {
+    const type = orderType.get()
+    // Summarized with the order type, so a delivery cart's line gives the total with the fee too.
+    return {
+      auth: { tokenFactory: () => fetchToken(send) },
+      agent: agentSettings(summarizeCart(quantitiesOf(cartDetails), type), toolDefinitions, type),
+    }
+  })
 
   return (
     <AgentProvider

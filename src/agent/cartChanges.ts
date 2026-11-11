@@ -120,7 +120,8 @@ export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: 
     tapOrderType(type) {
       if (orderType.get() === type) return
       orderType.set(type)
-      tellAboutTap(describeOrderTypeTap(type, summarizeCart(cartAt(store.cartDetails()))))
+      // Summarized for the new choice, so a delivery update gives the total with the fee too.
+      tellAboutTap(describeOrderTypeTap(type, summarizeCart(cartAt(store.cartDetails()), type)))
     },
   }
 }

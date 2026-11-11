@@ -8,11 +8,15 @@
 import { isLive, NO_SESSION, type SessionEvent, type SessionState } from './sessionStatus'
 
 /**
- * The longest a leave waits for the agent to finish speaking. "Taking you to
- * checkout now" takes 2 to 4 s from the tool's answer to the end of playback;
- * if no reply comes, or an event is lost, the customer still gets to checkout.
+ * The longest a leave waits for the agent to finish speaking. The checkout
+ * line alone ("Taking you to checkout now so you can pay forty-five
+ * ninety-seven and enter your delivery address.") takes a few seconds, but the
+ * agent can read the order back first in the same reply: in the voice check
+ * of checkout paths (.build/step-5b.md) the 10 s cap this used to be fired
+ * during the line and the redirect cut it short. If no reply comes, or an
+ * event is lost, the customer still gets to checkout.
  */
-export const LEAVE_CAP_MS = 10_000
+export const LEAVE_CAP_MS = 20_000
 
 /** The part of the SDK's AgentSession the handle talks to. */
 export type PromptTarget = { updatePrompt(prompt: string): void }

@@ -21,8 +21,10 @@ export const CALL_VIEW_CART = 'Call view_cart before answering about the cart.'
 
 /**
  * "Customer added 1 × Fries by tapping. Order type: delivery. Cart: 2 × Large
- * Margherita Pizza, 1 × Fries. Total $46.97. Call view_cart before answering
- * about the cart."
+ * Margherita Pizza, 1 × Fries. Total $46.97, $50.96 with delivery. Call
+ * view_cart before answering about the cart." The cart after the change is
+ * summarized with the order type (cartChanges.ts), so for delivery its total
+ * comes with the fee as well (describeCart).
  *
  * The taps: add is Add on a menu card, or Add / Add all on the suggestion card;
  * quantity is − or + in the cart drawer, with the line's new quantity; remove
@@ -34,7 +36,9 @@ export function describeTapChange(change: CartChange, cartAfter: CartSummary, or
 
 /**
  * Pickup or Delivery tapped in the cart drawer: "Customer chose delivery by
- * tapping. Cart: 1 × Fries. Total $4.99. Call view_cart before answering about the cart."
+ * tapping. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart
+ * before answering about the cart." Pass the cart summarized for the new
+ * choice (summarizeCart(quantities, orderType)), so a delivery cart has the fee.
  */
 export function describeOrderTypeTap(orderType: OrderType, cart: CartSummary): string {
   return `Customer chose ${orderType} by tapping. ${describeCart(cart)} ${CALL_VIEW_CART}`

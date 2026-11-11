@@ -50,10 +50,12 @@ type HasTool = (name: ToolName) => boolean
 /**
  * The agent's instructions for a session that starts with this cart and
  * pickup-or-delivery choice, and can call these tools: pass
- * `summarizeCart(quantitiesOf(cartDetails))`, the tools the session sends as
- * functions (none in step 4, `toolDefinitions` from step 5), and the choice
- * (null before there is one). They end with the order in the words the tap
- * updates use, so the updates sent mid-session read as what happened next.
+ * `summarizeCart(quantitiesOf(cartDetails), orderType)`, the tools the session
+ * sends as functions (none in step 4, `toolDefinitions` from step 5), and the
+ * choice (null before there is one). They end with the order in the words the
+ * tap updates use, so the updates sent mid-session read as what happened next:
+ * for delivery, the cart summarized with it gives the total with the fee too
+ * ("Total $20.99, $24.98 with delivery.").
  */
 export function agentInstructions(
   cart: CartSummary,
@@ -69,7 +71,11 @@ export function agentInstructions(
   const rules = compact([
     safeguardRule(has, changesCart),
     has('set_order_type') && orderTypeRule(has, changesCart),
-    changesCart && '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.',
+    // The cart tools wait for the end of the customer's turn (defer_until_eot in tools.ts), so whatever the agent
+    // says alongside the call is spoken before the result comes back: in a text run it gave a medium pizza's price
+    // for a large that way (review round 4 of step 5b).
+    changesCart &&
+      '- To change the cart, always use a tool, and say nothing about the change, not even its price, until it returns. Never claim you added, changed or removed something unless the tool returned it.',
     changesCart && confirmRule(has),
     // In step 5's Check the agent wrote $20.99 as "twenty oh nine nine".
     TOTAL_TOOLS.some(has) &&

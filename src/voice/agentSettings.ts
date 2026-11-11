@@ -39,7 +39,8 @@ export const MANAGED_PROMPT_LIMIT = 25_000
 /**
  * The agent's settings for a session that starts with this cart and
  * pickup-or-delivery choice, and can call these tools: pass
- * `summarizeCart(quantitiesOf(cartDetails))` and the choice (null before
+ * `summarizeCart(quantitiesOf(cartDetails), orderType)` (for delivery, with the
+ * fee, which the instructions' cart line gives) and the choice (null before
  * there is one), both read when the customer presses the talk button, and the
  * tools the browser handles (none in step 4, `toolDefinitions` from step 5).
  */

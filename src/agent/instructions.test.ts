@@ -99,8 +99,10 @@ const ORDER_TYPE_RULE_ASK_FIRST = ' If they start ordering without saying, ask "
 const ORDER_TYPE_RULE_END =
   ' For delivery, never take an address by voice: if one comes up, say "You\'ll enter the delivery address at checkout." If asked about fees, delivery adds a flat three ninety-nine at checkout.'
 const ORDER_TYPE_RULE = ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT + ORDER_TYPE_RULE_ADD_FIRST + ORDER_TYPE_RULE_END
+// The cart tools wait for the end of the customer's turn (defer_until_eot), so what the agent says with the call
+// is spoken before the result: in a text run it gave a medium's price for a large (review round 4, .build/step-5b.md).
 const CHANGE_RULE =
-  '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.'
+  '- To change the cart, always use a tool, and say nothing about the change, not even its price, until it returns. Never claim you added, changed or removed something unless the tool returned it.'
 const CONFIRM_RULE_START =
   '- After each change, confirm it from the tool result: the quantity, size and name of every line you added or changed, then the new total, for delivery with the fee named.'
 const CONFIRM_RULE = `${CONFIRM_RULE_START} After add_items, name every line it added, one by one ("two large cheese pizzas, three large pepperoni pizzas, six garlic knots, …"), a whole group plan included, even if it takes more than two sentences; never sum them up.`
@@ -461,19 +463,31 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
   it('ends with the order as the session starts, in the words the tap updates use', () => {
     expect(prompt.endsWith('\n\nConversation started. Cart: empty.')).toBe(true)
 
-    const cart = summarizeCart({ 'margherita-pizza-large': 1 })
+    // The cart as the voice session summarizes it at the press: with the order type, so a delivery cart has the fee.
+    const cartFor = (orderType: 'pickup' | 'delivery' | null) => summarizeCart({ 'margherita-pizza-large': 1 }, orderType)
     const lastLine = (tools: ToolDefinition[], orderType: 'pickup' | 'delivery' | null = null) =>
-      agentInstructions(cart, tools, orderType).split('\n').at(-1)
+      agentInstructions(cartFor(orderType), tools, orderType).split('\n').at(-1)
     expect(lastLine(toolDefinitions)).toBe('Conversation started. Order type: not chosen yet. Cart: 1 × Large Margherita Pizza. Total $20.99.')
-    expect(lastLine(toolDefinitions, 'delivery')).toBe('Conversation started. Order type: delivery. Cart: 1 × Large Margherita Pizza. Total $20.99.')
-    expect(lastLine(toolDefinitions, 'pickup')).toBe(`Conversation started. ${describeOrderType('pickup')} ${describeCart(cart)}`)
-    // Pickup or delivery only with the tool that records it.
+    expect(lastLine(toolDefinitions, 'pickup')).toBe('Conversation started. Order type: pickup. Cart: 1 × Large Margherita Pizza. Total $20.99.')
+    expect(lastLine(toolDefinitions, 'pickup')).toBe(`Conversation started. ${describeOrderType('pickup')} ${describeCart(cartFor('pickup'))}`)
+    // "Order type:" only with the tool that records it. The cart's total is still what Stripe will charge.
     for (const tools of [[], allBut('set_order_type')]) {
-      expect(lastLine(tools, 'delivery')).toBe('Conversation started. Cart: 1 × Large Margherita Pizza. Total $20.99.')
+      expect(lastLine(tools, null)).toBe('Conversation started. Cart: 1 × Large Margherita Pizza. Total $20.99.')
+      expect(lastLine(tools, 'delivery')).toBe('Conversation started. Cart: 1 × Large Margherita Pizza. Total $20.99, $24.98 with delivery.')
     }
-    expect(describeTapChange({ type: 'remove', id: 'fries' }, cart, 'delivery')).toBe(
-      `Customer removed Fries by tapping. ${describeOrderType('delivery')} ${describeCart(cart)} ${CALL_VIEW_CART}`,
+    expect(describeTapChange({ type: 'remove', id: 'fries' }, cartFor('delivery'), 'delivery')).toBe(
+      `Customer removed Fries by tapping. ${describeOrderType('delivery')} ${describeCart(cartFor('delivery'))} ${CALL_VIEW_CART}`,
     )
+  })
+
+  // In the voice check of checkout paths (.build/step-5b.md) the agent said "for twenty dollars ninety-nine" on a
+  // delivery order, from this line, without calling view_cart. Stripe charges the total with the fee.
+  it('for delivery, ends with the total with the fee as well as the items total', () => {
+    const cart = summarizeCart({ 'pepperoni-pizza-large': 1 }, 'delivery')
+    expect(agentInstructions(cart, toolDefinitions, 'delivery').split('\n').at(-1)).toBe(
+      'Conversation started. Order type: delivery. Cart: 1 × Large Pepperoni Pizza. Total $20.99, $24.98 with delivery.',
+    )
+    expect(agentInstructions(summarizeCart({}, 'delivery'), toolDefinitions, 'delivery').endsWith('\n\nConversation started. Order type: delivery. Cart: empty.')).toBe(true)
   })
 
   it('asks pickup or delivery, records it with set_order_type, and never takes an address by voice', () => {

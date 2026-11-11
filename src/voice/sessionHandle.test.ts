@@ -132,6 +132,12 @@ describe('leaveAfterSpeaking', () => {
     expect(await settled(leaving)).toBe(true)
   })
 
+  // In the voice check of checkout paths (.build/step-5b.md) the agent read the order back and then said the
+  // checkout line in one reply; the 10 s cap fired and the redirect cut the line short.
+  it('waits up to 20 s, room for a read-back and the checkout line', () => {
+    expect(LEAVE_CAP_MS).toBe(20_000)
+  })
+
   it(`ends the session and resolves after ${LEAVE_CAP_MS / 1000} s, if the agent never finishes speaking`, async () => {
     const { handle, sent, startSession, state } = setUp()
     const sessionNumber = startSession()

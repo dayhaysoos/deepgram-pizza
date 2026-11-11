@@ -95,6 +95,23 @@ describe('describeCart', () => {
 
   it('says an empty cart is empty', () => {
     expect(describeCart(summarizeCart({}))).toBe('Cart: empty.')
+    expect(describeCart(summarizeCart({}, 'delivery'))).toBe('Cart: empty.')
+  })
+
+  // In the voice check of checkout paths (.build/step-5b.md) the agent said "twenty dollars ninety-nine"
+  // for a delivery order, from the session-start cart line, which gave only the items' total.
+  it('for delivery, gives the total with the fee as well, from the summary', () => {
+    const cart = summarizeCart({ 'pepperoni-pizza-large': 1 }, 'delivery')
+    expect(describeCart(cart)).toBe('Cart: 1 × Large Pepperoni Pizza. Total $20.99, $24.98 with delivery.')
+    expect(describeCart(cart)).toBe(`Cart: 1 × Large Pepperoni Pizza. Total $20.99, ${formatPrice(2099 + DELIVERY_FEE)} with delivery.`)
+  })
+
+  it('gives only the total for pickup, or before the customer has chosen', () => {
+    for (const orderType of ['pickup', null] as const) {
+      expect(describeCart(summarizeCart({ 'margherita-pizza-large': 2, fries: 1 }, orderType))).toBe(
+        'Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97.',
+      )
+    }
   })
 })
 
