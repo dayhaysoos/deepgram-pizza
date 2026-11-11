@@ -6,9 +6,11 @@
 // it, and summarizes that (cartChanges.ts). Every cart tool returns the
 // summary, so the agent speaks only from what a tool returned and never
 // invents a price. The total comes written for the screen and spoken for the
-// agent to say (spokenPrice.ts).
+// agent to say (spokenPrice.ts). For delivery, the summary also carries the
+// delivery fee and the total with it, since that's what Stripe will charge.
 
 import { findVariant, formatPrice } from '../menu/menu'
+import { DELIVERY_FEE, type OrderType } from '../shop'
 import { spokenPrice } from './spokenPrice'
 
 /** How many of each product the cart holds, by product id, in cart order. */
@@ -34,6 +36,20 @@ export type CartSummary = {
   total: string
   /** "forty-six ninety-seven": the total as the agent says it (spokenPrice). */
   totalSpoken: string
+  /** Only for a delivery order with something in the cart: the fee Stripe adds, and the total with it. */
+  delivery?: DeliveryCharge
+}
+
+/** The flat delivery fee (DELIVERY_FEE in src/shop.ts) and the total with it, written and spoken. */
+export type DeliveryCharge = {
+  /** "$3.99" */
+  fee: string
+  /** "three ninety-nine" */
+  feeSpoken: string
+  /** "$45.97": the cart's total plus the fee, what Stripe charges. */
+  totalWithDelivery: string
+  /** "forty-five ninety-seven" */
+  totalWithDeliverySpoken: string
 }
 
 /** "2 × Large Margherita Pizza": how the tools, the tap updates and the suggestion card name a line. */
@@ -86,8 +102,14 @@ export function applyCartChange(quantities: Quantities, change: CartChange): Qua
  * The summary of a cart. Names and prices come from the menu. A line whose
  * product is no longer on the menu (a cart saved before menu.json changed) is
  * left out, since there's no price to give for it; checkout turns it down too.
+ *
+ * Pass the order type for the cart the agent reads (the cart tools and
+ * view_cart): for delivery, the summary also has the fee and the total with
+ * it, so the total the agent says is what Stripe charges. An empty cart has
+ * nothing to deliver, so it has no fee. Leave it out for anything else, such
+ * as the suggestion card's lines.
  */
-export function summarizeCart(quantities: Quantities): CartSummary {
+export function summarizeCart(quantities: Quantities, orderType: OrderType | null = null): CartSummary {
   const lines: CartSummary['lines'] = []
   let count = 0
   let cents = 0
@@ -99,5 +121,13 @@ export function summarizeCart(quantities: Quantities): CartSummary {
     count += quantity
     cents += lineCents
   }
-  return { lines, count, total: formatPrice(cents), totalSpoken: spokenPrice(cents) }
+  const summary: CartSummary = { lines, count, total: formatPrice(cents), totalSpoken: spokenPrice(cents) }
+  if (orderType !== 'delivery' || count === 0) return summary
+  const delivery: DeliveryCharge = {
+    fee: formatPrice(DELIVERY_FEE),
+    feeSpoken: spokenPrice(DELIVERY_FEE),
+    totalWithDelivery: formatPrice(cents + DELIVERY_FEE),
+    totalWithDeliverySpoken: spokenPrice(cents + DELIVERY_FEE),
+  }
+  return { ...summary, delivery }
 }

@@ -90,16 +90,24 @@ describe('describeMenu', () => {
 // with the wording recorded under Decisions since the first draft.
 const ORDER_TYPE_RULE_START = '- Every order is pickup or delivery. When the customer says which, call set_order_type, then say one short line like "Great, delivery it is. What can I get you?"'
 const ORDER_TYPE_RULE_CHECKOUT = ', or if they were checking out, call checkout next.'
+// In the voice check, "Add a large cheese pizza" before choosing got no tool
+// call, and "I'll get that large cheese pizza added for you right after."
+const ORDER_TYPE_RULE_ADD_FIRST =
+  ' If they order something before saying which, add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply; never hold an item until they answer, or promise to add it later, and don\'t call set_order_type until they say which.'
+const ORDER_TYPE_RULE_ASK_FIRST = ' If they start ordering without saying, ask "Pickup or delivery?" once, in the same reply.'
 const ORDER_TYPE_RULE_END =
-  ' If they start ordering without saying, take the order and ask "Pickup or delivery?" before they check out. For delivery, never take an address by voice: if one comes up, say "You\'ll enter the delivery address at checkout." If asked about fees, delivery adds a flat three ninety-nine at checkout.'
-const ORDER_TYPE_RULE = ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT + ORDER_TYPE_RULE_END
+  ' For delivery, never take an address by voice: if one comes up, say "You\'ll enter the delivery address at checkout." If asked about fees, delivery adds a flat three ninety-nine at checkout.'
+const ORDER_TYPE_RULE = ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT + ORDER_TYPE_RULE_ADD_FIRST + ORDER_TYPE_RULE_END
 const CHANGE_RULE =
   '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.'
 const CONFIRM_RULE_START =
-  '- After each change, confirm it from the tool result: the quantity, size and name of every line you added or changed, then the new total.'
+  '- After each change, confirm it from the tool result: the quantity, size and name of every line you added or changed, then the new total, for delivery with the fee named.'
 const CONFIRM_RULE = `${CONFIRM_RULE_START} After add_items, name every line it added, one by one ("two large cheese pizzas, three large pepperoni pizzas, six garlic knots, …"), a whole group plan included, even if it takes more than two sentences; never sum them up.`
 const SPOKEN_TOTAL_RULE =
   '- Say every total exactly as the totalSpoken in the tool result gives it, word for word, even a long one ("two hundred ninety-seven dollars and fifty-six cents"); never turn the digits in total into words yourself.'
+// The agent said "forty-one ninety-eight" for a delivery order, and Stripe charged $45.97.
+const DELIVERY_TOTAL_RULE =
+  '- For delivery, a cart in a tool result also has delivery. Every time you say its total, after a change too, name the fee and give the total with it, each word for word: "forty-one ninety-eight, plus three ninety-nine for delivery, forty-five ninety-seven in all" (totalSpoken, feeSpoken, totalWithDeliverySpoken).'
 const SIZE_RULE = '- If a sized item has no size, ask which size before adding it.'
 const FIND_RULE_START =
   '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.'
@@ -124,13 +132,14 @@ const OFFER_RULE =
 const VIEW_CART_RULE =
   "- The customer can also change the cart by tapping. Before answering anything about what's in the cart or the total, call view_cart and answer from its result."
 const DONE_RULE =
-  '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm and say "Taking you to checkout now so you can pay." Never say the order is placed, done or confirmed: it isn\'t until they pay.'
+  '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm and say "Taking you to checkout now so you can pay.", or for delivery "Taking you to checkout now so you can pay and enter your delivery address." Never say the order is placed, done or confirmed: it isn\'t until they pay.'
 
 const SPEC_DRAFT_RULES = [
   ORDER_TYPE_RULE,
   CHANGE_RULE,
   CONFIRM_RULE,
   SPOKEN_TOTAL_RULE,
+  DELIVERY_TOTAL_RULE,
   SIZE_RULE,
   FIND_RULE,
   SHOW_RULE,
@@ -166,11 +175,13 @@ function allBut(...names: ToolName[]): ToolDefinition[] {
   return toolDefinitions.filter((tool) => !names.includes(tool.name))
 }
 
-// The tool names a prompt mentions, as whole words: `add_item` isn't found in
-// `add_items`, and neither the Checkout button nor paying "at checkout" is the
-// `checkout` tool.
+// The tool names a prompt mentions. A snake_case name counts wherever it
+// stands as a whole identifier (`add_item` isn't found in `add_items`). A
+// one-word name is plain English too ("pay at checkout", "Taking you to
+// checkout now", the Checkout button), so it counts only where a rule calls
+// it: "call checkout".
 function toolsNamedIn(text: string): string[] {
-  return toolNames.filter((name) => new RegExp(`(?<!at )\\b${name}\\b`).test(text))
+  return toolNames.filter((name) => new RegExp(name.includes('_') ? `\\b${name}\\b` : `\\bcall ${name}\\b`).test(text))
 }
 
 function rulesOf(text: string): string[] {
@@ -224,6 +235,17 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     ])
   })
 
+  // toolsNamedIn counts a one-word tool name only after "call". Any other use of
+  // the word in the rules has to be plain English ("at checkout", "to checkout
+  // now"), or the tests that use it would miss a tool.
+  it('names every one-word tool after "call", so toolsNamedIn finds it', () => {
+    for (const name of toolNames.filter((name) => !name.includes('_'))) {
+      const mentions = rulesOf(fullPrompt).join('\n').match(new RegExp(`\\b\\w+ ${name}\\b`, 'g')) ?? []
+      expect(mentions.filter((words) => !/^(at|to) /.test(words)), name).toEqual(mentions.filter((words) => words.startsWith('call ')))
+      expect(mentions, name).toContain(`call ${name}`)
+    }
+  })
+
   it.each(toolNames)('mentions %s only when the session has it', (name) => {
     expect(toolsNamedIn(agentInstructions(emptyCart, allBut(name)))).not.toContain(name)
     const alone = toolsNamedIn(agentInstructions(emptyCart, only(name)))
@@ -241,14 +263,22 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart')))).toContain(VIEW_CART_RULE)
     expect(rulesOf(agentInstructions(emptyCart, allBut('view_cart')))).not.toContain(VIEW_CART_RULE)
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart', 'checkout')))).toContain(DONE_RULE)
-    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout')))).toContain(ORDER_TYPE_RULE)
-    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type')))).toContain(ORDER_TYPE_RULE_START + '.' + ORDER_TYPE_RULE_END)
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout', 'add_item')))).toContain(ORDER_TYPE_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout')))).toContain(
+      ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT + ORDER_TYPE_RULE_ASK_FIRST + ORDER_TYPE_RULE_END,
+    )
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type')))).toContain(
+      ORDER_TYPE_RULE_START + '.' + ORDER_TYPE_RULE_ASK_FIRST + ORDER_TYPE_RULE_END,
+    )
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'add_item')))).toContain(
+      ORDER_TYPE_RULE_START + '.' + ORDER_TYPE_RULE_ADD_FIRST + ORDER_TYPE_RULE_END,
+    )
     expect(rulesOf(agentInstructions(emptyCart, allBut('set_order_type'))).join('\n')).not.toContain('pickup or delivery')
   })
 
   it.each(CART_TOOLS)('keeps the cart-change rules, and drops the cart from the safeguard, with %s', (name) => {
     const rules = rulesOf(agentInstructions(emptyCart, only(name)))
-    expect(rules).toEqual(expect.arrayContaining([CHANGE_RULE, SIZE_RULE, SPOKEN_TOTAL_RULE]))
+    expect(rules).toEqual(expect.arrayContaining([CHANGE_RULE, SIZE_RULE, SPOKEN_TOTAL_RULE, DELIVERY_TOTAL_RULE]))
     expect(rules).toContain(name === 'add_items' ? CONFIRM_RULE : CONFIRM_RULE_START)
     expect(rules.join('\n')).not.toContain('add, change or remove anything in the cart')
   })
@@ -256,6 +286,8 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
   it('without the cart tools, drops the cart-change rules and says only what is missing', () => {
     const rules = rulesOf(agentInstructions(emptyCart, allBut(...CART_TOOLS)))
     for (const rule of [CHANGE_RULE, CONFIRM_RULE, SIZE_RULE]) expect(rules).not.toContain(rule)
+    // view_cart still returns the cart, so the delivery total stays.
+    expect(rules).toContain(DELIVERY_TOTAL_RULE)
     expect(rules.join('\n')).not.toContain(CONFIRM_RULE_START)
     expect(rules[0]).toBe(
       "- You can't add, change or remove anything in the cart right now. If the customer asks, start by saying you can't do that yet, then tell them they can tap Add on the menu, all in one sentence. Never say you're adding, or that you did.",
@@ -343,6 +375,32 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(checkout?.description).toContain("Never say the order is placed, done or confirmed: it isn't until they pay.")
   })
 
+  // In the voice check a delivery order never heard where the address goes.
+  it('for delivery, says the customer will enter the delivery address at checkout', () => {
+    const delivery = 'or for delivery "Taking you to checkout now so you can pay and enter your delivery address."'
+    expect(rulesOf(fullPrompt).find((line) => line.startsWith('- When the customer is done'))).toContain(delivery)
+    expect(toolDefinitions.find((tool) => tool.name === 'checkout')?.description).toContain(delivery)
+    // Still never placed, done or confirmed.
+    expect(DONE_RULE).not.toMatch(/"[^"]*\b(placed|done|confirmed)\b[^"]*"/)
+  })
+
+  // The agent said "forty-one ninety-eight" for a delivery order, and Stripe charged $45.97 (.build/step-5b.md).
+  it('for delivery, says the total with the fee named, from the delivery the cart results carry', () => {
+    expect(rulesOf(fullPrompt)).toContain(DELIVERY_TOTAL_RULE)
+    // The example is what the tools return for two large margheritas, with the fee from the shop settings.
+    const { totalSpoken, delivery } = summarizeCart({ 'margherita-pizza-large': 2 }, 'delivery')
+    expect(DELIVERY_TOTAL_RULE).toContain(
+      `"${totalSpoken}, plus ${delivery?.feeSpoken} for delivery, ${delivery?.totalWithDeliverySpoken} in all"`,
+    )
+    // Only with a tool that returns the cart; the card's totals have no fee.
+    for (const name of [...CART_TOOLS, 'view_cart'] as const) {
+      expect(rulesOf(agentInstructions(emptyCart, only(name))), name).toContain(DELIVERY_TOTAL_RULE)
+    }
+    for (const tools of [[], only('show_suggestions', 'plan_group_order', 'find_menu_items', 'set_order_type', 'checkout')]) {
+      expect(rulesOf(agentInstructions(emptyCart, tools))).not.toContain(DELIVERY_TOTAL_RULE)
+    }
+  })
+
   it('after plan_group_order, keeps show_suggestions for changes the customer asks for, since the plan is on screen', () => {
     const groupRule = rulesOf(fullPrompt).find((line) => line.startsWith('- For a group'))
     expect(groupRule).toContain('The plan is already on screen, so call show_suggestions only when the customer asks to change it')
@@ -409,6 +467,11 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(ORDER_TYPE_RULE).toContain('never take an address by voice')
     // After checkout asked for it, the answer goes on to checkout, which the tool refuses until it's set.
     expect(ORDER_TYPE_RULE).toContain('if they were checking out, call checkout next.')
+    // An order before the choice is added at once, then the question asked once: never held, never promised for later.
+    expect(ORDER_TYPE_RULE).toContain('add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply')
+    expect(ORDER_TYPE_RULE).toContain('never hold an item until they answer, or promise to add it later')
+    // In a text run it also recorded "pickup" on its own, before the customer said.
+    expect(ORDER_TYPE_RULE).toContain("don't call set_order_type until they say which.")
     // The fee, from the shop settings, said the way the totals are.
     expect(spokenPrice(DELIVERY_FEE)).toBe('three ninety-nine')
     expect(ORDER_TYPE_RULE).toContain(`delivery adds a flat ${spokenPrice(DELIVERY_FEE)} at checkout.`)

@@ -13,9 +13,10 @@
 // `config` of its first render, and ignores later changes. The agent's
 // instructions have to carry the cart, and its greeting pickup or delivery, as
 // they are when the customer presses the button, so each press mounts a new
-// provider (a new `key`) with a config built at that moment, and ending the session unmounts it, which hangs up and
-// stops the microphone and the speaker. Without a session there's no provider
-// at all: nothing connects, and nothing asks for the microphone, until a press.
+// provider (a new `key`) with a config built at that moment, and ending the
+// session unmounts it, which hangs up and stops the microphone and the
+// speaker. Without a session there's no provider at all: nothing connects, and
+// nothing asks for the microphone, until a press.
 //
 // The provider's conversation goes with it, so VoiceSession keeps a copy, the
 // transcript (transcript.ts), for the captions. It stays after the session

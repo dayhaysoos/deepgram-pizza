@@ -22,7 +22,7 @@ import { describeCart, type CartSummary } from './cartSummary'
 import { describeOrderType } from './orderType'
 import { spokenPrice } from './spokenPrice'
 import { orList } from './text'
-import { GROUP_MAINS, NOT_PLACED_YET, TO_CHECKOUT, type ToolDefinition, type ToolName } from './tools'
+import { GROUP_MAINS, NOT_PLACED_YET, SAY_AT_CHECKOUT, type ToolDefinition, type ToolName } from './tools'
 
 /**
  * What the agent says first, as soon as the session opens: the owner wants it
@@ -39,8 +39,14 @@ export function greeting(orderType: OrderType | null, tools: readonly ToolDefini
 /** The tools that change the cart. With any of them, the cart-change rules apply. */
 const CART_TOOLS: readonly ToolName[] = ['add_item', 'add_items', 'set_quantity', 'remove_item', 'clear_cart']
 
+/** The tools that return the cart, which for delivery carries the fee and the total with it (cartSummary.ts). */
+const CART_READ_TOOLS: readonly ToolName[] = [...CART_TOOLS, 'view_cart']
+
 /** The tools whose result has a total, and so a `totalSpoken` (spokenPrice.ts) for the agent to say. */
-const TOTAL_TOOLS: readonly ToolName[] = [...CART_TOOLS, 'view_cart', 'show_suggestions', 'plan_group_order']
+const TOTAL_TOOLS: readonly ToolName[] = [...CART_READ_TOOLS, 'show_suggestions', 'plan_group_order']
+
+/** Two large margheritas: the cart the delivery rule's example is said for. */
+const EXAMPLE_CART_CENTS = 4198
 
 type HasTool = (name: ToolName) => boolean
 
@@ -65,12 +71,13 @@ export function agentInstructions(
   // the session has that tool; some have a version for a session without it.
   const rules = compact([
     safeguardRule(has, changesCart),
-    has('set_order_type') && orderTypeRule(has),
+    has('set_order_type') && orderTypeRule(has, changesCart),
     changesCart && '- To change the cart, always use a tool. Never claim you added, changed or removed something unless the tool returned it.',
     changesCart && confirmRule(has),
     // In step 5's Check the agent wrote $20.99 as "twenty oh nine nine".
     TOTAL_TOOLS.some(has) &&
       '- Say every total exactly as the totalSpoken in the tool result gives it, word for word, even a long one ("two hundred ninety-seven dollars and fifty-six cents"); never turn the digits in total into words yourself.',
+    CART_READ_TOOLS.some(has) && deliveryTotalRule(),
     changesCart && '- If a sized item has no size, ask which size before adding it.',
     has('find_menu_items')
       ? '- Use find_menu_items when the customer asks what you have that matches something ("vegetarian", "spicy", "under ten bucks"), so the matching items light up on screen. Then name two or three of them.' +
@@ -90,7 +97,7 @@ export function agentInstructions(
     '- When the customer is done, ' +
       (has('view_cart') ? 'read back the order and total from view_cart, then ' : '') +
       (has('checkout')
-        ? `call checkout when they confirm and say "${TO_CHECKOUT}" ${NOT_PLACED_YET}`
+        ? `call checkout when they confirm and ${SAY_AT_CHECKOUT} ${NOT_PLACED_YET}`
         : 'tell them to tap Checkout in the cart.'),
     '- Never end a reply by promising to do something later ("give me a sec", "let me check"). ' +
       (tools.length > 0 ? 'Either do it now with a tool, or answer now.' : 'Answer now.'),
@@ -112,26 +119,41 @@ Conversation started. ${has('set_order_type') ? `${describeOrderType(orderType)}
 // Pickup or delivery (the owner's flow, .build/step-5b.md): the greeting
 // asks, and the answer is recorded with set_order_type, then one short line
 // moves on to the order. checkout refuses until it's set, so an answer given
-// at that point goes straight back to checkout. No address by voice: Stripe's
-// page asks for it. The fee is said only if asked, from the shop settings.
-function orderTypeRule(has: HasTool): string {
+// at that point goes straight back to checkout. An order that comes first is
+// added at once: in the voice check, "Add a large cheese pizza" before the
+// choice got no tool call and "I'll get that added for you right after." No
+// address by voice: Stripe's page asks for it. The fee, from the shop
+// settings, is said when asked, and in every delivery total (below).
+function orderTypeRule(has: HasTool, changesCart: boolean): string {
   return [
     '- Every order is pickup or delivery. When the customer says which, call set_order_type, then say one short line like "Great, delivery it is. What can I get you?"' +
       (has('checkout') ? ', or if they were checking out, call checkout next.' : '.'),
-    'If they start ordering without saying, take the order and ask "Pickup or delivery?" before they check out.',
+    changesCart
+      ? `If they order something before saying which, add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply; never hold an item until they answer, or promise to add it later, and don't call set_order_type until they say which.`
+      : 'If they start ordering without saying, ask "Pickup or delivery?" once, in the same reply.',
     `For delivery, never take an address by voice: if one comes up, say "You'll enter the delivery address at checkout."`,
     `If asked about fees, delivery adds a flat ${spokenPrice(DELIVERY_FEE)} at checkout.`,
   ].join(' ')
+}
+
+// For delivery, the cart the tools return also has the fee and the total with
+// it (cartSummary.ts), since Stripe adds the fee: in the voice check the agent
+// said "forty-one ninety-eight" and Stripe charged $45.97. The example is
+// worked out from the fee, so it stays true when the fee changes.
+function deliveryTotalRule(): string {
+  const example = `${spokenPrice(EXAMPLE_CART_CENTS)}, plus ${spokenPrice(DELIVERY_FEE)} for delivery, ${spokenPrice(EXAMPLE_CART_CENTS + DELIVERY_FEE)} in all`
+  return `- For delivery, a cart in a tool result also has delivery. Every time you say its total, after a change too, name the fee and give the total with it, each word for word: "${example}" (totalSpoken, feeSpoken, totalWithDeliverySpoken).`
 }
 
 // After a change, every line it made, add_items included: the owner wants a
 // whole group plan read back line by line once it's added ("that's very
 // important"). The group rule's one-sentence summary is for the plan before
 // it's added, and each rule says which moment it's for, so neither reads as
-// the other.
+// the other. For delivery the total names the fee here too: in a text run
+// with only the delivery rule, one confirmation in two left it out.
 function confirmRule(has: HasTool): string {
   return compact([
-    '- After each change, confirm it from the tool result: the quantity, size and name of every line you added or changed, then the new total.',
+    '- After each change, confirm it from the tool result: the quantity, size and name of every line you added or changed, then the new total, for delivery with the fee named.',
     has('add_items') &&
       'After add_items, name every line it added, one by one ("two large cheese pizzas, three large pepperoni pizzas, six garlic knots, …"), a whole group plan included, even if it takes more than two sentences; never sum them up.',
   ]).join(' ')

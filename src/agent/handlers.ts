@@ -10,7 +10,10 @@
 //   against the cart now (`cart.now()`), then makes the change through the
 //   cart port (`cart.change()`), which returns the summary of the cart after
 //   it, even before React renders it. In the app the port is the page's cart
-//   changes (cartChanges.ts), which taps go through too.
+//   changes (cartChanges.ts), which taps go through too. For delivery, the
+//   summary also has the delivery fee and the total with it, so the total
+//   the agent says is what Stripe charges; view_cart reads pickup or delivery
+//   from the order-type port to give the same.
 
 import type { CartDetails } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
@@ -247,7 +250,8 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
       return cart.change({ type: 'remove', id })
     }),
 
-    view_cart: recovering(() => summarizeCart(cart.now())),
+    // The cart as the cart tools return it (cartChanges.ts): for delivery, with the fee and the total with it.
+    view_cart: recovering(() => summarizeCart(cart.now(), orderType.get())),
 
     clear_cart: recovering(() => cart.change({ type: 'clear' })),
 

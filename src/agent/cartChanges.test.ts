@@ -94,6 +94,20 @@ describe('change', () => {
     expect(onTapUpdate).not.toHaveBeenCalled()
   })
 
+  // The summary is what a cart tool returns, so for delivery it says what Stripe will charge.
+  it('summarizes the cart with the delivery fee once the customer has chosen delivery', () => {
+    const { cart, orderType, holds } = setup()
+
+    expect(cart.change({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })).not.toHaveProperty('delivery')
+    orderType.set('delivery')
+    const summary = cart.change({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
+
+    expect(summary).toEqual(summarizeCart(holds(), 'delivery'))
+    expect(summary.delivery).toMatchObject({ fee: '$3.99', totalWithDelivery: '$13.97' })
+    orderType.set('pickup')
+    expect(cart.change({ type: 'remove', id: 'fries' })).toEqual(summarizeCart({}))
+  })
+
   it('gives checkout the rendered cart', () => {
     const { cart, given, store } = setup()
     given({ fries: 1 })

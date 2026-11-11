@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ShoppingCart } from 'use-shopping-cart/core'
-import { findVariant } from '../menu/menu'
-import { CURRENCY, LOCALE } from '../shop'
+import { findVariant, formatPrice } from '../menu/menu'
+import { CURRENCY, DELIVERY_FEE, LOCALE } from '../shop'
 import { applyCartChange, describeCart, describeLine, quantitiesOf, summarizeCart } from './cartSummary'
+import { spokenPrice } from './spokenPrice'
 
 describe('summarizeCart', () => {
   it('lists each line with its name, quantity and total, in cart order, plus the count and the total, written and spoken', () => {
@@ -35,6 +36,47 @@ describe('summarizeCart, spoken', () => {
   it('says the total in the words spokenPrice uses, from a hundred dollars up too', () => {
     expect(summarizeCart({ 'meat-lovers-pizza-large': 8 }).totalSpoken).toBe('one hundred ninety-nine dollars and ninety-two cents')
     expect(summarizeCart({ soda: 4 }).totalSpoken).toBe('nine ninety-six')
+  })
+})
+
+// The agent said "forty-one ninety-eight" for a delivery order, and Stripe charged $45.97 (.build/step-5b.md).
+describe('summarizeCart, for delivery', () => {
+  it('adds the delivery fee and the total with it, written and spoken', () => {
+    expect(summarizeCart({ 'margherita-pizza-large': 2 }, 'delivery')).toEqual({
+      lines: [{ id: 'margherita-pizza-large', name: 'Large Margherita Pizza', quantity: 2, total: '$41.98' }],
+      count: 2,
+      total: '$41.98',
+      totalSpoken: 'forty-one ninety-eight',
+      delivery: {
+        fee: '$3.99',
+        feeSpoken: 'three ninety-nine',
+        totalWithDelivery: '$45.97',
+        totalWithDeliverySpoken: 'forty-five ninety-seven',
+      },
+    })
+  })
+
+  it('takes the fee from the shop settings, and says a total from a hundred dollars up in full', () => {
+    const { delivery } = summarizeCart({ 'meat-lovers-pizza-large': 4 }, 'delivery')
+    expect(summarizeCart({ 'meat-lovers-pizza-large': 4 }).total).toBe('$99.96')
+    expect(delivery).toEqual({
+      fee: formatPrice(DELIVERY_FEE),
+      feeSpoken: spokenPrice(DELIVERY_FEE),
+      totalWithDelivery: formatPrice(9996 + DELIVERY_FEE),
+      totalWithDeliverySpoken: 'one hundred three dollars and ninety-five cents',
+    })
+  })
+
+  it('leaves the summary as it was for pickup, or before the customer has chosen', () => {
+    const cart = { 'margherita-pizza-large': 2, fries: 1 }
+    for (const orderType of ['pickup', null] as const) {
+      expect(summarizeCart(cart, orderType)).toEqual(summarizeCart(cart))
+      expect(summarizeCart(cart, orderType)).not.toHaveProperty('delivery')
+    }
+  })
+
+  it('has no delivery for an empty cart, since there is nothing to deliver', () => {
+    expect(summarizeCart({}, 'delivery')).toEqual(summarizeCart({}))
   })
 })
 

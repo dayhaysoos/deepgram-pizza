@@ -1,7 +1,7 @@
 // The tool handlers, wired to the live page: the cart through the page's cart
 // changes (CartChangesProvider), the highlights and suggestion card from
-// MenuUiProvider, pickup or delivery from OrderTypeProvider, and checkout. The handlers themselves (handlers.ts) know
-// nothing about React.
+// MenuUiProvider, pickup or delivery from OrderTypeProvider, and checkout. The
+// handlers themselves (handlers.ts) know nothing about React.
 //
 // The page gets one set of handlers for its lifetime, read with
 // useToolHandlers() (src/pageContext.ts): they remember what they did (whether

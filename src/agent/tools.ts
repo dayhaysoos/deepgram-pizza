@@ -98,6 +98,12 @@ const noParameters: ToolDefinition['parameters'] = { type: 'object', properties:
 /** What the agent says once checkout returns ok (SPEC.md, "Checkout"): they're going to pay, not done. */
 export const TO_CHECKOUT = 'Taking you to checkout now so you can pay.'
 
+/** The same for delivery: Stripe's page asks for the address, never the agent. */
+export const TO_CHECKOUT_FOR_DELIVERY = 'Taking you to checkout now so you can pay and enter your delivery address.'
+
+/** How the rule and checkout's description put the two lines. */
+export const SAY_AT_CHECKOUT = `say "${TO_CHECKOUT}", or for delivery "${TO_CHECKOUT_FOR_DELIVERY}"`
+
 /** Nothing is ordered until the customer pays on Stripe's page. */
 export const NOT_PLACED_YET = "Never say the order is placed, done or confirmed: it isn't until they pay."
 
@@ -212,7 +218,7 @@ export const toolDefinitions = [
   }),
   tool({
     name: 'checkout',
-    description: `Send the customer to the payment page, once they have confirmed their order. When it returns ok, say "${TO_CHECKOUT}" ${NOT_PLACED_YET} The page leaves as soon as you stop speaking.`,
+    description: `Send the customer to the payment page, once they have confirmed their order. When it returns ok, ${SAY_AT_CHECKOUT} ${NOT_PLACED_YET} The page leaves as soon as you stop speaking.`,
     parameters: noParameters,
     defer_until_eot: true,
   }),

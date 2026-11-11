@@ -51,7 +51,10 @@ export type CartStore = {
 
 export type CartChangesPorts = {
   store: CartStore
-  /** Pickup or delivery (orderType.ts): every tap update says it, and `tapOrderType` changes it. */
+  /**
+   * Pickup or delivery (orderType.ts): every tap update says it, a change's
+   * summary adds the delivery fee for delivery, and `tapOrderType` changes it.
+   */
   orderType: Pick<OrderTypeStore, 'get' | 'set'>
   /** Tells the voice agent about a tap: the voice session's `tell`, which does nothing without a session. */
   tellAgent(text: string): void
@@ -64,7 +67,10 @@ export type CartChanges = {
   now(): Quantities
   /** The cart's entries as of the last render, as checkout takes them. */
   cartDetails(): CartDetails
-  /** Makes a change the agent asked for, and returns the summary of the cart after it. */
+  /**
+   * Makes a change the agent asked for, and returns the summary of the cart
+   * after it: for delivery, with the fee and the total with it (summarizeCart).
+   */
   change(change: CartChange): CartSummary
   /**
    * Makes a change the customer tapped, as `change` does, and tells the agent:
@@ -92,7 +98,8 @@ export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: 
     const cartAfter = applyCartChange(cartAt(rendered), cartChange)
     perform(store, cartChange)
     last = { basedOn: rendered, cartAfter }
-    return summarizeCart(cartAfter)
+    // The cart as the agent reads it: for delivery, with the fee and the total with it.
+    return summarizeCart(cartAfter, orderType.get())
   }
 
   function tellAboutTap(text: string) {

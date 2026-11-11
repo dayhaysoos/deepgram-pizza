@@ -506,6 +506,61 @@ describe('view_cart', () => {
   })
 })
 
+// The agent said "forty-one ninety-eight" for a delivery order, and Stripe charged $45.97 (.build/step-5b.md).
+describe('the cart the agent reads, for delivery', () => {
+  const DELIVERY_ON_41_98 = {
+    fee: '$3.99',
+    feeSpoken: 'three ninety-nine',
+    totalWithDelivery: '$45.97',
+    totalWithDeliverySpoken: 'forty-five ninety-seven',
+  }
+
+  it('carries the delivery fee and the total with it, after every cart tool and in view_cart', async () => {
+    const { call, given, orderType } = setup()
+    orderType.set('delivery')
+
+    expect(await call('add_item', { id: 'margherita-pizza-large', quantity: 2 })).toMatchObject({
+      total: '$41.98',
+      totalSpoken: 'forty-one ninety-eight',
+      delivery: DELIVERY_ON_41_98,
+    })
+    expect(await call('view_cart')).toEqual(summarizeCart({ 'margherita-pizza-large': 2 }, 'delivery'))
+    expect(await call('view_cart')).toMatchObject({ delivery: DELIVERY_ON_41_98 })
+    expect(await call('set_quantity', { id: 'margherita-pizza-large', quantity: 1 })).toMatchObject({
+      delivery: { totalWithDelivery: '$24.98', totalWithDeliverySpoken: 'twenty-four ninety-eight' },
+    })
+    expect(await call('add_items', { items: [{ id: 'fries', quantity: 1 }] })).toMatchObject({
+      delivery: { totalWithDelivery: '$29.97' },
+    })
+    expect(await call('remove_item', { id: 'fries' })).toMatchObject({ delivery: { totalWithDelivery: '$24.98' } })
+    // Nothing to deliver in an empty cart.
+    expect(await call('clear_cart')).toEqual(summarizeCart({}))
+    given({ soda: 1 })
+    expect(await call('view_cart')).toMatchObject({ delivery: { totalWithDelivery: '$6.48' } })
+  })
+
+  it('follows the choice as it is when the tool runs', async () => {
+    const { call, given, orderType } = setup()
+    given({ 'margherita-pizza-large': 2 })
+
+    expect(await call('view_cart')).not.toHaveProperty('delivery')
+    await call('set_order_type', { type: 'delivery' })
+    expect(await call('view_cart')).toMatchObject({ delivery: DELIVERY_ON_41_98 })
+    orderType.set('pickup')
+    expect(await call('view_cart')).toEqual(summarizeCart({ 'margherita-pizza-large': 2 }))
+  })
+
+  it('leaves pickup as it was', async () => {
+    const { call, orderType } = setup()
+    orderType.set('pickup')
+
+    expect(await call('add_item', { id: 'margherita-pizza-large', quantity: 2 })).toEqual(
+      summarizeCart({ 'margherita-pizza-large': 2 }),
+    )
+    expect(await call('view_cart')).not.toHaveProperty('delivery')
+  })
+})
+
 describe('clear_cart', () => {
   it('empties the cart and returns it', async () => {
     const { cart, call, given, storeSummary } = setup()
@@ -1091,6 +1146,12 @@ describe('the golden path', () => {
       count: 1,
       total: '$20.99',
       totalSpoken: 'twenty ninety-nine',
+      delivery: {
+        fee: '$3.99',
+        feeSpoken: 'three ninety-nine',
+        totalWithDelivery: '$24.98',
+        totalWithDeliverySpoken: 'twenty-four ninety-eight',
+      },
     })
     expect(JSON.parse(JSON.stringify(cart))).toEqual(cart)
 
