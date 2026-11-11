@@ -119,7 +119,8 @@ Conversation started. ${has('set_order_type') ? `${describeOrderType(orderType)}
 // Pickup or delivery (the owner's flow, .build/step-5b.md): the greeting
 // asks, and the answer is recorded with set_order_type, then one short line
 // moves on to the order. checkout refuses until it's set, so an answer given
-// at that point goes straight back to checkout. An order that comes first is
+// at that point goes back to checkout, after the total with the fee for
+// delivery (review round 2: that path never said the fee). An order that comes first is
 // added at once: in the voice check, "Add a large cheese pizza" before the
 // choice got no tool call and "I'll get that added for you right after." No
 // address by voice: Stripe's page asks for it. The fee, from the shop
@@ -127,7 +128,10 @@ Conversation started. ${has('set_order_type') ? `${describeOrderType(orderType)}
 function orderTypeRule(has: HasTool, changesCart: boolean): string {
   return [
     '- Every order is pickup or delivery. When the customer says which, call set_order_type, then say one short line like "Great, delivery it is. What can I get you?"' +
-      (has('checkout') ? ', or if they were checking out, call checkout next.' : '.'),
+      (has('checkout')
+        ? ', or if they were checking out, call checkout next' +
+          (has('view_cart') ? '; for delivery, first call view_cart and say the total with the fee.' : '.')
+        : '.'),
     changesCart
       ? `If they order something before saying which, add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply; never hold an item until they answer, or promise to add it later, and don't call set_order_type until they say which.`
       : 'If they start ordering without saying, ask "Pickup or delivery?" once, in the same reply.',

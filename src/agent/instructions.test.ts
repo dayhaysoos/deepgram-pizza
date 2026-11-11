@@ -89,7 +89,9 @@ describe('describeMenu', () => {
 // The rules in SPEC.md's "Agent instructions (first draft)", word for word,
 // with the wording recorded under Decisions since the first draft.
 const ORDER_TYPE_RULE_START = '- Every order is pickup or delivery. When the customer says which, call set_order_type, then say one short line like "Great, delivery it is. What can I get you?"'
-const ORDER_TYPE_RULE_CHECKOUT = ', or if they were checking out, call checkout next.'
+const ORDER_TYPE_RULE_CHECKOUT = ', or if they were checking out, call checkout next; for delivery, first call view_cart and say the total with the fee.'
+// A session without view_cart: the fee comes with the cart tools' results instead.
+const ORDER_TYPE_RULE_CHECKOUT_WITHOUT_VIEW_CART = ', or if they were checking out, call checkout next.'
 // In the voice check, "Add a large cheese pizza" before choosing got no tool
 // call, and "I'll get that large cheese pizza added for you right after."
 const ORDER_TYPE_RULE_ADD_FIRST =
@@ -263,9 +265,12 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart')))).toContain(VIEW_CART_RULE)
     expect(rulesOf(agentInstructions(emptyCart, allBut('view_cart')))).not.toContain(VIEW_CART_RULE)
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart', 'checkout')))).toContain(DONE_RULE)
-    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout', 'add_item')))).toContain(ORDER_TYPE_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout', 'add_item', 'view_cart')))).toContain(ORDER_TYPE_RULE)
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout', 'add_item')))).toContain(
+      ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT_WITHOUT_VIEW_CART + ORDER_TYPE_RULE_ADD_FIRST + ORDER_TYPE_RULE_END,
+    )
     expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout')))).toContain(
-      ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT + ORDER_TYPE_RULE_ASK_FIRST + ORDER_TYPE_RULE_END,
+      ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT_WITHOUT_VIEW_CART + ORDER_TYPE_RULE_ASK_FIRST + ORDER_TYPE_RULE_END,
     )
     expect(rulesOf(agentInstructions(emptyCart, only('set_order_type')))).toContain(
       ORDER_TYPE_RULE_START + '.' + ORDER_TYPE_RULE_ASK_FIRST + ORDER_TYPE_RULE_END,
@@ -466,7 +471,7 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(ORDER_TYPE_RULE).toContain('"You\'ll enter the delivery address at checkout."')
     expect(ORDER_TYPE_RULE).toContain('never take an address by voice')
     // After checkout asked for it, the answer goes on to checkout, which the tool refuses until it's set.
-    expect(ORDER_TYPE_RULE).toContain('if they were checking out, call checkout next.')
+    expect(ORDER_TYPE_RULE).toContain('if they were checking out, call checkout next; for delivery, first call view_cart and say the total with the fee.')
     // An order before the choice is added at once, then the question asked once: never held, never promised for later.
     expect(ORDER_TYPE_RULE).toContain('add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply')
     expect(ORDER_TYPE_RULE).toContain('never hold an item until they answer, or promise to add it later')

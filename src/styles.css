@@ -752,6 +752,13 @@ button:disabled {
   background: var(--white);
 }
 
+.drawer-fee {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
 .drawer-total {
   display: flex;
   justify-content: space-between;

@@ -1,8 +1,8 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { useShoppingCart, type CartEntry } from 'use-shopping-cart'
-import { findVariant, imagePath } from '../menu/menu'
-import { useCartChanges } from '../pageContext'
-import { MAX_LINE_QUANTITY } from '../shop'
+import { findVariant, formatPrice, imagePath } from '../menu/menu'
+import { useCartChanges, useOrderType } from '../pageContext'
+import { DELIVERY_FEE, MAX_LINE_QUANTITY } from '../shop'
 import { CheckoutButton } from './CheckoutButton'
 import { OrderTypeSwitch } from './OrderTypeSwitch'
 
@@ -20,6 +20,9 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
   const open = useShoppingCart((cart) => cart.shouldDisplayCart)
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
   const formattedTotalPrice = useShoppingCart((cart) => cart.formattedTotalPrice)
+  const totalPrice = useShoppingCart((cart) => cart.totalPrice)
+  // For delivery the total includes the fee, as Stripe charges it and the agent says it.
+  const delivery = useOrderType() === 'delivery'
   const close = useShoppingCart((cart) => cart.handleCloseCart)
   const lines = Object.values(cartDetails)
 
@@ -76,9 +79,15 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
           <OrderTypeSwitch />
           {lines.length > 0 && (
             <>
+              {delivery && (
+                <p className="drawer-fee">
+                  <span>Delivery</span>
+                  <span>{formatPrice(DELIVERY_FEE)}</span>
+                </p>
+              )}
               <p className="drawer-total">
                 <span>Total</span>
-                <span>{formattedTotalPrice}</span>
+                <span>{delivery ? formatPrice((totalPrice ?? 0) + DELIVERY_FEE) : formattedTotalPrice}</span>
               </p>
               <CheckoutButton />
             </>
