@@ -37,8 +37,8 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
         closeSuggestions,
         isShowingSuggestions,
         openCart,
-        // Doesn't wait itself: the checkout tool answers `{ ok: true }` now, so
-        // the agent can say it's taking the customer to checkout.
+        // Doesn't wait itself: the checkout tool answers now, with the amount
+        // to pay, so the agent can say it's taking the customer to checkout.
         goToCheckout: (url) => void voiceSession.leaveAfterSpeaking().then(() => redirectToCheckout(url)),
       },
       orderType,

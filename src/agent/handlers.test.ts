@@ -2,14 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CheckoutResult } from '../checkout/checkout'
 import { menu, products } from '../menu/menu'
 import { createCartChanges } from './cartChanges'
-import { summarizeCart } from './cartSummary'
-import { checkLinesToAdd, createToolHandlers, type Suggestions, type ToolPorts } from './handlers'
+import { quantitiesOf, summarizeCart } from './cartSummary'
+import { checkLinesToAdd, createToolHandlers, type Suggestions, type ToolPorts, type ToolResult } from './handlers'
 import { createOrderTypeStore } from './orderType'
 import { planGroupOrder } from './planGroupOrder'
 import { renderedStore } from './testing'
-import type { ToolName } from './tools'
+import { checkoutLine, type ToolName } from './tools'
 
 const SESSION_URL = 'https://checkout.stripe.com/c/pay/cs_test_fake'
+
+/** The line the agent says once checkout returns ok, with the amount checkout returned. */
+function checkoutLineFor(result: ToolResult, type: 'pickup' | 'delivery'): string {
+  if (!('ok' in result) || !('totalSpoken' in result)) throw new Error(`Checkout didn't go ahead: ${JSON.stringify(result)}`)
+  return checkoutLine(result.totalSpoken, type)
+}
 
 /**
  * The handlers with the page's cart changes (cartChanges.ts) over a real
@@ -1023,9 +1029,52 @@ describe('checkout', () => {
     given({ 'margherita-pizza-large': 1 })
     orderType.set('delivery')
 
-    expect(await call('checkout')).toEqual({ ok: true })
+    expect(await call('checkout')).toMatchObject({ ok: true })
     expect(checkout).toHaveBeenCalledExactlyOnceWith(store.getState().cartDetails, 'delivery')
     expect(ui.goToCheckout).toHaveBeenCalledWith(SESSION_URL)
+  })
+
+  // Every path to checkout ends on the checkout line, so the amount it says
+  // comes from here: review round 3 found three delivery paths that reached
+  // Stripe without the total with the fee said once (.build/step-5b.md).
+  it('returns the amount to pay, written and spoken: the cart total for pickup', async () => {
+    const { call, given, orderType } = setup()
+    given({ 'margherita-pizza-large': 2 })
+    orderType.set('pickup')
+
+    const result = await call('checkout')
+
+    expect(result).toEqual({ ok: true, total: '$41.98', totalSpoken: 'forty-one ninety-eight' })
+    expect(checkoutLineFor(result, 'pickup')).toBe('Taking you to checkout now so you can pay forty-one ninety-eight.')
+  })
+
+  it('returns the total with the delivery fee for delivery, what Stripe charges', async () => {
+    const { call, given, orderType } = setup()
+    given({ 'margherita-pizza-large': 2 })
+    orderType.set('delivery')
+
+    const result = await call('checkout')
+
+    expect(result).toEqual({ ok: true, total: '$45.97', totalSpoken: 'forty-five ninety-seven' })
+    const { delivery } = summarizeCart({ 'margherita-pizza-large': 2 }, 'delivery')
+    expect(result).toMatchObject({ total: delivery?.totalWithDelivery, totalSpoken: delivery?.totalWithDeliverySpoken })
+    expect(checkoutLineFor(result, 'delivery')).toBe(
+      'Taking you to checkout now so you can pay forty-five ninety-seven and enter your delivery address.',
+    )
+  })
+
+  it('says the amount for the cart it sent to checkout', async () => {
+    const { checkout, given, handlers, orderType } = setup()
+    given({ fries: 1 })
+    orderType.set('pickup')
+    // A change the last render doesn't show yet: checkout sends the rendered cart, and prices that one.
+    await handlers.add_item({ id: 'soda', quantity: 1 })
+
+    const result = await handlers.checkout({})
+
+    const [sent] = checkout.mock.calls[0]
+    expect(quantitiesOf(sent)).toEqual({ fries: 1 })
+    expect(result).toEqual({ ok: true, total: '$4.99', totalSpoken: 'four ninety-nine' })
   })
 
   it('asks for pickup or delivery first, instead of starting checkout without it', async () => {
@@ -1122,7 +1171,7 @@ describe('set_order_type', () => {
 
     expect(await call('checkout')).toEqual({ message: "Ask whether it's pickup or delivery first." })
     await call('set_order_type', { type: 'pickup' })
-    expect(await call('checkout')).toEqual({ ok: true })
+    expect(await call('checkout')).toEqual({ ok: true, total: '$4.99', totalSpoken: 'four ninety-nine' })
   })
 })
 
@@ -1155,7 +1204,8 @@ describe('the golden path', () => {
     })
     expect(JSON.parse(JSON.stringify(cart))).toEqual(cart)
 
-    expect(await call('checkout')).toEqual({ ok: true })
+    // The checkout line says what Stripe charges: the total with the fee.
+    expect(await call('checkout')).toEqual({ ok: true, total: '$24.98', totalSpoken: 'twenty-four ninety-eight' })
     expect(ui.goToCheckout).toHaveBeenCalledWith(SESSION_URL)
   })
 })

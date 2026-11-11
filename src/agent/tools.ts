@@ -19,7 +19,8 @@
 // screen, which the next call puts right.
 
 import { categories, mainCategories, menu, products, tags, type MainCategory } from '../menu/menu'
-import { MAX_LINE_QUANTITY, ORDER_TYPES } from '../shop'
+import { DELIVERY_FEE, MAX_LINE_QUANTITY, ORDER_TYPES, type OrderType } from '../shop'
+import { spokenPrice } from './spokenPrice'
 import { orList } from './text'
 
 /** The most lines add_items and show_suggestions take in one call, and a group plan holds. */
@@ -95,14 +96,32 @@ const lines: JsonSchema = {
 
 const noParameters: ToolDefinition['parameters'] = { type: 'object', properties: {} }
 
-/** What the agent says once checkout returns ok (SPEC.md, "Checkout"): they're going to pay, not done. */
-export const TO_CHECKOUT = 'Taking you to checkout now so you can pay.'
+/** Two large margheritas: the cart the example totals in the agent's rules are said for. */
+export const EXAMPLE_CART_CENTS = 4198
 
-/** The same for delivery: Stripe's page asks for the address, never the agent. */
-export const TO_CHECKOUT_FOR_DELIVERY = 'Taking you to checkout now so you can pay and enter your delivery address.'
+/** How the checkout line starts: they're going to pay, not done. */
+export const TO_CHECKOUT = 'Taking you to checkout now so you can pay'
 
-/** How the rule and checkout's description put the two lines. */
-export const SAY_AT_CHECKOUT = `say "${TO_CHECKOUT}", or for delivery "${TO_CHECKOUT_FOR_DELIVERY}"`
+/** How it goes on for delivery, after the amount: Stripe's page asks for the address, never the agent. */
+export const FOR_DELIVERY = 'and enter your delivery address'
+
+/**
+ * What the agent says once checkout returns ok (SPEC.md, "Checkout"), with
+ * the totalSpoken it returned: "Taking you to checkout now so you can pay
+ * forty-five ninety-seven and enter your delivery address." Every path to
+ * Stripe ends on it, so the customer always hears what they'll pay, the
+ * delivery fee included (review round 3, .build/step-5b.md).
+ */
+export function checkoutLine(totalSpoken: string, orderType: OrderType): string {
+  return `${TO_CHECKOUT} ${totalSpoken}${orderType === 'delivery' ? ` ${FOR_DELIVERY}` : ''}.`
+}
+
+/**
+ * How the rule and checkout's description put the line, after "when it
+ * returns ok,". The examples are two large margheritas, the delivery one with
+ * the fee from the shop settings, so they stay true when the fee changes.
+ */
+export const SAY_AT_CHECKOUT = `say "${TO_CHECKOUT}", then the totalSpoken it returned, word for word (for delivery it already has the fee in it), then, for delivery only, "${FOR_DELIVERY}", as one sentence: for pickup "${checkoutLine(spokenPrice(EXAMPLE_CART_CENTS), 'pickup')}", for delivery "${checkoutLine(spokenPrice(EXAMPLE_CART_CENTS + DELIVERY_FEE), 'delivery')}"`
 
 /** Nothing is ordered until the customer pays on Stripe's page. */
 export const NOT_PLACED_YET = "Never say the order is placed, done or confirmed: it isn't until they pay."

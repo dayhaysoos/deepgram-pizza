@@ -6,7 +6,7 @@ import { agentInstructions, describeMenu, greeting } from './instructions'
 import { describeOrderType } from './orderType'
 import { spokenPrice } from './spokenPrice'
 import { CALL_VIEW_CART, describeTapChange } from './tapUpdates'
-import { GROUP_MAINS, toolDefinitions, type ToolDefinition, type ToolName } from './tools'
+import { checkoutLine, GROUP_MAINS, SAY_AT_CHECKOUT, toolDefinitions, type ToolDefinition, type ToolName } from './tools'
 
 const emptyCart = summarizeCart({})
 const prompt = agentInstructions(emptyCart)
@@ -89,9 +89,8 @@ describe('describeMenu', () => {
 // The rules in SPEC.md's "Agent instructions (first draft)", word for word,
 // with the wording recorded under Decisions since the first draft.
 const ORDER_TYPE_RULE_START = '- Every order is pickup or delivery. When the customer says which, call set_order_type, then say one short line like "Great, delivery it is. What can I get you?"'
-const ORDER_TYPE_RULE_CHECKOUT = ', or if they were checking out, call checkout next; for delivery, first call view_cart and say the total with the fee.'
-// A session without view_cart: the fee comes with the cart tools' results instead.
-const ORDER_TYPE_RULE_CHECKOUT_WITHOUT_VIEW_CART = ', or if they were checking out, call checkout next.'
+// The checkout line says the amount to pay, the fee included for delivery, so this path needs nothing more (review round 3).
+const ORDER_TYPE_RULE_CHECKOUT = ', or if they were checking out, call checkout next.'
 // In the voice check, "Add a large cheese pizza" before choosing got no tool
 // call, and "I'll get that large cheese pizza added for you right after."
 const ORDER_TYPE_RULE_ADD_FIRST =
@@ -133,8 +132,11 @@ const OFFER_RULE =
   '- Offer one pairing on your own at most once per order, after the first item is added, in one short question. When the customer asks for suggestions, always help.'
 const VIEW_CART_RULE =
   "- The customer can also change the cart by tapping. Before answering anything about what's in the cart or the total, call view_cart and answer from its result."
-const DONE_RULE =
-  '- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm and say "Taking you to checkout now so you can pay.", or for delivery "Taking you to checkout now so you can pay and enter your delivery address." Never say the order is placed, done or confirmed: it isn\'t until they pay.'
+// The checkout line says the amount checkout returns, so every path to Stripe ends on it (review round 3, .build/step-5b.md).
+const SAY_AT_CHECKOUT_TEXT =
+  'say "Taking you to checkout now so you can pay", then the totalSpoken it returned, word for word (for delivery it already has the fee in it), then, for delivery only, "and enter your delivery address", as one sentence: for pickup "Taking you to checkout now so you can pay forty-one ninety-eight.", for delivery "Taking you to checkout now so you can pay forty-five ninety-seven and enter your delivery address."'
+const NOT_PLACED_YET_TEXT = "Never say the order is placed, done or confirmed: it isn't until they pay."
+const DONE_RULE = `- When the customer is done, read back the order and total from view_cart, then call checkout when they confirm, and when it returns ok, ${SAY_AT_CHECKOUT_TEXT} ${NOT_PLACED_YET_TEXT}`
 
 const SPEC_DRAFT_RULES = [
   ORDER_TYPE_RULE,
@@ -266,11 +268,12 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(rulesOf(agentInstructions(emptyCart, allBut('view_cart')))).not.toContain(VIEW_CART_RULE)
     expect(rulesOf(agentInstructions(emptyCart, only('view_cart', 'checkout')))).toContain(DONE_RULE)
     expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout', 'add_item', 'view_cart')))).toContain(ORDER_TYPE_RULE)
-    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout', 'add_item')))).toContain(
-      ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT_WITHOUT_VIEW_CART + ORDER_TYPE_RULE_ADD_FIRST + ORDER_TYPE_RULE_END,
-    )
+    expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout', 'add_item')))).toContain(ORDER_TYPE_RULE)
     expect(rulesOf(agentInstructions(emptyCart, only('set_order_type', 'checkout')))).toContain(
-      ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT_WITHOUT_VIEW_CART + ORDER_TYPE_RULE_ASK_FIRST + ORDER_TYPE_RULE_END,
+      ORDER_TYPE_RULE_START + ORDER_TYPE_RULE_CHECKOUT + ORDER_TYPE_RULE_ASK_FIRST + ORDER_TYPE_RULE_END,
+    )
+    expect(rulesOf(agentInstructions(emptyCart, only('checkout')))).toContain(
+      `- When the customer is done, call checkout when they confirm, and when it returns ok, ${SAY_AT_CHECKOUT_TEXT} ${NOT_PLACED_YET_TEXT}`,
     )
     expect(rulesOf(agentInstructions(emptyCart, only('set_order_type')))).toContain(
       ORDER_TYPE_RULE_START + '.' + ORDER_TYPE_RULE_ASK_FIRST + ORDER_TYPE_RULE_END,
@@ -362,29 +365,38 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
   // In step 5's Check the agent said $20.99 as "twenty oh nine nine".
   it('says totals as the spoken total the tools return, whenever a tool returns one', () => {
     expect(rulesOf(fullPrompt)).toContain(SPOKEN_TOTAL_RULE)
-    for (const name of [...CART_TOOLS, 'view_cart', 'show_suggestions', 'plan_group_order'] as const) {
+    for (const name of [...CART_TOOLS, 'view_cart', 'show_suggestions', 'plan_group_order', 'checkout'] as const) {
       expect(rulesOf(agentInstructions(emptyCart, only(name))), name).toContain(SPOKEN_TOTAL_RULE)
     }
-    for (const tools of [[], only('find_menu_items', 'checkout')]) {
+    for (const tools of [[], only('find_menu_items', 'set_order_type')]) {
       expect(rulesOf(agentInstructions(emptyCart, tools))).not.toContain(SPOKEN_TOTAL_RULE)
     }
   })
 
-  it('with checkout, says the customer is going to pay, and never that the order is placed', () => {
+  it('with checkout, says the customer is going to pay the amount checkout returned, and never that the order is placed', () => {
     const rule = rulesOf(fullPrompt).find((line) => line.startsWith('- When the customer is done'))
-    expect(rule).toContain('call checkout when they confirm and say "Taking you to checkout now so you can pay."')
-    expect(rule).toContain("Never say the order is placed, done or confirmed: it isn't until they pay.")
+    expect(rule).toContain(`call checkout when they confirm, and when it returns ok, ${SAY_AT_CHECKOUT_TEXT}`)
+    expect(rule).toContain(NOT_PLACED_YET_TEXT)
     // The tool's own description says the same, so the agent reads it where it calls the tool.
     const checkout = toolDefinitions.find((tool) => tool.name === 'checkout')
-    expect(checkout?.description).toContain('say "Taking you to checkout now so you can pay."')
-    expect(checkout?.description).toContain("Never say the order is placed, done or confirmed: it isn't until they pay.")
+    expect(checkout?.description).toBe(
+      `Send the customer to the payment page, once they have confirmed their order. When it returns ok, ${SAY_AT_CHECKOUT_TEXT} ${NOT_PLACED_YET_TEXT} The page leaves as soon as you stop speaking.`,
+    )
   })
 
-  // In the voice check a delivery order never heard where the address goes.
-  it('for delivery, says the customer will enter the delivery address at checkout', () => {
-    const delivery = 'or for delivery "Taking you to checkout now so you can pay and enter your delivery address."'
-    expect(rulesOf(fullPrompt).find((line) => line.startsWith('- When the customer is done'))).toContain(delivery)
-    expect(toolDefinitions.find((tool) => tool.name === 'checkout')?.description).toContain(delivery)
+  // Review round 3: three delivery paths reached Stripe without the total with
+  // the fee said once, so the line every path ends on says it.
+  it("puts the amount in the checkout line, from checkout's totalSpoken, and the address for delivery", () => {
+    // The examples are the lines for two large margheritas, with the amounts checkout returns for them.
+    const pickup = summarizeCart({ 'margherita-pizza-large': 2 }, 'pickup')
+    const delivery = summarizeCart({ 'margherita-pizza-large': 2 }, 'delivery').delivery
+    expect(checkoutLine(pickup.totalSpoken, 'pickup')).toBe('Taking you to checkout now so you can pay forty-one ninety-eight.')
+    expect(checkoutLine(delivery?.totalWithDeliverySpoken ?? '', 'delivery')).toBe(
+      'Taking you to checkout now so you can pay forty-five ninety-seven and enter your delivery address.',
+    )
+    expect(SAY_AT_CHECKOUT).toBe(SAY_AT_CHECKOUT_TEXT)
+    expect(SAY_AT_CHECKOUT).toContain(`for pickup "${checkoutLine(pickup.totalSpoken, 'pickup')}"`)
+    expect(SAY_AT_CHECKOUT).toContain(`for delivery "${checkoutLine(delivery?.totalWithDeliverySpoken ?? '', 'delivery')}"`)
     // Still never placed, done or confirmed.
     expect(DONE_RULE).not.toMatch(/"[^"]*\b(placed|done|confirmed)\b[^"]*"/)
   })
@@ -471,7 +483,9 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(ORDER_TYPE_RULE).toContain('"You\'ll enter the delivery address at checkout."')
     expect(ORDER_TYPE_RULE).toContain('never take an address by voice')
     // After checkout asked for it, the answer goes on to checkout, which the tool refuses until it's set.
-    expect(ORDER_TYPE_RULE).toContain('if they were checking out, call checkout next; for delivery, first call view_cart and say the total with the fee.')
+    // The checkout line says the amount, the fee included for delivery, so the rule needs no view_cart first.
+    expect(ORDER_TYPE_RULE).toContain('if they were checking out, call checkout next.')
+    expect(ORDER_TYPE_RULE).not.toContain('view_cart')
     // An order before the choice is added at once, then the question asked once: never held, never promised for later.
     expect(ORDER_TYPE_RULE).toContain('add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply')
     expect(ORDER_TYPE_RULE).toContain('never hold an item until they answer, or promise to add it later')

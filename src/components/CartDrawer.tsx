@@ -1,8 +1,9 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { useShoppingCart, type CartEntry } from 'use-shopping-cart'
-import { findVariant, formatPrice, imagePath } from '../menu/menu'
+import { quantitiesOf, summarizeCart } from '../agent/cartSummary'
+import { findVariant, imagePath } from '../menu/menu'
 import { useCartChanges, useOrderType } from '../pageContext'
-import { DELIVERY_FEE, MAX_LINE_QUANTITY } from '../shop'
+import { MAX_LINE_QUANTITY } from '../shop'
 import { CheckoutButton } from './CheckoutButton'
 import { OrderTypeSwitch } from './OrderTypeSwitch'
 
@@ -20,9 +21,10 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
   const open = useShoppingCart((cart) => cart.shouldDisplayCart)
   const cartDetails = useShoppingCart((cart) => cart.cartDetails)
   const formattedTotalPrice = useShoppingCart((cart) => cart.formattedTotalPrice)
-  const totalPrice = useShoppingCart((cart) => cart.totalPrice)
-  // For delivery the total includes the fee, as Stripe charges it and the agent says it.
-  const delivery = useOrderType() === 'delivery'
+  const orderType = useOrderType()
+  // For delivery, the fee and the total with it, as Stripe charges them: the
+  // same figures the agent says, from the same place (summarizeCart).
+  const delivery = summarizeCart(quantitiesOf(cartDetails), orderType).delivery
   const close = useShoppingCart((cart) => cart.handleCloseCart)
   const lines = Object.values(cartDetails)
 
@@ -82,12 +84,12 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
               {delivery && (
                 <p className="drawer-fee">
                   <span>Delivery</span>
-                  <span>{formatPrice(DELIVERY_FEE)}</span>
+                  <span>{delivery.fee}</span>
                 </p>
               )}
               <p className="drawer-total">
                 <span>Total</span>
-                <span>{delivery ? formatPrice((totalPrice ?? 0) + DELIVERY_FEE) : formattedTotalPrice}</span>
+                <span>{delivery ? delivery.totalWithDelivery : formattedTotalPrice}</span>
               </p>
               <CheckoutButton />
             </>

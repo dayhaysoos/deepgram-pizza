@@ -8,7 +8,7 @@ const call = (name: string, args: string) => ({ id: 'fc-1', name, arguments: arg
 
 describe('answerToolCall', () => {
   it("passes the handler the call's arguments, not the whole call", async () => {
-    const handler = vi.fn<ToolHandler>(async () => ({ ok: true }))
+    const handler = vi.fn<ToolHandler>(async () => ({ message: 'unused' }))
     await answerToolCall(handler, call('add_item', '{"id":"fries","quantity":1}'))
     expect(handler).toHaveBeenCalledExactlyOnceWith('{"id":"fries","quantity":1}')
   })

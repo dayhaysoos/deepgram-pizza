@@ -13,7 +13,8 @@
 //   changes (cartChanges.ts), which taps go through too. For delivery, the
 //   summary also has the delivery fee and the total with it, so the total
 //   the agent says is what Stripe charges; view_cart reads pickup or delivery
-//   from the order-type port to give the same.
+//   from the order-type port to give the same, and checkout returns the
+//   amount to pay, which the agent's checkout line says.
 
 import type { CartDetails } from 'use-shopping-cart/core'
 import type { CheckoutResult } from '../checkout/checkout'
@@ -24,6 +25,7 @@ import type { CartChanges } from './cartChanges'
 import {
   applyCartChange,
   describeLine,
+  quantitiesOf,
   quantityOf,
   summarizeCart,
   type CartSummary,
@@ -110,7 +112,15 @@ export type PlanShown = SuggestionsShown & {
 /** What set_order_type returns once it has recorded the choice. */
 export type OrderTypeSet = { orderType: OrderType }
 
-export type ToolResult = CartSummary | Recovery | FoundItems | SuggestionsShown | PlanShown | OrderTypeSet | { ok: true }
+/**
+ * What checkout returns once it's on the way to Stripe: what the customer
+ * will pay there, written and spoken. For delivery that's the total with the
+ * fee. The agent says it in the checkout line (`checkoutLine` in tools.ts),
+ * so every path to Stripe says it.
+ */
+export type CheckoutStarted = { ok: true } & Pick<CartSummary, 'total' | 'totalSpoken'>
+
+export type ToolResult = CartSummary | Recovery | FoundItems | SuggestionsShown | PlanShown | OrderTypeSet | CheckoutStarted
 
 /**
  * Runs one tool. Takes the arguments the agent sent, as an object or as the
@@ -273,7 +283,7 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
       const result = await checkout(cartDetails, type)
       if ('message' in result) return result
       ui.goToCheckout(result.url)
-      return { ok: true }
+      return { ok: true, ...amountToPay(quantitiesOf(cartDetails), type) }
     }),
   }
 }
@@ -359,6 +369,16 @@ function notInCart(id: unknown, quantities: Quantities): Recovery {
   if (lines.length === 0) return { message: `That isn't in the cart. ${EMPTY_CART}` }
   const listed = lines.map((line) => `${describeLine(line)} (${line.id})`).join(', ')
   return { message: `That isn't in the cart. The cart has: ${listed}.` }
+}
+
+/**
+ * What Stripe charges for this cart, written and spoken: the total, plus the
+ * fee for delivery. From summarizeCart, as the drawer and the cart tools get it.
+ */
+function amountToPay(quantities: Quantities, type: OrderType): Pick<CartSummary, 'total' | 'totalSpoken'> {
+  const { total, totalSpoken, delivery } = summarizeCart(quantities, type)
+  if (!delivery) return { total, totalSpoken }
+  return { total: delivery.totalWithDelivery, totalSpoken: delivery.totalWithDeliverySpoken }
 }
 
 /** Whether two lists of lines, one line per id, hold the same ids and quantities, in any order. */

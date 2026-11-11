@@ -61,7 +61,7 @@ function addAllOf(party: GroupOrderRequest): (inCart: Quantities) => Args {
 const presetGroups: Array<{ title: string; note: string; presets: Preset[] }> = [
   {
     title: 'Golden path',
-    note: "Run them in order. Check out returns { ok: true } and goes straight to Stripe's test checkout: with voice, it will wait for the agent to finish speaking first. Without step 1 it asks for pickup or delivery instead.",
+    note: "Run them in order. Check out returns { ok: true } with the amount to pay and goes straight to Stripe's test checkout: with voice, it will wait for the agent to finish speaking first. Without step 1 it asks for pickup or delivery instead.",
     presets: [
       { label: '1. Delivery, please', tool: 'set_order_type', args: { type: 'delivery' } },
       { label: "2. What's vegetarian?", tool: 'find_menu_items', args: { tags: ['vegetarian'] } },
