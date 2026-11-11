@@ -49,9 +49,12 @@ export type CartPort = Pick<CartChanges, 'now' | 'change' | 'cartDetails'>
 
 /** What the tools change on screen. */
 export type UiPort = {
-  /** Lights up these menu cards, by item id. An empty list clears the highlights. */
+  /**
+   * Lights up these menu cards, by item id. An empty list clears the
+   * highlights. In the app they light up once the agent starts speaking.
+   */
   highlight(itemIds: string[]): void
-  /** Opens the suggestion card, replacing any card already open. */
+  /** Opens the suggestion card, replacing any card already open. In the app it comes up once the agent starts speaking. */
   showSuggestions(suggestions: Suggestions): void
   /** Closes the suggestion card, if one is open. */
   closeSuggestions(): void

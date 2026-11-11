@@ -215,7 +215,7 @@ function groupRule(has: HasTool): string {
       'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.',
     has('add_items')
       ? 'Add it with add_items only after they agree, then name every line it added, one by one, as after any change.'
-      : 'Tell them they can add it by tapping Add all on the card.',
+      : 'Tell them they can add it by tapping Add all to cart on the card.',
   ]).join(' ')
 }
 

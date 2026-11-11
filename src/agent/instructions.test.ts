@@ -132,7 +132,7 @@ const PLAN_BUDGET =
 const PLAN_CHANGES =
   'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.'
 const PLAN_ADD = 'Add it with add_items only after they agree, then name every line it added, one by one, as after any change.'
-const PLAN_ADD_BY_TAPPING = 'Tell them they can add it by tapping Add all on the card.'
+const PLAN_ADD_BY_TAPPING = 'Tell them they can add it by tapping Add all to cart on the card.'
 const GROUP_RULE = [GROUP_QUESTION, PLAN_SUMMARY, PLAN_BUDGET, PLAN_CHANGES, PLAN_ADD].join(' ')
 const OFFER_RULE =
   '- Offer one pairing on your own at most once per order, after the first item is added, in one short question. When the customer asks for suggestions, always help.'

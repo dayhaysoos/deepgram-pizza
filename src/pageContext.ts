@@ -44,10 +44,13 @@ export type MenuUi = {
   highlighted: readonly string[]
   /** What the suggestion card shows now, or null when it's closed. */
   shown: ShownSuggestions | null
-  /** Highlights these menu cards, replacing any highlighted before. */
+  /**
+   * Highlights these menu cards, replacing any highlighted before, once the
+   * agent's voice has started (the session handle's `showWithVoice`).
+   */
   highlight(itemIds: readonly string[]): void
   clearHighlight(): void
-  /** Opens the suggestion card, replacing any card already open. */
+  /** Opens the suggestion card, replacing any card already open, once the agent's voice has started. */
   showSuggestions(suggestions: Suggestions): void
   closeSuggestions(): void
   /** Whether a suggestion card is open now, read at the moment of the call (the tool handlers outlive renders). */
@@ -81,9 +84,9 @@ export function useVoiceSessionControls(): VoiceSessionControls {
 }
 
 /**
- * The page's handle on the voice session: `tell(text)` and
- * `leaveAfterSpeaking()`, safe to call whether or not a session is on. It's
- * the same object for the page's lifetime.
+ * The page's handle on the voice session: `tell(text)`,
+ * `leaveAfterSpeaking()` and `showWithVoice(show)`, safe to call whether or
+ * not a session is on. It's the same object for the page's lifetime.
  */
 export function useVoiceSession(): SessionHandle {
   return required(useContext(VoiceHandleContext), 'useVoiceSession', 'VoiceSessionProvider')

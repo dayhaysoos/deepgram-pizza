@@ -1,7 +1,7 @@
 import { useId, useState, type RefObject } from 'react'
-import { describeLine } from '../agent/cartSummary'
+import { applyCartChange, describeLine, summarizeCart } from '../agent/cartSummary'
 import { checkLinesToAdd, type Suggestions } from '../agent/handlers'
-import { useCartChanges, useMenuUi } from '../pageContext'
+import { useCartChanges, useMenuUi, useOrderType } from '../pageContext'
 
 type SuggestionCardProps = {
   /**
@@ -15,7 +15,11 @@ type SuggestionCardProps = {
 // The card the show_suggestions tool opens: pairings, recommendations or a
 // plan for a group. It's a sheet above the talk button, not a modal: the menu
 // stays usable behind it, and the conversation goes on. A new set of
-// suggestions replaces it.
+// suggestions replaces it. It reads as a suggestion, not as the cart: the
+// owner took the plan's card for a cart the agent had filled (2026-11-11), so
+// it's labelled "Our suggestion", says what it "comes to" rather than a
+// total, and its button says where Add all goes. With a voice session on, it
+// comes up once the agent has started talking (MenuUiProvider.tsx).
 export function SuggestionCard({ returnFocusRef }: SuggestionCardProps) {
   const { shown, closeSuggestions } = useMenuUi()
 
@@ -42,6 +46,9 @@ function SuggestionSheet({ suggestions, onClose }: { suggestions: Suggestions; o
   const cartChanges = useCartChanges()
   const [notice, setNotice] = useState<{ text: string; refused: boolean } | null>(null)
   const titleId = useId()
+  // For delivery, what the lines come to with the fee, as the agent says a plan's total.
+  const orderType = useOrderType()
+  const { delivery } = summarizeCart(applyCartChange({}, { type: 'add', lines: suggestions.lines }), orderType)
 
   // Add and Add all check lines exactly as the add_items tool does: all or nothing,
   // at most MAX_LINE_QUANTITY per line counting the cart. Returns whether the
@@ -65,7 +72,10 @@ function SuggestionSheet({ suggestions, onClose }: { suggestions: Suggestions; o
   return (
     <section className="suggestion-card" aria-labelledby={titleId}>
       <div className="suggestion-header">
-        <h2 id={titleId}>{suggestions.title}</h2>
+        <div>
+          <p className="suggestion-kicker">Our suggestion</p>
+          <h2 id={titleId}>{suggestions.title}</h2>
+        </div>
         <button type="button" className="icon-button" aria-label="Close suggestions" onClick={onClose}>
           ✕
         </button>
@@ -93,11 +103,14 @@ function SuggestionSheet({ suggestions, onClose }: { suggestions: Suggestions; o
         {notice?.text}
       </p>
       <div className="suggestion-footer">
-        <p className="suggestion-total">
-          <span>Total</span> <span>{suggestions.total}</span>
-        </p>
+        <div>
+          <p className="suggestion-total">
+            <span>Comes to</span> <span>{suggestions.total}</span>
+          </p>
+          {delivery && <p className="suggestion-delivery">{delivery.totalWithDelivery} with delivery</p>}
+        </div>
         <button type="button" className="add-button" onClick={addAll}>
-          Add all
+          Add all to cart
         </button>
       </div>
     </section>

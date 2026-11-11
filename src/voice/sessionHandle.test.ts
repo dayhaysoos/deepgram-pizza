@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createSessionHandle, LEAVE_CAP_MS } from './sessionHandle'
+import { createSessionHandle, LEAVE_CAP_MS, SHOW_CAP_MS, VOICE_LEAD_MS } from './sessionHandle'
 import { NO_SESSION, updateSession, type SessionEvent, type SessionState } from './sessionStatus'
 
 /**
@@ -170,3 +170,91 @@ describe('leaveAfterSpeaking', () => {
     expect(sent.map((event) => event.type)).not.toContain('leaveTimedOut')
   })
 })
+
+// The owner found the suggestion card popping up in silence before the agent spoke disjointed (2026-11-11).
+describe('showWithVoice', () => {
+  it('shows at once when no session is on', () => {
+    const { handle } = setUp()
+    const show = vi.fn()
+    handle.showWithVoice(show)
+    expect(show).toHaveBeenCalledOnce()
+  })
+
+  it("shows once the agent's voice has played for a moment, not before", () => {
+    const { handle, dispatch, startSession } = setUp()
+    const sessionNumber = startSession()
+    dispatch({ type: 'toolsRequested', names: ['plan_group_order'], sessionNumber })
+    const show = vi.fn()
+
+    handle.showWithVoice(show)
+    vi.advanceTimersByTime(SHOW_CAP_MS / 2)
+    expect(show).not.toHaveBeenCalled()
+
+    dispatch({ type: 'agentChanged', state: 'connected', mode: 'speaking', sessionNumber })
+    vi.advanceTimersByTime(VOICE_LEAD_MS - 1)
+    expect(show).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(show).toHaveBeenCalledOnce()
+
+    vi.advanceTimersByTime(SHOW_CAP_MS)
+    expect(show).toHaveBeenCalledOnce()
+  })
+
+  it('starts the lead at once when the agent is already speaking', () => {
+    const { handle, dispatch, startSession } = setUp()
+    const sessionNumber = startSession()
+    dispatch({ type: 'agentChanged', state: 'connected', mode: 'speaking', sessionNumber })
+    const show = vi.fn()
+
+    handle.showWithVoice(show)
+    vi.advanceTimersByTime(VOICE_LEAD_MS)
+
+    expect(show).toHaveBeenCalledOnce()
+  })
+
+  it('shows after the cap if the agent never speaks', () => {
+    const { handle, startSession } = setUp()
+    startSession()
+    const show = vi.fn()
+
+    handle.showWithVoice(show)
+    vi.advanceTimersByTime(SHOW_CAP_MS - 1)
+    expect(show).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(show).toHaveBeenCalledOnce()
+  })
+
+  it('shows at once when the session ends first', () => {
+    const { handle, dispatch, startSession } = setUp()
+    startSession()
+    const show = vi.fn()
+
+    handle.showWithVoice(show)
+    dispatch({ type: 'pressed' })
+
+    expect(show).toHaveBeenCalledOnce()
+    vi.advanceTimersByTime(SHOW_CAP_MS)
+    expect(show).toHaveBeenCalledOnce()
+  })
+
+  it('never shows what was cancelled, as a card replaced before it came up', () => {
+    const { handle, dispatch, startSession } = setUp()
+    const sessionNumber = startSession()
+    const replaced = vi.fn()
+    const replacement = vi.fn()
+
+    handle.showWithVoice(replaced)()
+    handle.showWithVoice(replacement)
+    dispatch({ type: 'agentChanged', state: 'connected', mode: 'speaking', sessionNumber })
+    vi.advanceTimersByTime(SHOW_CAP_MS)
+
+    expect(replaced).not.toHaveBeenCalled()
+    expect(replacement).toHaveBeenCalledOnce()
+  })
+
+  it('waits a short lead and a capped wait: the voice comes first, but never long', () => {
+    expect(VOICE_LEAD_MS).toBe(400)
+    expect(SHOW_CAP_MS).toBe(2_000)
+  })
+})
+
