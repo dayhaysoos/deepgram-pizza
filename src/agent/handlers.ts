@@ -47,6 +47,8 @@ export type UiPort = {
   showSuggestions(suggestions: Suggestions): void
   /** Closes the suggestion card, if one is open. */
   closeSuggestions(): void
+  /** Whether a suggestion card is open now: the customer can close it with ✕. */
+  isShowingSuggestions(): boolean
   openCart(): void
   /** Leaves for Stripe Checkout, once the agent has finished speaking. */
   goToCheckout(url: string): void
@@ -127,13 +129,24 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
   // those ("add all of that"), the card closes, as it does after its own Add
   // all, so tapping Add all can't add the whole set a second time.
   let suggested: ItemQuantity[] | null = null
+  // The lines plan_group_order put on the card, while they're the card shown
+  // last. The agent sometimes shows them again with show_suggestions, under a
+  // title of its own and with no reason (it never sees the card's); while that
+  // card is still up, the repeat leaves it as it is, reason and all. Any other
+  // set replaces the card, as SPEC's Screens says.
+  let planned: ItemQuantity[] | null = null
 
   /**
    * Opens the suggestion card with these lines: show_suggestions and
    * plan_group_order both use it. Returns what the card shows, plus the total
    * spoken, for the agent.
    */
-  function suggest(title: unknown, reason: unknown, items: unknown): (Suggestions & Pick<CartSummary, 'totalSpoken'>) | Recovery {
+  function suggest(
+    title: unknown,
+    reason: unknown,
+    items: unknown,
+    from: 'show_suggestions' | 'plan_group_order',
+  ): (Suggestions & Pick<CartSummary, 'totalSpoken'>) | Recovery {
     // Not checked against the cart: it can change before the customer taps
     // Add all, and Add all checks again then.
     const checked = checkLines(items, {})
@@ -142,8 +155,12 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
     const { lines, total, totalSpoken } = summarizeCart(applyCartChange({}, { type: 'add', lines: checked.lines }))
     const reasonText = nonBlankText(reason)
     const suggestions = { title: nonBlankText(title) ?? 'Suggestions', ...(reasonText ? { reason: reasonText } : {}), lines, total }
-    ui.showSuggestions(suggestions)
-    suggested = checked.lines
+    const repeatsPlan = from === 'show_suggestions' && planned && ui.isShowingSuggestions() && sameLines(checked.lines, planned)
+    if (!repeatsPlan) {
+      ui.showSuggestions(suggestions)
+      suggested = checked.lines
+      planned = from === 'plan_group_order' ? checked.lines : null
+    }
     return { ...suggestions, totalSpoken }
   }
 
@@ -171,7 +188,7 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
     }),
 
     show_suggestions: recovering((args) => {
-      const shown = suggest(args.title, args.reason, args.items)
+      const shown = suggest(args.title, args.reason, args.items, 'show_suggestions')
       return 'message' in shown ? shown : { shown: true, total: shown.total, totalSpoken: shown.totalSpoken }
     }),
 
@@ -181,7 +198,7 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
     plan_group_order: recovering((args) => {
       const plan = planGroupOrder(args, cart.now())
       if ('message' in plan) return { message: `Nothing was shown. ${plan.message}` }
-      const shown = suggest(plan.title, plan.reason, plan.lines)
+      const shown = suggest(plan.title, plan.reason, plan.lines, 'plan_group_order')
       if ('message' in shown) return shown
       const lines = shown.lines.map(({ id, name, quantity }) => ({ id, name, quantity }))
       return { shown: true, summary: plan.summary, total: shown.total, totalSpoken: shown.totalSpoken, lines }
@@ -202,6 +219,7 @@ export function createToolHandlers({ cart, ui, checkout }: ToolPorts): ToolHandl
       openDrawerOnce()
       if (suggested && sameLines(checked.lines, suggested)) {
         suggested = null
+        planned = null
         ui.closeSuggestions()
       }
       return cartAfter

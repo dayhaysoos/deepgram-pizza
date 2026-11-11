@@ -24,7 +24,7 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
   const cartChanges = useCartChanges()
   // The cart library's only action that just opens the drawer (handleCartClick toggles).
   const openCart = useShoppingCart((cart) => cart.handleCartHover)
-  const { highlight, showSuggestions, closeSuggestions } = useMenuUi()
+  const { highlight, showSuggestions, closeSuggestions, isShowingSuggestions } = useMenuUi()
   const voiceSession = useVoiceSession()
 
   const [handlers] = useState(() =>
@@ -34,6 +34,7 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
         highlight,
         showSuggestions,
         closeSuggestions,
+        isShowingSuggestions,
         openCart,
         // Doesn't wait itself: the checkout tool answers `{ ok: true }` now, so
         // the agent can say it's taking the customer to checkout.

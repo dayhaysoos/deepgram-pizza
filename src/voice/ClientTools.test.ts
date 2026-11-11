@@ -16,7 +16,7 @@ describe('answerToolCall', () => {
   it("answers with the handler's result as JSON, the string a FunctionCallResponse carries", async () => {
     const handlers = createToolHandlers({
       cart: { now: () => ({}), cartDetails: () => ({}), change: () => summarizeCart({}) },
-      ui: { highlight() {}, showSuggestions() {}, closeSuggestions() {}, openCart() {}, goToCheckout() {} },
+      ui: { highlight() {}, showSuggestions() {}, closeSuggestions() {}, isShowingSuggestions: () => false, openCart() {}, goToCheckout() {} },
       checkout: async () => ({ message: 'unused' }),
     })
 

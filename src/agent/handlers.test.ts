@@ -3,7 +3,7 @@ import type { CheckoutResult } from '../checkout/checkout'
 import { menu, products } from '../menu/menu'
 import { createCartChanges } from './cartChanges'
 import { summarizeCart } from './cartSummary'
-import { checkLinesToAdd, createToolHandlers, type ToolPorts } from './handlers'
+import { checkLinesToAdd, createToolHandlers, type Suggestions, type ToolPorts } from './handlers'
 import { planGroupOrder } from './planGroupOrder'
 import { renderedStore } from './testing'
 import type { ToolName } from './tools'
@@ -26,10 +26,17 @@ function setup(respond: () => Promise<CheckoutResult> = async () => ({ url: SESS
     cartDetails: vi.fn(cartChanges.cartDetails),
     change: vi.fn(cartChanges.change),
   }
+  // Like MenuUiProvider: a card is open from showSuggestions until closeSuggestions.
+  let showing = false
   const ui = {
     highlight: vi.fn(),
-    showSuggestions: vi.fn(),
-    closeSuggestions: vi.fn(),
+    showSuggestions: vi.fn<(suggestions: Suggestions) => void>(() => {
+      showing = true
+    }),
+    closeSuggestions: vi.fn(() => {
+      showing = false
+    }),
+    isShowingSuggestions: vi.fn(() => showing),
     openCart: vi.fn(),
     goToCheckout: vi.fn(),
   }
@@ -1029,5 +1036,60 @@ describe('the golden path', () => {
 
     expect(await call('checkout')).toEqual({ ok: true })
     expect(ui.goToCheckout).toHaveBeenCalledWith(SESSION_URL)
+  })
+})
+
+describe('the plan card and the agent repeating it', () => {
+  async function planFor20(call: ReturnType<typeof setup>['call']) {
+    const shown = await call('plan_group_order', { people: 20 })
+    if (!('lines' in shown) || !('summary' in shown)) throw new Error('No plan shown')
+    return shown.lines.map(({ id, quantity }) => ({ id, quantity }))
+  }
+
+  // In real runs the agent re-showed the plan with a title of its own and no
+  // reason, which would have replaced the card and lost the planner's reason.
+  it('leaves the plan card as it is when the agent shows the same lines again, in any order', async () => {
+    const { call, ui } = setup()
+    const lines = await planFor20(call)
+
+    const repeat = await call('show_suggestions', { title: 'Party of 20 plan', items: [...lines].reverse() })
+
+    expect(ui.showSuggestions).toHaveBeenCalledTimes(1)
+    expect(repeat).toMatchObject({ shown: true })
+  })
+
+  it('shows the plan again if the customer closed its card', async () => {
+    const { call, ui } = setup()
+    const lines = await planFor20(call)
+    ui.closeSuggestions()
+
+    await call('show_suggestions', { title: 'Party of 20', items: lines })
+
+    expect(ui.showSuggestions).toHaveBeenCalledTimes(2)
+  })
+
+  it('replaces the plan card when the lines change', async () => {
+    const { call, ui } = setup()
+    const lines = await planFor20(call)
+
+    await call('show_suggestions', { title: 'Party of 20', items: [...lines.slice(1), { id: 'cannoli', quantity: 2 }] })
+
+    expect(ui.showSuggestions).toHaveBeenCalledTimes(2)
+  })
+
+  // Fries and a soda go with the cheeseburger and with the cheesesteak: the
+  // second card must say it's for the cheesesteak.
+  it('replaces a pairing card with another that has the same lines', async () => {
+    const { call, ui } = setup()
+    const pairing = [
+      { id: 'fries', quantity: 1 },
+      { id: 'soda', quantity: 1 },
+    ]
+    await call('show_suggestions', { title: 'Goes with the Classic Cheeseburger', items: pairing })
+
+    await call('show_suggestions', { title: 'Goes with the Philly Cheesesteak', items: pairing })
+
+    expect(ui.showSuggestions).toHaveBeenCalledTimes(2)
+    expect(ui.showSuggestions.mock.calls[1][0]).toMatchObject({ title: 'Goes with the Philly Cheesesteak' })
   })
 })

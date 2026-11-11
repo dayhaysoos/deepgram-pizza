@@ -48,6 +48,8 @@ export type MenuUi = {
   /** Opens the suggestion card, replacing any card already open. */
   showSuggestions(suggestions: Suggestions): void
   closeSuggestions(): void
+  /** Whether a suggestion card is open now, read at the moment of the call (the tool handlers outlive renders). */
+  isShowingSuggestions(): boolean
 }
 
 /** Provided by MenuUiProvider (src/agent/MenuUiProvider.tsx). */
