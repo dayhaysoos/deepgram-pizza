@@ -9,14 +9,11 @@ import type { Suggestions } from './handlers'
 
 const NONE: readonly string[] = []
 
-/** The same card: same title, reason and lines, in the same order. */
+/** The same card: the same items in the same quantities, in any order. Titles and reasons aren't compared. */
 export function sameSuggestions(a: Suggestions, b: Suggestions): boolean {
-  return (
-    a.title === b.title &&
-    a.reason === b.reason &&
-    a.lines.length === b.lines.length &&
-    a.lines.every((line, i) => line.id === b.lines[i].id && line.quantity === b.lines[i].quantity)
-  )
+  if (a.lines.length !== b.lines.length) return false
+  const quantities = new Map(a.lines.map((line) => [line.id, line.quantity]))
+  return b.lines.every((line) => quantities.get(line.id) === line.quantity)
 }
 
 export function MenuUiProvider({ children }: { children: ReactNode }) {
@@ -28,7 +25,8 @@ export function MenuUiProvider({ children }: { children: ReactNode }) {
     highlight: (itemIds: readonly string[]) => setHighlighted(itemIds.length > 0 ? itemIds : NONE),
     clearHighlight: () => setHighlighted(NONE),
     // The agent sometimes shows the plan plan_group_order just put on the card
-    // again; the same card stays as it is rather than opening anew.
+    // again, with its own title and no reason (it never sees the card's). Same
+    // lines means the same card: it stays as it is, reason and all.
     showSuggestions: (suggestions: Suggestions) =>
       setShown((before) => (before && sameSuggestions(before.suggestions, suggestions) ? before : { key: (before?.key ?? 0) + 1, suggestions })),
     closeSuggestions: () => setShown(null),
