@@ -1,15 +1,22 @@
 // The cart as an order board, like a drive-thru's (the owner, 2026-11-11):
 // lines key in one by one as they're added, each lighting up as it lands; a
 // changed quantity lights its line up again; a line taken out is struck
-// through and fades. "Add all of that" puts a plan's lines in the cart at
-// once, and the board keys them in KEY_IN_MS apart while the agent reads them
-// back, the first at once. The board's total counts only the lines keyed in
-// so far, so it climbs with them.
+// through and fades. The board's total counts only the lines keyed in so far,
+// so it climbs with them.
+//
+// What the agent adds during a voice session keys in at the pace the agent
+// reads it back, like a cashier keying in an order as they repeat it: the
+// first line once the agent's voice has started (the session handle's
+// `showWithVoice`), and each next one about as long after as the agent takes
+// to say the one before (`readBackMs`). In the owner's check of "add all of
+// that", six lines a third of a second apart were all in before the agent
+// had said the first one. Taps, and changes with no voice session, key in
+// KEY_IN_MS apart, the first at once.
 //
 // It hears every change the page makes, tapped or asked for by voice, from
 // the page's cart changes (`subscribe` in src/agent/cartChanges.ts), with the
-// cart before and after it. A cart that changes any other way (loaded from
-// the browser's storage, emptied after paying) just shows as it is.
+// cart before and after it and who made it. A cart that changes any other way
+// (loaded from the browser's storage, emptied after paying) just shows as it is.
 //
 // The state and what the board shows are plain functions (`updateBoard`,
 // `boardLines`); `createOrderBoard` holds the state and its timers, as an
@@ -19,9 +26,24 @@
 // No React here: useOrderBoard.ts wires it to the page.
 
 import { quantityOf, type Quantities } from '../agent/cartSummary'
+import { numberWords } from '../agent/spokenPrice'
+import { findVariant } from '../menu/menu'
 
-/** How long after one line keys in the next one does: about a third of a second, like a cashier keying them. */
+/** How long after one line keys in the next one does, for taps: about a third of a second, like a cashier keying them. */
 export const KEY_IN_MS = 350
+
+/**
+ * How fast the agent reads lines back, in characters a second. In the owner's
+ * check on 2026-11-11, "Two large cheese pizzas, three large pepperoni
+ * pizzas, …" and its total, 260 characters, took about 13 seconds.
+ */
+export const READ_BACK_CHARS_PER_SECOND = 20
+
+/** About how long the agent takes to say a line back, "two large cheese pizzas, ", in milliseconds. */
+export function readBackMs({ id, quantity }: { id: string; quantity: number }): number {
+  const name = findVariant(id)?.product.name ?? id
+  return Math.round((`${numberWords(quantity)} ${name}s, `.length / READ_BACK_CHARS_PER_SECOND) * 1000)
+}
 /** How long a keyed-in or changed line stays lit. styles.css's `line-lit` animation lasts as long. */
 export const LIT_MS = 1_200
 /** How long a line taken out stays, struck through, as it fades. styles.css's `line-leave` animation lasts as long. */
@@ -145,15 +167,37 @@ export type OrderBoard = {
   subscribe(listener: () => void): () => void
   /** The state now. The same object until something changes. */
   getSnapshot(): BoardState
-  /** Hears a change from the page's cart changes: the cart before it, and after it. */
-  cartChanged(before: Quantities, after: Quantities): void
+  /** Hears a change from the page's cart changes: the cart before it and after it, and who made it (a tap, unless said). */
+  cartChanged(before: Quantities, after: Quantities, by?: 'agent' | 'tap'): void
 }
 
-/** Creates a page's board. The first line a change adds keys in at once; the rest follow KEY_IN_MS apart. */
-export function createOrderBoard(): OrderBoard {
+/** How the board knows the agent will read back what it adds. In the app, from the voice session's handle. */
+export type BoardVoice = {
+  /** Whether a voice session is on, so the agent will read back what it adds. */
+  isOn(): boolean
+  /** Calls `start` once the agent's voice has started. Returns the function that cancels it. */
+  showWithVoice(start: () => void): () => void
+}
+
+const NO_VOICE: BoardVoice = {
+  isOn: () => false,
+  showWithVoice(start) {
+    start()
+    return () => {}
+  },
+}
+
+/**
+ * Creates a page's board. What a tap adds keys in KEY_IN_MS apart, the first
+ * at once; what the agent adds while `voice` is on keys in at its read-back pace.
+ */
+export function createOrderBoard(voice: BoardVoice = NO_VOICE): OrderBoard {
   let state = EMPTY_BOARD
   const listeners = new Set<() => void>()
   let keyInTimer: ReturnType<typeof setTimeout> | undefined
+  // Whether the lines waiting key in at the agent's pace, and, until its voice starts, how to stop waiting for it.
+  let paced = false
+  let cancelWaitForVoice: (() => void) | undefined
 
   /** Applies an event, and times the end of each mark and fade it started. */
   function apply(event: BoardEvent) {
@@ -177,15 +221,19 @@ export function createOrderBoard(): OrderBoard {
     if (state !== before) notify()
   }
 
-  function keyInLater() {
-    if (state.waiting.length > 0 && keyInTimer === undefined) {
-      keyInTimer = setTimeout(() => {
+  /** Keys the next line in, and times the one after: as long as saying this one takes, when paced. */
+  function keyInNext() {
+    const next = state.waiting[0]
+    apply({ type: 'keyIn' })
+    if (state.waiting.length === 0 || !next) return
+    keyInTimer = setTimeout(
+      () => {
         keyInTimer = undefined
-        apply({ type: 'keyIn' })
-        keyInLater()
+        keyInNext()
         notify()
-      }, KEY_IN_MS)
-    }
+      },
+      paced ? readBackMs(next) : KEY_IN_MS,
+    )
   }
 
   return {
@@ -194,11 +242,24 @@ export function createOrderBoard(): OrderBoard {
       return () => listeners.delete(listener)
     },
     getSnapshot: () => state,
-    cartChanged(before, after) {
+    cartChanged(before, after, by = 'tap') {
       apply({ type: 'changed', before, after })
-      // With nothing keying in, the first new line keys in with the change itself.
-      if (keyInTimer === undefined) apply({ type: 'keyIn' })
-      keyInLater()
+      // Lines already keying in, or waiting for the voice, carry on; a change after them joins the queue.
+      if (keyInTimer === undefined && cancelWaitForVoice === undefined && state.waiting.length > 0) {
+        paced = by === 'agent' && voice.isOn()
+        if (paced) {
+          let started = false
+          const cancel = voice.showWithVoice(() => {
+            started = true
+            cancelWaitForVoice = undefined
+            keyInNext()
+            notify()
+          })
+          if (!started) cancelWaitForVoice = cancel
+        } else {
+          keyInNext()
+        }
+      }
       notify()
     },
   }

@@ -258,3 +258,13 @@ describe('showWithVoice', () => {
   })
 })
 
+describe('isOn', () => {
+  it('says whether a session is on', () => {
+    const { handle, dispatch, startSession } = setUp()
+    expect(handle.isOn()).toBe(false)
+    startSession()
+    expect(handle.isOn()).toBe(true)
+    dispatch({ type: 'pressed' })
+    expect(handle.isOn()).toBe(false)
+  })
+})

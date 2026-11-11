@@ -84,30 +84,34 @@ export type CartChanges = {
   tapOrderType(type: OrderType): void
   /**
    * Calls `listener` after every change, tapped or asked for, with the cart
-   * before it and after it, once the use-shopping-cart actions have run. The
-   * cart drawer's order board keys new lines in from it. Returns the function
-   * that unsubscribes.
+   * before it and after it, once the use-shopping-cart actions have run, and
+   * who made it: `agent` for `change` (a tool call), `tap` for `tap`. The cart
+   * drawer's order board keys new lines in from it, paced to the agent's
+   * read-back for the agent's changes. Returns the function that unsubscribes.
    */
-  subscribe(listener: (before: Quantities, after: Quantities) => void): () => void
+  subscribe(listener: CartChangeListener): () => void
 }
+
+/** Hears a change: the cart before it and after it, and who made it. */
+export type CartChangeListener = (before: Quantities, after: Quantities, by: 'agent' | 'tap') => void
 
 /** Creates the page's cart changes. A page makes one and shares it, since it remembers the last change. */
 export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: CartChangesPorts): CartChanges {
   // The cart after the last change, and the rendered cart it was based on.
   let last: { basedOn: CartDetails; cartAfter: Quantities } | null = null
-  const listeners = new Set<(before: Quantities, after: Quantities) => void>()
+  const listeners = new Set<CartChangeListener>()
 
   function cartAt(rendered: CartDetails): Quantities {
     return last?.basedOn === rendered ? last.cartAfter : quantitiesOf(rendered)
   }
 
-  function change(cartChange: CartChange): CartSummary {
+  function change(cartChange: CartChange, by: 'agent' | 'tap' = 'agent'): CartSummary {
     const rendered = store.cartDetails()
     const cartBefore = cartAt(rendered)
     const cartAfter = applyCartChange(cartBefore, cartChange)
     perform(store, cartChange)
     last = { basedOn: rendered, cartAfter }
-    for (const listener of listeners) listener(cartBefore, cartAfter)
+    for (const listener of listeners) listener(cartBefore, cartAfter, by)
     // The cart as the agent reads it: for delivery, with the fee and the total with it.
     return summarizeCart(cartAfter, orderType.get())
   }
@@ -120,9 +124,9 @@ export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: 
   return {
     now: () => cartAt(store.cartDetails()),
     cartDetails: () => store.cartDetails(),
-    change,
+    change: (cartChange) => change(cartChange),
     tap(tapped) {
-      const cartAfter = change(tapped)
+      const cartAfter = change(tapped, 'tap')
       // Every update carries the whole order: the SDK sends only the newest after a reconnect.
       tellAboutTap(describeTapChange(tapped, cartAfter, orderType.get()))
       return cartAfter

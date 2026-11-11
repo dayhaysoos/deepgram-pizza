@@ -59,6 +59,8 @@ export type SessionHandle = {
    * replaced before it showed.
    */
   showWithVoice(show: () => void): () => void
+  /** Whether a session is on now: the agent will answer, out loud, what a tool did. */
+  isOn(): boolean
 }
 
 /** The handle, plus what VoiceSessionProvider and the live session keep it up to date with. */
@@ -129,6 +131,8 @@ export function createSessionHandle(send: (event: SessionEvent) => void): Sessio
       if (state.status === 'speaking') waiting.voiceStarted()
       return cancel
     },
+
+    isOn: () => isLive(state),
 
     update(next) {
       state = next

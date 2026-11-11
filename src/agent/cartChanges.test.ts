@@ -247,10 +247,10 @@ describe('taps and tool calls before React renders', () => {
 })
 
 describe('subscribe', () => {
-  it('hears every change, tapped or asked for, with the cart before and after it, once the store has it', () => {
+  it('hears every change, tapped or asked for, with the cart before and after it and who made it, once the store has it', () => {
     const { cart, render, holds } = setup()
-    const heard: Array<[Record<string, number>, Record<string, number>, Record<string, number>]> = []
-    cart.subscribe((before, after) => heard.push([before, after, holds()]))
+    const heard: Array<[Record<string, number>, Record<string, number>, string, Record<string, number>]> = []
+    cart.subscribe((before, after, by) => heard.push([before, after, by, holds()]))
 
     cart.change({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
     // Before React renders: the cart before counts the change above.
@@ -259,9 +259,9 @@ describe('subscribe', () => {
     cart.change({ type: 'remove', id: 'fries' })
 
     expect(heard).toEqual([
-      [{}, { fries: 1 }, { fries: 1 }],
-      [{ fries: 1 }, { fries: 3 }, { fries: 3 }],
-      [{ fries: 3 }, {}, {}],
+      [{}, { fries: 1 }, 'agent', { fries: 1 }],
+      [{ fries: 1 }, { fries: 3 }, 'tap', { fries: 3 }],
+      [{ fries: 3 }, {}, 'agent', {}],
     ])
   })
 

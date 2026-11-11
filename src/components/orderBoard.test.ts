@@ -7,8 +7,10 @@ import {
   KEY_IN_MS,
   LEAVE_MS,
   LIT_MS,
+  readBackMs,
   updateBoard,
   type BoardState,
+  type BoardVoice,
 } from './orderBoard'
 
 /** The owner's party of 30, added with "add all of that". */
@@ -20,19 +22,23 @@ const plan: Quantities = {
   soda: 17,
 }
 
-/** A board driven the way the page drives it: each change goes to the board, and the cart is then what it shows lines for. */
-function setUp(start: Quantities = {}) {
-  const board = createOrderBoard()
+/**
+ * A board driven the way the page drives it: each change goes to the board,
+ * and the cart is then what it shows lines for. `voice` stands in for the
+ * voice session's handle; by default none is on.
+ */
+function setUp(start: Quantities = {}, voice?: BoardVoice) {
+  const board = createOrderBoard(voice)
   let cart = start
   const notified = vi.fn()
   board.subscribe(notified)
   return {
     board,
     notified,
-    change(after: Quantities) {
+    change(after: Quantities, by: 'agent' | 'tap' = 'tap') {
       const before = cart
       cart = after
-      board.cartChanged(before, after)
+      board.cartChanged(before, after, by)
     },
     shown: () => boardLines(board.getSnapshot(), cart),
     ids: () => boardLines(board.getSnapshot(), cart).map(({ id }) => id),
@@ -190,3 +196,62 @@ describe('updateBoard', () => {
     expect(state.marks.fries).toMatchObject({ mark: 'changed' })
   })
 })
+
+describe('the order board during a voice session', () => {
+  /** A voice session that's on, whose agent starts speaking when the test says. */
+  function liveVoice() {
+    let started: (() => void) | undefined
+    const voice: BoardVoice = {
+      isOn: () => true,
+      showWithVoice: vi.fn((start: () => void) => {
+        started = start
+        return () => (started = undefined)
+      }),
+    }
+    return { voice, agentStartsSpeaking: () => started?.() }
+  }
+
+  it("keys in what the agent adds once its voice starts, each line about as long after as saying the one before takes", () => {
+    const { voice, agentStartsSpeaking } = liveVoice()
+    const { change, ids } = setUp({}, voice)
+
+    change(plan, 'agent')
+    expect(ids()).toEqual([])
+    vi.advanceTimersByTime(KEY_IN_MS * 3)
+    expect(ids()).toEqual([])
+
+    agentStartsSpeaking()
+    expect(ids()).toEqual(['cheese-pizza-large'])
+    const saying = readBackMs({ id: 'cheese-pizza-large', quantity: 2 })
+    vi.advanceTimersByTime(saying - 1)
+    expect(ids()).toEqual(['cheese-pizza-large'])
+    vi.advanceTimersByTime(1)
+    expect(ids()).toEqual(['cheese-pizza-large', 'pepperoni-pizza-large'])
+  })
+
+  it('reads a line back at about twenty characters a second: "two large cheese pizzas, " in about 1.3 s', () => {
+    expect(readBackMs({ id: 'cheese-pizza-large', quantity: 2 })).toBe(1250)
+    expect(readBackMs({ id: 'soda', quantity: 17 })).toBe(1300)
+  })
+
+  it('keys in what the customer taps at once, voice or not', () => {
+    const { voice } = liveVoice()
+    const { change, ids } = setUp({}, voice)
+
+    change({ fries: 1, soda: 2 })
+
+    expect(ids()).toEqual(['fries'])
+    expect(voice.showWithVoice).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(KEY_IN_MS)
+    expect(ids()).toEqual(['fries', 'soda'])
+  })
+
+  it("keys in what the agent adds quickly when no session is on, as the dev tools panel's calls do", () => {
+    const { change, ids } = setUp()
+    change({ fries: 1, soda: 2 }, 'agent')
+    expect(ids()).toEqual(['fries'])
+    vi.advanceTimersByTime(KEY_IN_MS)
+    expect(ids()).toEqual(['fries', 'soda'])
+  })
+})
+

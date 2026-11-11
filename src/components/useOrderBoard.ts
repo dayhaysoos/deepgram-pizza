@@ -5,17 +5,19 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useShoppingCart } from 'use-shopping-cart'
 import { quantitiesOf, summarizeCart, type DeliveryCharge } from '../agent/cartSummary'
-import { useCartChanges, useOrderType } from '../pageContext'
+import { useCartChanges, useOrderType, useVoiceSession } from '../pageContext'
 import { boardLines, createOrderBoard, EMPTY_BOARD, type BoardLine, type LatestLine, type OrderBoard } from './orderBoard'
 
 /**
- * The page's board, made once and subscribed to the page's cart changes.
- * MenuLayout makes it without reading it, so the menu doesn't re-render as
- * lines key in; the drawer and the strip read it with useOrderBoardView.
+ * The page's board, made once and subscribed to the page's cart changes, with
+ * the voice session's handle, so what the agent adds keys in as it reads it
+ * back. MenuLayout makes it without reading it, so the menu doesn't re-render
+ * as lines key in; the drawer and the strip read it with useOrderBoardView.
  */
 export function useOrderBoardStore(): OrderBoard {
   const cartChanges = useCartChanges()
-  const [board] = useState(createOrderBoard)
+  const voice = useVoiceSession()
+  const [board] = useState(() => createOrderBoard(voice))
   useEffect(() => cartChanges.subscribe(board.cartChanged), [cartChanges, board])
   return board
 }
