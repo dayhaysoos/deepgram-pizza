@@ -82,12 +82,20 @@ export type CartChanges = {
    * "Customer chose delivery by tapping. Cart: …". Nothing, if it's the choice already made.
    */
   tapOrderType(type: OrderType): void
+  /**
+   * Calls `listener` after every change, tapped or asked for, with the cart
+   * before it and after it, once the use-shopping-cart actions have run. The
+   * cart drawer's order board keys new lines in from it. Returns the function
+   * that unsubscribes.
+   */
+  subscribe(listener: (before: Quantities, after: Quantities) => void): () => void
 }
 
 /** Creates the page's cart changes. A page makes one and shares it, since it remembers the last change. */
 export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: CartChangesPorts): CartChanges {
   // The cart after the last change, and the rendered cart it was based on.
   let last: { basedOn: CartDetails; cartAfter: Quantities } | null = null
+  const listeners = new Set<(before: Quantities, after: Quantities) => void>()
 
   function cartAt(rendered: CartDetails): Quantities {
     return last?.basedOn === rendered ? last.cartAfter : quantitiesOf(rendered)
@@ -95,9 +103,11 @@ export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: 
 
   function change(cartChange: CartChange): CartSummary {
     const rendered = store.cartDetails()
-    const cartAfter = applyCartChange(cartAt(rendered), cartChange)
+    const cartBefore = cartAt(rendered)
+    const cartAfter = applyCartChange(cartBefore, cartChange)
     perform(store, cartChange)
     last = { basedOn: rendered, cartAfter }
+    for (const listener of listeners) listener(cartBefore, cartAfter)
     // The cart as the agent reads it: for delivery, with the fee and the total with it.
     return summarizeCart(cartAfter, orderType.get())
   }
@@ -122,6 +132,10 @@ export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: 
       orderType.set(type)
       // Summarized for the new choice, so a delivery update gives the total with the fee too.
       tellAboutTap(describeOrderTypeTap(type, summarizeCart(cartAt(store.cartDetails()), type)))
+    },
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
     },
   }
 }

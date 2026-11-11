@@ -1,32 +1,36 @@
 import { useEffect, useRef, type RefObject } from 'react'
-import { useShoppingCart, type CartEntry } from 'use-shopping-cart'
-import { quantitiesOf, summarizeCart } from '../agent/cartSummary'
-import { findVariant, imagePath } from '../menu/menu'
-import { useCartChanges, useOrderType } from '../pageContext'
+import { useShoppingCart } from 'use-shopping-cart'
+import { findVariant, formatPrice, imagePath } from '../menu/menu'
+import { useCartChanges } from '../pageContext'
 import { MAX_LINE_QUANTITY } from '../shop'
 import { CheckoutButton } from './CheckoutButton'
+import type { BoardLine, OrderBoard } from './orderBoard'
 import { OrderTypeSwitch } from './OrderTypeSwitch'
+import { useOrderBoardView } from './useOrderBoard'
 
 type CartDrawerProps = {
   /** Gets focus back when the drawer closes (the header's cart button). */
   returnFocusRef: RefObject<HTMLElement | null>
   /** The drawer's close button, which gets focus when it opens. The page holds it so other parts can focus it too. */
   closeButtonRef: RefObject<HTMLButtonElement | null>
+  /** The page's order board (orderBoard.ts): how the lines key in, light up and leave. */
+  board: OrderBoard
 }
 
 // Open/closed is the cart library's `shouldDisplayCart`, so anything can open the
 // drawer the same way: the cart button calls `handleCartClick()`, and a voice
 // tool can call `handleCartHover()` (which only opens).
-export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) {
+//
+// The drawer is the order board (the owner, 2026-11-11): its lines come from
+// the board, so the lines a change adds key in one by one, lit as they land,
+// a changed line lights up, and a line taken out is struck through as it
+// fades. The total counts the lines keyed in so far; for delivery it has the
+// fee in it, as Stripe charges it and the agent says it (summarizeCart).
+export function CartDrawer({ returnFocusRef, closeButtonRef, board }: CartDrawerProps) {
   const open = useShoppingCart((cart) => cart.shouldDisplayCart)
-  const cartDetails = useShoppingCart((cart) => cart.cartDetails)
-  const formattedTotalPrice = useShoppingCart((cart) => cart.formattedTotalPrice)
-  const orderType = useOrderType()
-  // For delivery, the fee and the total with it, as Stripe charges them: the
-  // same figures the agent says, from the same place (summarizeCart).
-  const delivery = summarizeCart(quantitiesOf(cartDetails), orderType).delivery
+  const { lines, latest, total, delivery } = useOrderBoardView(board)
   const close = useShoppingCart((cart) => cart.handleCloseCart)
-  const lines = Object.values(cartDetails)
+  const listRef = useRef<HTMLUListElement>(null)
 
   // Focus moves into the drawer when it opens and back to the cart button when it closes.
   const wasOpen = useRef(false)
@@ -35,6 +39,13 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
     else if (wasOpen.current) returnFocusRef.current?.focus()
     wasOpen.current = open
   }, [open, returnFocusRef, closeButtonRef])
+
+  // The line that just keyed in or changed comes into view, when a long order scrolls.
+  useEffect(() => {
+    if (!open || !latest || latest.kind === 'removed') return
+    const line = [...(listRef.current?.children ?? [])].find((child) => child instanceof HTMLElement && child.dataset.lineId === latest.id)
+    line?.scrollIntoView({ block: 'nearest' })
+  }, [open, latest])
 
   // Escape closes it.
   useEffect(() => {
@@ -70,7 +81,7 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
             <p>Pick something from the menu and press Add.</p>
           </div>
         ) : (
-          <ul className="cart-lines">
+          <ul className="cart-lines" ref={listRef}>
             {lines.map((line) => (
               <CartLine key={line.id} line={line} />
             ))}
@@ -89,7 +100,7 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
               )}
               <p className="drawer-total">
                 <span>Total</span>
-                <span>{delivery ? delivery.totalWithDelivery : formattedTotalPrice}</span>
+                <span>{delivery ? delivery.totalWithDelivery : total}</span>
               </p>
               <CheckoutButton />
             </>
@@ -100,27 +111,32 @@ export function CartDrawer({ returnFocusRef, closeButtonRef }: CartDrawerProps) 
   )
 }
 
-function CartLine({ line }: { line: CartEntry }) {
+function CartLine({ line }: { line: BoardLine }) {
   // Changes go through the page's cart changes, which tell the voice agent.
   const cartChanges = useCartChanges()
-  // The photo comes from the menu, not the cart entry, so cart entries stay plain products.
+  // Name, price and photo come from the menu, as the agent's cart summary's do;
+  // a line on its way out is no longer in the cart.
   const found = findVariant(line.id)
+  const name = found?.product.name ?? line.id
+  const price = found?.variant.price ?? 0
+  const leaving = line.mark === 'leaving'
 
   return (
-    <li className="cart-line">
+    // A line on its way out is only a picture of what was there: screen readers skip it.
+    <li className="cart-line" data-line-id={line.id} data-mark={line.mark} aria-hidden={leaving || undefined}>
       {found ? (
         <img className="cart-line-photo" src={imagePath(found.item)} alt="" width={64} height={64} />
       ) : (
         <span className="cart-line-photo" />
       )}
       <div className="cart-line-info">
-        <p className="cart-line-name">{line.name}</p>
-        <p className="cart-line-price">{line.formattedPrice} each</p>
-        <div className="cart-line-controls">
-          <div className="quantity" role="group" aria-label={`Quantity of ${line.name}`}>
+        <p className="cart-line-name">{name}</p>
+        <p className="cart-line-price">{formatPrice(price)} each</p>
+        {!leaving && <div className="cart-line-controls">
+          <div className="quantity" role="group" aria-label={`Quantity of ${name}`}>
             <button
               type="button"
-              aria-label={`One fewer ${line.name}`}
+              aria-label={`One fewer ${name}`}
               disabled={line.quantity <= 1}
               onClick={() => cartChanges.tap({ type: 'quantity', id: line.id, quantity: line.quantity - 1 })}
             >
@@ -129,7 +145,7 @@ function CartLine({ line }: { line: CartEntry }) {
             <span className="quantity-value">{line.quantity}</span>
             <button
               type="button"
-              aria-label={`One more ${line.name}`}
+              aria-label={`One more ${name}`}
               disabled={line.quantity >= MAX_LINE_QUANTITY}
               onClick={() => cartChanges.tap({ type: 'quantity', id: line.id, quantity: line.quantity + 1 })}
             >
@@ -139,14 +155,14 @@ function CartLine({ line }: { line: CartEntry }) {
           <button
             type="button"
             className="remove-button"
-            aria-label={`Remove ${line.name}`}
+            aria-label={`Remove ${name}`}
             onClick={() => cartChanges.tap({ type: 'remove', id: line.id })}
           >
             Remove
           </button>
-        </div>
+        </div>}
       </div>
-      <p className="cart-line-total">{line.formattedValue}</p>
+      <p className="cart-line-total">{formatPrice(price * line.quantity)}</p>
     </li>
   )
 }

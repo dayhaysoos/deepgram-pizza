@@ -245,3 +245,35 @@ describe('taps and tool calls before React renders', () => {
     expect(summary).toEqual(summarizeCart(holds()))
   })
 })
+
+describe('subscribe', () => {
+  it('hears every change, tapped or asked for, with the cart before and after it, once the store has it', () => {
+    const { cart, render, holds } = setup()
+    const heard: Array<[Record<string, number>, Record<string, number>, Record<string, number>]> = []
+    cart.subscribe((before, after) => heard.push([before, after, holds()]))
+
+    cart.change({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
+    // Before React renders: the cart before counts the change above.
+    cart.tap({ type: 'quantity', id: 'fries', quantity: 3 })
+    render()
+    cart.change({ type: 'remove', id: 'fries' })
+
+    expect(heard).toEqual([
+      [{}, { fries: 1 }, { fries: 1 }],
+      [{ fries: 1 }, { fries: 3 }, { fries: 3 }],
+      [{ fries: 3 }, {}, {}],
+    ])
+  })
+
+  it('hears nothing for Pickup or Delivery, and nothing once unsubscribed', () => {
+    const { cart } = setup()
+    const listener = vi.fn()
+    const unsubscribe = cart.subscribe(listener)
+
+    cart.tapOrderType('delivery')
+    expect(listener).not.toHaveBeenCalled()
+    unsubscribe()
+    cart.change({ type: 'add', lines: [{ id: 'fries', quantity: 1 }] })
+    expect(listener).not.toHaveBeenCalled()
+  })
+})

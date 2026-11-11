@@ -8,9 +8,11 @@ import { categories, menu } from '../menu/menu'
 import { VoiceSession, VoiceSessionProvider } from '../voice/VoiceSession'
 import { CartDrawer } from './CartDrawer'
 import { MenuSection } from './MenuSection'
+import { OrderStrip } from './OrderStrip'
 import { SiteHeader } from './SiteHeader'
 import { SuggestionCard } from './SuggestionCard'
 import { useHighlightScroll } from './useHighlightScroll'
+import { useOrderBoardStore } from './useOrderBoard'
 
 type MenuPageProps = {
   /** Shows the "Checkout cancelled" notice at the top of the menu. */
@@ -25,8 +27,8 @@ type MenuPageProps = {
 }
 
 /**
- * The menu page: the menu, the cart drawer, the suggestion card and the talk
- * button. `/` renders it, and so does the dev-only `/dev/tools`, which adds its
+ * The menu page: the menu, the cart drawer (the order board), the suggestion
+ * card, the order strip on phones and the talk button. `/` renders it, and so does the dev-only `/dev/tools`, which adds its
  * tool panel as a child.
  */
 export function MenuPage(props: MenuPageProps) {
@@ -57,6 +59,8 @@ function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: Me
   const menuRef = useRef<HTMLElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
   useHighlightScroll(pageRef)
+  // The order board: the cart drawer and, on phones, the strip show the order from it.
+  const board = useOrderBoardStore()
 
   function dismissNotice() {
     onDismissNotice?.()
@@ -96,7 +100,9 @@ function MenuLayout({ checkoutCancelled = false, onDismissNotice, children }: Me
       {/* Outside the page, so it stays usable beside an open cart (styles.css says where it sits).
           When it closes, focus goes into the open cart, since the page behind it is inert. */}
       <SuggestionCard returnFocusRef={cartOpen ? cartCloseButtonRef : cartButtonRef} />
-      <CartDrawer returnFocusRef={cartButtonRef} closeButtonRef={cartCloseButtonRef} />
+      {/* On phones, the order above the talk button, while the cart is closed. */}
+      <OrderStrip board={board} />
+      <CartDrawer returnFocusRef={cartButtonRef} closeButtonRef={cartCloseButtonRef} board={board} />
       {/* Outside the page too, so the conversation goes on while the cart is open.
           The session's state lives in VoiceSessionProvider, above. Its sessions
           answer the agent's tool calls with the page's one set of handlers. */}

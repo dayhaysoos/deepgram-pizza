@@ -16,6 +16,7 @@
 import { useState, type ReactNode } from 'react'
 import { redirectToCheckout, useShoppingCart } from 'use-shopping-cart'
 import { startCheckout } from '../checkout/startCheckout'
+import { PHONE_WIDTH } from '../layout'
 import { ToolHandlersContext, useCartChanges, useMenuUi, useOrderTypeStore, useVoiceSession } from '../pageContext'
 import { createToolHandlers } from './handlers'
 
@@ -36,7 +37,10 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
         showSuggestions,
         closeSuggestions,
         isShowingSuggestions,
-        openCart,
+        // On phones the full-screen cart would cover the menu: the order strip shows the change instead.
+        openCart: () => {
+          if (!window.matchMedia(PHONE_WIDTH).matches) openCart()
+        },
         // Doesn't wait itself: the checkout tool answers now, with the amount
         // to pay, so the agent can say it's taking the customer to checkout.
         goToCheckout: (url) => void voiceSession.leaveAfterSpeaking().then(() => redirectToCheckout(url)),
