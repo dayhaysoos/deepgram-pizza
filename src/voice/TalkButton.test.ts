@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { TalkStatus } from './sessionStatus'
-import { TALK_LABELS } from './TalkButton'
+import { TALK_LABELS, talkLabel } from './TalkButton'
+
+describe('talkLabel', () => {
+  it("is the state's label", () => {
+    expect(talkLabel('connecting')).toBe(TALK_LABELS.connecting)
+    expect(talkLabel('listening')).toBe(TALK_LABELS.listening)
+  })
+
+  it('says reconnecting while a dropped connection is tried again, and how to cancel', () => {
+    expect(talkLabel('connecting', true)).toEqual({ label: 'Reconnecting…', hint: 'Press to cancel' })
+  })
+
+  it("keeps the state's label once the agent is back", () => {
+    expect(talkLabel('listening', true)).toBe(TALK_LABELS.listening)
+  })
+})
 
 describe('TALK_LABELS', () => {
   const statuses: TalkStatus[] = ['idle', 'connecting', 'listening', 'thinking', 'speaking', 'error']

@@ -16,22 +16,22 @@ describe('agentSettings', () => {
       provider: { type: 'deepgram', version: 'v2', model: 'flux-general-en', keyterms: menuKeyterms() },
     })
     expect(settings.think).toMatchObject({ provider: { type: 'open_ai', model: 'gpt-4.1-mini' } })
-    expect(settings.speak).toEqual({ provider: { type: 'deepgram', version: 'v2', model: 'flux-cole-en' } })
+    expect(settings.speak).toEqual({ provider: { type: 'deepgram', version: 'v2', model: 'flux-cole-en', speed: 0.9 } })
   })
 
   it('gives the agent its instructions with the cart from the press, and the greeting', () => {
     expect(settings.think).toMatchObject({ prompt: agentInstructions(cart) })
     expect(settings.greeting).toBe(greeting(null))
-    expect(settings.greeting).toBe("Hey, welcome to Nick's Pizza! What can I get started for you?")
+    expect(settings.greeting).toBe("Hi, welcome to Nick's Pizza. What can I get started for you?")
   })
 
   it('greets and instructs from pickup or delivery as it is at the press', () => {
     const none = agentSettings(cart, toolDefinitions, null)
-    expect(none.greeting).toBe("Hey, welcome to Nick's Pizza! Is this for pickup or delivery?")
+    expect(none.greeting).toBe("Hi, welcome to Nick's Pizza. Is this for pickup or delivery?")
     expect(none.think).toMatchObject({ prompt: agentInstructions(cart, toolDefinitions, null) })
 
     const delivery = agentSettings(cart, toolDefinitions, 'delivery')
-    expect(delivery.greeting).toBe("Hey, welcome to Nick's Pizza! Still delivery today?")
+    expect(delivery.greeting).toBe("Hi, welcome to Nick's Pizza. Still delivery today?")
     expect(delivery.greeting).toBe(greeting('delivery', toolDefinitions))
     expect(delivery.think).toMatchObject({ prompt: agentInstructions(cart, toolDefinitions, 'delivery') })
     expect((delivery.think as { prompt: string }).prompt).toContain('Conversation started. Order type: delivery. Cart: ')

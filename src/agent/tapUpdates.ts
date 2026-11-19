@@ -16,6 +16,14 @@ import type { OrderType } from '../shop'
 import { describeCart, describeLine, type CartChange, type CartSummary } from './cartSummary'
 import { describeOrderType } from './orderType'
 
+/**
+ * Said with every pickup-or-delivery choice. The agent's instructions are
+ * written when the customer presses the talk button, and with no choice made
+ * then, they say to ask: in the owner's run on 2026-11-16 the agent asked
+ * "Pickup or delivery?" again a minute after it had recorded delivery.
+ */
+export const ORDER_TYPE_SETTLED = `Don't ask "Pickup or delivery?" again.`
+
 /** The last sentence of every tap update. */
 export const CALL_VIEW_CART = 'Call view_cart before answering about the cart.'
 
@@ -36,12 +44,22 @@ export function describeTapChange(change: CartChange, cartAfter: CartSummary, or
 
 /**
  * Pickup or Delivery tapped in the cart drawer: "Customer chose delivery by
- * tapping. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart
+ * tapping. Don't ask "Pickup or delivery?" again. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart
  * before answering about the cart." Pass the cart summarized for the new
  * choice (summarizeCart(quantities, orderType)), so a delivery cart has the fee.
  */
 export function describeOrderTypeTap(orderType: OrderType, cart: CartSummary): string {
-  return `Customer chose ${orderType} by tapping. ${describeCart(cart)} ${CALL_VIEW_CART}`
+  return `Customer chose ${orderType} by tapping. ${ORDER_TYPE_SETTLED} ${describeCart(cart)} ${CALL_VIEW_CART}`
+}
+
+/**
+ * Pickup or delivery said to the agent (set_order_type): "Customer chose
+ * delivery. Don't ask "Pickup or delivery?" again. Cart: empty. Call view_cart
+ * before answering about the cart." Like a tap's update it says the whole
+ * order, since the SDK sends only the newest after a reconnect.
+ */
+export function describeOrderTypeChoice(orderType: OrderType, cart: CartSummary): string {
+  return `Customer chose ${orderType}. ${ORDER_TYPE_SETTLED} ${describeCart(cart)} ${CALL_VIEW_CART}`
 }
 
 function describeChange(change: CartChange): string {

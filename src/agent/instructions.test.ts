@@ -22,19 +22,19 @@ function lineOf(item: MenuItem): string {
 describe('greeting', () => {
   // The owner's greeting (2026-11-10, .build/step-5b.md): it asks every time.
   it('welcomes the customer to the shop by name and asks pickup or delivery', () => {
-    expect(greeting(null, toolDefinitions)).toBe(`Hey, welcome to ${SHOP_NAME}! Is this for pickup or delivery?`)
-    expect(greeting(null, toolDefinitions)).toBe("Hey, welcome to Nick's Pizza! Is this for pickup or delivery?")
+    expect(greeting(null, toolDefinitions)).toBe(`Hi, welcome to ${SHOP_NAME}. Is this for pickup or delivery?`)
+    expect(greeting(null, toolDefinitions)).toBe("Hi, welcome to Nick's Pizza. Is this for pickup or delivery?")
   })
 
   it('asks to confirm the choice already made, in the cart or an earlier session', () => {
-    expect(greeting('delivery', toolDefinitions)).toBe("Hey, welcome to Nick's Pizza! Still delivery today?")
-    expect(greeting('pickup', toolDefinitions)).toBe("Hey, welcome to Nick's Pizza! Still pickup today?")
+    expect(greeting('delivery', toolDefinitions)).toBe("Hi, welcome to Nick's Pizza. Still delivery today?")
+    expect(greeting('pickup', toolDefinitions)).toBe("Hi, welcome to Nick's Pizza. Still pickup today?")
   })
 
   it("without set_order_type, doesn't ask what it can't record", () => {
     for (const orderType of [null, 'delivery'] as const) {
-      expect(greeting(orderType, allBut('set_order_type'))).toBe(`Hey, welcome to ${SHOP_NAME}! What can I get started for you?`)
-      expect(greeting(orderType)).toBe(`Hey, welcome to ${SHOP_NAME}! What can I get started for you?`)
+      expect(greeting(orderType, allBut('set_order_type'))).toBe(`Hi, welcome to ${SHOP_NAME}. What can I get started for you?`)
+      expect(greeting(orderType)).toBe(`Hi, welcome to ${SHOP_NAME}. What can I get started for you?`)
     }
   })
 })
@@ -94,7 +94,7 @@ const ORDER_TYPE_RULE_CHECKOUT = ', or if they were checking out, call checkout 
 // In the voice check, "Add a large cheese pizza" before choosing got no tool
 // call, and "I'll get that large cheese pizza added for you right after."
 const ORDER_TYPE_RULE_ADD_FIRST =
-  ' If they order something before saying which, add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply; never hold an item until they answer, or promise to add it later, and don\'t call set_order_type until they say which.'
+  ' If they order something before saying which, add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply; never hold an item until they answer, or promise to add it later, and don\'t call set_order_type until they say which. Once they have said which, by voice or by tapping, never ask again.'
 const ORDER_TYPE_RULE_ASK_FIRST = ' If they start ordering without saying, ask "Pickup or delivery?" once, in the same reply.'
 const ORDER_TYPE_RULE_END =
   ' For delivery, never take an address by voice: if one comes up, say "You\'ll enter the delivery address at checkout." If asked about fees, delivery adds a flat three ninety-nine at checkout.'
@@ -131,7 +131,7 @@ const PLAN_BUDGET =
   "If they give a budget, before the plan or after it, call plan_group_order with it, then say in a few words what it took to fit, from the result's budget, and the total."
 const PLAN_CHANGES =
   'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.'
-const PLAN_ADD = 'Add it with add_items only after they agree, then name every line it added, one by one, as after any change.'
+const PLAN_ADD = 'Add it with add_items only after you have said the plan and they clearly ask ("add all of that", "yes, add it"); a stray word or half a sentence ("some.") is not a yes, so ask "Want me to add all of that?" instead. Then name every line it added, one by one, as after any change.'
 const PLAN_ADD_BY_TAPPING = 'Tell them they can add it by tapping Add all to cart on the card.'
 const GROUP_RULE = [GROUP_QUESTION, PLAN_SUMMARY, PLAN_BUDGET, PLAN_CHANGES, PLAN_ADD].join(' ')
 const OFFER_RULE =
@@ -340,7 +340,7 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(CONFIRM_RULE).toContain('a whole group plan included, even if it takes more than two sentences; never sum them up.')
     // The group rule says when the summary applies, and sends the add back to the confirmation.
     expect(PLAN_SUMMARY.startsWith('To present the plan, before anything is added, sum it up')).toBe(true)
-    expect(GROUP_RULE.endsWith('Add it with add_items only after they agree, then name every line it added, one by one, as after any change.')).toBe(true)
+    expect(GROUP_RULE.endsWith('Add it with add_items only after you have said the plan and they clearly ask ("add all of that", "yes, add it"); a stray word or half a sentence ("some.") is not a yes, so ask "Want me to add all of that?" instead. Then name every line it added, one by one, as after any change.')).toBe(true)
     // Nothing anywhere says not to read every line, except while presenting the plan.
     const notListing = fullPrompt.split(/(?<=\.)\s+/).filter((sentence) => /don't list|never read out|not.*every line/i.test(sentence))
     expect(notListing).toEqual([expect.stringMatching(/^To present the plan, before anything is added,/)])
@@ -508,7 +508,7 @@ Conversation started. Order type: not chosen yet. Cart: empty.`)
     expect(ORDER_TYPE_RULE).toContain('add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply')
     expect(ORDER_TYPE_RULE).toContain('never hold an item until they answer, or promise to add it later')
     // In a text run it also recorded "pickup" on its own, before the customer said.
-    expect(ORDER_TYPE_RULE).toContain("don't call set_order_type until they say which.")
+    expect(ORDER_TYPE_RULE).toContain("don't call set_order_type until they say which. Once they have said which, by voice or by tapping, never ask again.")
     // The fee, from the shop settings, said the way the totals are.
     expect(spokenPrice(DELIVERY_FEE)).toBe('three ninety-nine')
     expect(ORDER_TYPE_RULE).toContain(`delivery adds a flat ${spokenPrice(DELIVERY_FEE)} at checkout.`)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { summarizeCart, type CartChange } from './cartSummary'
-import { CALL_VIEW_CART, describeOrderTypeTap, describeTapChange } from './tapUpdates'
+import { CALL_VIEW_CART, describeOrderTypeChoice, describeOrderTypeTap, describeTapChange } from './tapUpdates'
 
 const cartAfter = summarizeCart({ 'margherita-pizza-large': 2, fries: 1 })
 // The cart changes summarize a delivery order's cart with the fee (cartChanges.ts), so its update gives the total with it too.
@@ -98,13 +98,24 @@ describe('describeTapChange', () => {
 describe('describeOrderTypeTap', () => {
   it('describes Pickup or Delivery tapped in the cart, with the cart', () => {
     expect(describeOrderTypeTap('delivery', deliveryCartAfter)).toBe(
-      'Customer chose delivery by tapping. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97, $50.96 with delivery. Call view_cart before answering about the cart.',
+      `Customer chose delivery by tapping. Don't ask "Pickup or delivery?" again. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97, $50.96 with delivery. Call view_cart before answering about the cart.`,
     )
     expect(describeOrderTypeTap('pickup', cartAfter)).toBe(
-      'Customer chose pickup by tapping. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97. Call view_cart before answering about the cart.',
+      `Customer chose pickup by tapping. Don't ask "Pickup or delivery?" again. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97. Call view_cart before answering about the cart.`,
     )
     expect(describeOrderTypeTap('pickup', summarizeCart({}))).toBe(
-      'Customer chose pickup by tapping. Cart: empty. Call view_cart before answering about the cart.',
+      `Customer chose pickup by tapping. Don't ask "Pickup or delivery?" again. Cart: empty. Call view_cart before answering about the cart.`,
+    )
+  })
+})
+
+describe('describeOrderTypeChoice', () => {
+  it('says pickup or delivery was said to the agent and is settled, with the cart', () => {
+    expect(describeOrderTypeChoice('delivery', summarizeCart({}))).toBe(
+      `Customer chose delivery. Don't ask "Pickup or delivery?" again. Cart: empty. Call view_cart before answering about the cart.`,
+    )
+    expect(describeOrderTypeChoice('delivery', deliveryCartAfter)).toBe(
+      `Customer chose delivery. Don't ask "Pickup or delivery?" again. Cart: 2 × Large Margherita Pizza, 1 × Fries. Total $46.97, $50.96 with delivery. Call view_cart before answering about the cart.`,
     )
   })
 })

@@ -39,7 +39,7 @@ import {
  * the answer, it doesn't ask.
  */
 export function greeting(orderType: OrderType | null, tools: readonly ToolDefinition[] = []): string {
-  const welcome = `Hey, welcome to ${SHOP_NAME}!`
+  const welcome = `Hi, welcome to ${SHOP_NAME}.`
   if (!tools.some((tool) => tool.name === 'set_order_type')) return `${welcome} What can I get started for you?`
   return orderType ? `${welcome} Still ${orderType} today?` : `${welcome} Is this for pickup or delivery?`
 }
@@ -141,7 +141,7 @@ function orderTypeRule(has: HasTool, changesCart: boolean): string {
     '- Every order is pickup or delivery. When the customer says which, call set_order_type, then say one short line like "Great, delivery it is. What can I get you?"' +
       (has('checkout') ? ', or if they were checking out, call checkout next.' : '.'),
     changesCart
-      ? `If they order something before saying which, add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply; never hold an item until they answer, or promise to add it later, and don't call set_order_type until they say which.`
+      ? `If they order something before saying which, add it with its tool right away and confirm it as usual, then ask "Pickup or delivery?" once, in the same reply; never hold an item until they answer, or promise to add it later, and don't call set_order_type until they say which. Once they have said which, by voice or by tapping, never ask again.`
       : 'If they start ordering without saying, ask "Pickup or delivery?" once, in the same reply.',
     `For delivery, never take an address by voice: if one comes up, say "You'll enter the delivery address at checkout."`,
     `If asked about fees, delivery adds a flat ${spokenPrice(DELIVERY_FEE)} at checkout.`,
@@ -216,7 +216,7 @@ function groupRule(has: HasTool): string {
     has('show_suggestions') &&
       'The plan is already on screen, so call show_suggestions only when the customer asks to change it ("swap a pepperoni for a margherita"), with the changed lines.',
     has('add_items')
-      ? 'Add it with add_items only after they agree, then name every line it added, one by one, as after any change.'
+      ? 'Add it with add_items only after you have said the plan and they clearly ask ("add all of that", "yes, add it"); a stray word or half a sentence ("some.") is not a yes, so ask "Want me to add all of that?" instead. Then name every line it added, one by one, as after any change.'
       : 'Tell them they can add it by tapping Add all to cart on the card.',
   ]).join(' ')
 }

@@ -174,7 +174,7 @@ describe('tapOrderType', () => {
 
     expect(orderType.get()).toBe('delivery')
     // For delivery, the cart line gives the total with the fee as well.
-    const told = 'Customer chose delivery by tapping. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart before answering about the cart.'
+    const told = `Customer chose delivery by tapping. Don't ask "Pickup or delivery?" again. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart before answering about the cart.`
     expect(tellAgent).toHaveBeenCalledExactlyOnceWith(told)
     expect(onTapUpdate).toHaveBeenCalledExactlyOnceWith(told)
   })
@@ -186,7 +186,7 @@ describe('tapOrderType', () => {
     cart.tapOrderType('pickup')
 
     expect(tellAgent).toHaveBeenCalledExactlyOnceWith(
-      'Customer chose pickup by tapping. Cart: 2 × Fries. Total $9.98. Call view_cart before answering about the cart.',
+      `Customer chose pickup by tapping. Don't ask "Pickup or delivery?" again. Cart: 2 × Fries. Total $9.98. Call view_cart before answering about the cart.`,
     )
   })
 
@@ -217,6 +217,22 @@ describe('tapOrderType', () => {
     expect(tellAgent).toHaveBeenLastCalledWith(
       'Customer added 1 × Fries by tapping. Order type: delivery. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart before answering about the cart.',
     )
+  })
+})
+
+describe('chooseOrderType', () => {
+  it('records pickup or delivery said to the agent and tells the agent it is settled, with the cart', () => {
+    const { cart, given, orderType, tellAgent, onTapUpdate } = setup()
+    given({ fries: 1 })
+
+    cart.chooseOrderType('delivery')
+
+    expect(orderType.get()).toBe('delivery')
+    expect(tellAgent).toHaveBeenCalledExactlyOnceWith(
+      `Customer chose delivery. Don't ask "Pickup or delivery?" again. Cart: 1 × Fries. Total $4.99, $8.98 with delivery. Call view_cart before answering about the cart.`,
+    )
+    // Not a tap, so the tap observer hears nothing.
+    expect(onTapUpdate).not.toHaveBeenCalled()
   })
 })
 

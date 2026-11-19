@@ -258,6 +258,7 @@ const END_REASONS: Record<SessionEnd, string> = {
   idle: `no speech for ${IDLE_TIMEOUT_MS / 1000} s`,
   leaveRequested: 'left once the agent finished speaking',
   leaveTimedOut: `left after waiting ${LEAVE_CAP_MS / 1000} s for the agent to finish speaking`,
+  connectTimedOut: `still connecting after ${IDLE_TIMEOUT_MS / 1000} s`,
   tokenFailed: 'the token server function failed',
   sdkError: 'microphone or connection error',
   agentError: 'Deepgram sent an Error',

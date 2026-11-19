@@ -13,12 +13,20 @@
 // - the token server function's own message, shown as it is
 // - a blocked or missing microphone
 // - an Error message from Deepgram
-// - any other SDK error before the agent has its settings: retrying a refused
-//   token or a broken connection would only repeat it. After, the SDK
-//   reconnects a dropped connection by itself.
-// - a disconnect once the session has started, which means the SDK gave up
-//   reconnecting. Before that, a disconnect is AgentProvider hanging up after a
-//   failed start, and the error it reports next says why.
+// - any other SDK error before the session has started (the agent has its
+//   settings and the microphone is on): retrying a refused token or a broken
+//   connection would only repeat it, and after a microphone that failed to
+//   start, AgentProvider has hung up. After, the SDK reconnects a dropped
+//   connection by itself: the status is connecting again, marked
+//   `reconnecting`, so the button says "Reconnecting…".
+// - a disconnect once the session has started, or while reconnecting, which
+//   means the SDK gave up (eight tries: a minute and a half, more when tries
+//   hang). Otherwise a disconnect is AgentProvider hanging up after a failed
+//   start, and the error it reports next says why.
+// - a minute gone by while still connecting, or within one try at
+//   reconnecting (a token request that never answers sends no events, and
+//   each try starts the idle timer again): the idle timer's minute then ends
+//   the session with a message instead of quietly.
 //
 // Page code can also ask a session to leave once the agent has spoken
 // (sessionHandle.ts, for checkout by voice: SPEC.md, "Checkout"). The request
@@ -66,6 +74,13 @@ export type LiveSession = {
    * connection drops.
    */
   toolCalls?: string[]
+  /**
+   * The connection dropped and the SDK is trying again: `status` is
+   * connecting, and the button says "Reconnecting…". It lasts until the agent
+   * is back. If the SDK gives up, or one try goes a minute without an answer,
+   * the session ends with CONNECTION_LOST.
+   */
+  reconnecting?: true
   /** Page code asked the session to leave: it ends the next time the agent's voice stops. */
   leaving?: true
 }
@@ -73,7 +88,8 @@ export type LiveSession = {
 /**
  * What ended a session: the type of the event that ended it. A session asked
  * to leave ends with `leaveRequested` once the agent's voice stops, or
- * `leaveTimedOut` when the handle stops waiting.
+ * `leaveTimedOut` when the handle stops waiting. `connectTimedOut` is the idle
+ * timer's minute going by while the session was still connecting.
  */
 export type SessionEnd =
   | 'pressed'
@@ -81,6 +97,7 @@ export type SessionEnd =
   | 'idle'
   | 'leaveRequested'
   | 'leaveTimedOut'
+  | 'connectTimedOut'
   | 'tokenFailed'
   | 'sdkError'
   | 'agentError'
@@ -173,7 +190,11 @@ function nextState(state: SessionState, event: SessionEvent): SessionState {
       const status = liveStatus(event.state, event.mode)
       // The agent speaking means its tool calls were answered; a reconnect drops them.
       const toolCallsOver = status === 'speaking' || status === 'connecting'
-      return withStatus(toolCallsOver ? withoutToolCalls(state) : state, status)
+      // The SDK says `reconnecting` while it waits to try again and
+      // `connecting` while it tries, so a reconnect lasts until the status
+      // is something else.
+      const reconnecting = status === 'connecting' && (event.state === 'reconnecting' || state.reconnecting === true)
+      return withReconnecting(withStatus(toolCallsOver ? withoutToolCalls(state) : state, status), reconnecting)
     }
     // The SDK's mode shows thinking only on Deepgram's AgentThinking, which
     // its docs still list but no session of ours has received, so the mode
@@ -197,6 +218,12 @@ function nextState(state: SessionState, event: SessionEvent): SessionState {
     case 'microphoneOn':
       return state.microphoneOn ? state : { ...state, microphoneOn: true }
     case 'idle':
+      // The timer counts silence. A session still connecting after a minute
+      // never reached the agent, or never got back to it: say which.
+      if (state.status === 'connecting') {
+        return failed(state, 'connectTimedOut', state.reconnecting ? CONNECTION_LOST : VOICE_UNAVAILABLE)
+      }
+      return { status: 'idle', sessionNumber: state.sessionNumber, endedBy: event.type }
     case 'pageHidden':
       return { status: 'idle', sessionNumber: state.sessionNumber, endedBy: event.type }
     case 'leaveRequested':
@@ -209,15 +236,25 @@ function nextState(state: SessionState, event: SessionEvent): SessionState {
       return failed(state, event.type, VOICE_UNAVAILABLE)
     case 'sdkError': {
       const message = microphoneMessage(event.error)
-      // Once the agent has its settings, the SDK reconnects by itself, but a microphone won't fix itself.
-      if (!message && state.settingsApplied) return state
+      // Once the session has started, the SDK reconnects by itself, but a microphone won't fix itself.
+      if (!message && hasStarted(state)) return state
       return failed(state, event.type, message ?? VOICE_UNAVAILABLE, summarize(event.error))
     }
     case 'disconnected':
-      // The microphone starts after the connection opens, often while the
-      // browser is still asking for it, after the settings have arrived.
-      return state.settingsApplied && state.microphoneOn ? failed(state, event.type, CONNECTION_LOST) : state
+      // The SDK gave up reconnecting. Otherwise, before the session has
+      // started, it's AgentProvider hanging up, and the error that follows
+      // says why.
+      return hasStarted(state) || state.reconnecting ? failed(state, event.type, CONNECTION_LOST) : state
   }
+}
+
+/**
+ * Whether the customer can talk: the agent has its settings and the
+ * microphone is on. The microphone starts after the connection opens, often
+ * while the browser is still asking for it, after the settings have arrived.
+ */
+function hasStarted(state: LiveSession): boolean {
+  return state.settingsApplied && state.microphoneOn
 }
 
 /** `state` with `status`, or `state` itself when the status is already that. */
@@ -228,6 +265,12 @@ function withStatus(state: LiveSession, status: LiveStatus): LiveSession {
 /** `state` without tool calls, or `state` itself when it has none. */
 function withoutToolCalls(state: LiveSession): LiveSession {
   return state.toolCalls ? { ...state, toolCalls: undefined } : state
+}
+
+/** `state` reconnecting or not, or `state` itself when it already says so. */
+function withReconnecting(state: LiveSession, reconnecting: boolean): LiveSession {
+  if ((state.reconnecting === true) === reconnecting) return state
+  return { ...state, reconnecting: reconnecting || undefined }
 }
 
 function failed(state: LiveSession, endedBy: SessionEnd, message: string, sdkError?: ErrorSummary): SessionState {

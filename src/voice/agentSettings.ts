@@ -24,7 +24,8 @@
 // Audio formats are left to the SDK and Deepgram's defaults: the browser SDK
 // sends 16 kHz linear16 and plays back the 24 kHz linear16 Flux TTS sends.
 //
-// To change the voice, pick another `flux-…-en` voice from the catalog above.
+// To change the voice, pick another `flux-…-en` voice from the catalog above;
+// to change its pace, SPEAK_SPEED below.
 
 import type { AgentSettingsObject } from '@deepgram/react'
 import type { CartSummary } from '../agent/cartSummary'
@@ -32,6 +33,14 @@ import { agentInstructions, greeting } from '../agent/instructions'
 import type { ToolDefinition } from '../agent/tools'
 import { menu, spokenName } from '../menu/menu'
 import type { OrderType } from '../shop'
+
+/**
+ * How fast the agent speaks: 1 is the voice's own pace, and Flux TTS takes 0.5
+ * to 1.5 in steps of 0.05. The owner found Cole at 1 ran the greeting's words
+ * together (2026-11-16), so it's a little slower.
+ * https://developers.deepgram.com/docs/voice-agent-tts-controls
+ */
+export const SPEAK_SPEED = 0.9
 
 /** Deepgram's limit on `think.prompt` for managed LLMs, in characters. */
 export const MANAGED_PROMPT_LIMIT = 25_000
@@ -61,7 +70,7 @@ export function agentSettings(
       ...(tools.length > 0 ? { functions: [...tools] } : {}),
     },
     speak: {
-      provider: { type: 'deepgram', version: 'v2', model: 'flux-cole-en' },
+      provider: { type: 'deepgram', version: 'v2', model: 'flux-cole-en', speed: SPEAK_SPEED },
     },
     greeting: greeting(orderType, tools),
   }

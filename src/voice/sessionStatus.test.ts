@@ -89,6 +89,70 @@ describe('updateSession', () => {
     })
   })
 
+  // A dropped connection: the SDK says `reconnecting` while it waits to try
+  // again and `connecting` while it tries, so the session remembers that this
+  // connecting is a reconnect, and the button can say so.
+  describe('reconnecting after a dropped connection', () => {
+    const waiting: LiveEvent = { type: 'agentChanged', state: 'reconnecting', mode: 'listening' }
+    const trying: LiveEvent = { type: 'agentChanged', state: 'connecting', mode: 'listening' }
+
+    it("doesn't call a first connect a reconnect", () => {
+      expect(live()).not.toHaveProperty('reconnecting')
+      expect(live({ type: 'agentChanged', state: 'connecting', mode: 'idle' })).not.toHaveProperty('reconnecting')
+      expect(live({ type: 'agentChanged', state: 'connected', mode: 'idle' })).not.toHaveProperty('reconnecting')
+    })
+
+    it('is reconnecting from the drop, through every try', () => {
+      expect(live(...started, waiting)).toMatchObject({ status: 'connecting', reconnecting: true })
+      expect(live(...started, waiting, trying)).toMatchObject({ status: 'connecting', reconnecting: true })
+      expect(live(...started, waiting, trying, waiting, trying)).toMatchObject({
+        status: 'connecting',
+        reconnecting: true,
+      })
+    })
+
+    it('is over once the agent is back', () => {
+      const back = live(...started, waiting, trying, listening)
+      expect(back.status).toBe('listening')
+      expect(back).not.toMatchObject({ reconnecting: true })
+    })
+
+    it('changes nothing when the SDK repeats itself', () => {
+      const reconnecting = live(...started, waiting)
+      expect(updateSession(reconnecting, fromSession1(waiting))).toBe(reconnecting)
+    })
+
+    it('ends with the connection lost when the SDK gives up', () => {
+      expect(live(...started, waiting, trying, waiting, disconnected)).toEqual({
+        status: 'error',
+        sessionNumber: 1,
+        message: CONNECTION_LOST,
+        endedBy: 'disconnected',
+      })
+    })
+
+    // A drop while the browser is still asking for the microphone, or before
+    // the settings: the SDK gave up all the same, and no error follows.
+    it('ends with the connection lost when the SDK gives up before the session has started', () => {
+      expect(live(settingsApplied, listening, waiting, trying, disconnected)).toMatchObject({
+        status: 'error',
+        message: CONNECTION_LOST,
+        endedBy: 'disconnected',
+      })
+      expect(live(waiting, trying, disconnected)).toMatchObject({ status: 'error', message: CONNECTION_LOST })
+    })
+
+    // A try that hangs (its token request never answers) sends no events.
+    it('says the connection was lost when a minute goes by mid-reconnect', () => {
+      expect(live(...started, waiting, trying, { type: 'idle' })).toEqual({
+        status: 'error',
+        sessionNumber: 1,
+        message: CONNECTION_LOST,
+        endedBy: 'connectTimedOut',
+      })
+    })
+  })
+
   // The SDK's mode shows thinking only on Deepgram's AgentThinking, which no
   // session of ours has received, so it goes straight from listening to
   // speaking. The customer's line, which arrives at the end of their turn,
@@ -271,6 +335,17 @@ describe('updateSession', () => {
       expect(live(...started, { type: 'idle' })).toEqual({ status: 'idle', sessionNumber: 1, endedBy: 'idle' })
     })
 
+    // The timer counts silence, but a session still connecting after a minute
+    // never got as far as a conversation: it says so instead of ending quietly.
+    it('says voice is unavailable when a minute goes by still connecting', () => {
+      expect(live({ type: 'idle' })).toEqual({
+        status: 'error',
+        sessionNumber: 1,
+        message: VOICE_UNAVAILABLE,
+        endedBy: 'connectTimedOut',
+      })
+    })
+
     it("shows the token server function's message as it is", () => {
       expect(live({ type: 'tokenFailed', message: VOICE_NOT_SET_UP })).toEqual({
         status: 'error',
@@ -322,9 +397,22 @@ describe('updateSession', () => {
       })
     })
 
-    it('lets the SDK reconnect after other SDK errors once the agent has its settings', () => {
-      const on = live(settingsApplied, listening)
+    it('lets the SDK reconnect after other SDK errors once the session has started', () => {
+      const on = live(...started)
       expect(updateSession(on, fromSession1(openTimeout))).toBe(on)
+    })
+
+    // The settings usually arrive while the browser is still asking for the
+    // microphone. If it then fails in a way with no message of its own,
+    // AgentProvider has already hung up, and nothing will reconnect.
+    it('ends on any SDK error until the microphone is on, even with the settings applied', () => {
+      const aborted: LiveEvent = { type: 'sdkError', error: new DOMException('Aborted', 'AbortError') }
+      expect(live(settingsApplied, listening, disconnected, aborted)).toMatchObject({
+        status: 'error',
+        message: VOICE_UNAVAILABLE,
+        endedBy: 'sdkError',
+        sdkError: { name: 'AbortError', message: 'Aborted' },
+      })
     })
 
     it('still ends on a microphone error once the session has started', () => {

@@ -11,8 +11,18 @@ export const TALK_LABELS: Record<TalkStatus, { label: string; hint?: string }> =
   error: { label: 'Try again' },
 }
 
+/** Connecting again after the connection dropped mid-session. */
+const RECONNECTING = { label: 'Reconnecting…', hint: 'Press to cancel' }
+
+/** What the button says: the state's label, or "Reconnecting…" while a dropped connection is tried again. */
+export function talkLabel(status: TalkStatus, reconnecting = false): { label: string; hint?: string } {
+  return status === 'connecting' && reconnecting ? RECONNECTING : TALK_LABELS[status]
+}
+
 type TalkButtonProps = {
   status: TalkStatus
+  /** The session is connecting again after a dropped connection. */
+  reconnecting?: boolean
   /** Why the last session failed, shown above the button until the next press. */
   message?: string
   onPress: () => void
@@ -25,9 +35,9 @@ type TalkButtonProps = {
  * `aria-pressed`: its label already says the state and what a press does. It
  * needs no Deepgram provider, so it renders the same with or without a session.
  */
-export function TalkButton({ status, message, onPress }: TalkButtonProps) {
+export function TalkButton({ status, reconnecting, message, onPress }: TalkButtonProps) {
   const messageId = useId()
-  const { label, hint } = TALK_LABELS[status]
+  const { label, hint } = talkLabel(status, reconnecting)
 
   return (
     <>

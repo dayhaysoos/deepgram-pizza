@@ -37,7 +37,7 @@ import {
   type Quantities,
 } from './cartSummary'
 import type { OrderTypeStore } from './orderType'
-import { describeOrderTypeTap, describeTapChange } from './tapUpdates'
+import { describeOrderTypeChoice, describeOrderTypeTap, describeTapChange } from './tapUpdates'
 
 /** use-shopping-cart: the cart as of the last render, and the actions that change it. */
 export type CartStore = {
@@ -82,6 +82,13 @@ export type CartChanges = {
    * "Customer chose delivery by tapping. Cart: …". Nothing, if it's the choice already made.
    */
   tapOrderType(type: OrderType): void
+  /**
+   * Records pickup or delivery the customer said to the agent (the
+   * set_order_type tool), and tells the agent it's settled: "Customer chose
+   * delivery. Don't ask "Pickup or delivery?" again. Cart: …". Its
+   * instructions were written at the press, before the choice.
+   */
+  chooseOrderType(type: OrderType): void
   /**
    * Calls `listener` after every change, tapped or asked for, with the cart
    * before it and after it, once the use-shopping-cart actions have run, and
@@ -139,6 +146,10 @@ export function createCartChanges({ store, orderType, tellAgent, onTapUpdate }: 
       orderType.set(type)
       // Summarized for the new choice, so a delivery update gives the total with the fee too.
       tellAboutTap(describeOrderTypeTap(type, summarizeCart(cartAt(store.cartDetails()), type)))
+    },
+    chooseOrderType(type) {
+      orderType.set(type)
+      tellAgent(describeOrderTypeChoice(type, summarizeCart(cartAt(store.cartDetails()), type)))
     },
     subscribe(listener) {
       listeners.add(listener)

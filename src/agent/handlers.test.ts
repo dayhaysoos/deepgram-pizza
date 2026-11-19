@@ -14,6 +14,7 @@ import {
 } from './handlers'
 import { createOrderTypeStore } from './orderType'
 import { planGroupOrder } from './planGroupOrder'
+import { ORDER_TYPE_SETTLED } from './tapUpdates'
 import { renderedStore } from './testing'
 import { checkoutLine, type ToolName } from './tools'
 
@@ -1254,9 +1255,9 @@ describe('set_order_type', () => {
   it('records pickup or delivery and returns it, without touching the cart', async () => {
     const { call, orderType, noCartChanges } = setup()
 
-    expect(await call('set_order_type', { type: 'delivery' })).toEqual({ orderType: 'delivery' })
+    expect(await call('set_order_type', { type: 'delivery' })).toEqual({ orderType: 'delivery', note: ORDER_TYPE_SETTLED })
     expect(orderType.get()).toBe('delivery')
-    expect(await call('set_order_type', { type: 'pickup' })).toEqual({ orderType: 'pickup' })
+    expect(await call('set_order_type', { type: 'pickup' })).toEqual({ orderType: 'pickup', note: ORDER_TYPE_SETTLED })
     expect(orderType.get()).toBe('pickup')
     noCartChanges()
   })
@@ -1264,7 +1265,7 @@ describe('set_order_type', () => {
   it('takes the JSON string Deepgram sends', async () => {
     const { handlers, orderType } = setup()
 
-    expect(await handlers.set_order_type('{"type":"pickup"}')).toEqual({ orderType: 'pickup' })
+    expect(await handlers.set_order_type('{"type":"pickup"}')).toEqual({ orderType: 'pickup', note: ORDER_TYPE_SETTLED })
     expect(orderType.get()).toBe('pickup')
   })
 
@@ -1285,10 +1286,12 @@ describe('set_order_type', () => {
 
     expect(await call('set_order_type', { type: 'delivery' })).toEqual({
       orderType: 'delivery',
+      note: ORDER_TYPE_SETTLED,
       cart: 'Cart: 1 × Large Pepperoni Pizza. Total $20.99, $24.98 with delivery.',
     })
     expect(await call('set_order_type', { type: 'pickup' })).toEqual({
       orderType: 'pickup',
+      note: ORDER_TYPE_SETTLED,
       cart: 'Cart: 1 × Large Pepperoni Pizza. Total $20.99.',
     })
   })
@@ -1307,7 +1310,7 @@ describe('the golden path', () => {
   it('runs as tool calls', async () => {
     const { call, ui } = setup()
 
-    expect(await call('set_order_type', { type: 'delivery' })).toEqual({ orderType: 'delivery' })
+    expect(await call('set_order_type', { type: 'delivery' })).toEqual({ orderType: 'delivery', note: ORDER_TYPE_SETTLED })
 
     const vegetarian = await call('find_menu_items', { tags: ['vegetarian'] })
     expect(vegetarian).toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: 'margherita-pizza' })]) })

@@ -429,6 +429,17 @@ describe('recordSessionEnd', () => {
     )
   })
 
+  it('says a session timed out connecting, with the message the button shows', () => {
+    const log = createSessionLog()
+    log.startSession()
+    recordSessionEnd({ status: 'error', sessionNumber: 1, endedBy: 'connectTimedOut', message: CONNECTION_LOST }, log)
+
+    expect(log.entries().at(-1)).toMatchObject({
+      type: 'SessionEnded',
+      payload: { endedBy: 'connectTimedOut', reason: 'still connecting after 60 s', message: CONNECTION_LOST },
+    })
+  })
+
   it('has words for every end', () => {
     const log = createSessionLog()
     const all: SessionEnd[] = [
@@ -437,6 +448,7 @@ describe('recordSessionEnd', () => {
       'idle',
       'leaveRequested',
       'leaveTimedOut',
+      'connectTimedOut',
       'tokenFailed',
       'sdkError',
       'agentError',

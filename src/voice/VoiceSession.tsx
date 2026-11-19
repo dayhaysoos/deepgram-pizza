@@ -133,6 +133,7 @@ export function VoiceSession() {
       {/* After the session, so it keeps its place (and its focus) as sessions come and go. */}
       <TalkButton
         status={state.status}
+        reconnecting={sessionOn && state.reconnecting}
         message={state.status === 'error' ? state.message : undefined}
         onPress={() => send({ type: 'pressed' })}
       />

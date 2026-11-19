@@ -47,7 +47,9 @@ export function ToolHandlersProvider({ children }: { children: ReactNode }) {
         // to pay, so the agent can say it's taking the customer to checkout.
         goToCheckout: (url) => void voiceSession.leaveAfterSpeaking().then(() => redirectToCheckout(url)),
       },
-      orderType,
+      // A choice said to the agent goes through the cart changes, which tell
+      // the agent it's settled: its instructions were written before it.
+      orderType: { get: orderType.get, set: cartChanges.chooseOrderType },
       checkout: (cartDetails, type) => startCheckout(cartDetails, type),
     }),
   )

@@ -38,6 +38,7 @@ import {
 import { closeMatches, searchMenu, type MenuFilters } from './menuSearch'
 import type { OrderTypeStore } from './orderType'
 import { planGroupOrder } from './planGroupOrder'
+import { ORDER_TYPE_SETTLED } from './tapUpdates'
 import { orList, type Recovery } from './text'
 import { MAX_LINES_PER_CALL, type ToolName } from './tools'
 
@@ -152,12 +153,13 @@ export const PLAN_ON_SCREEN = "The card on screen shows this plan now, so don't 
 export const FOUND_ON_SCREEN = "They're lit up on screen now: name two or three of them, and don't call show_suggestions for them."
 
 /**
- * What set_order_type returns once it has recorded the choice, and, when the
+ * What set_order_type returns once it has recorded the choice: a note that
+ * it's settled (ORDER_TYPE_SETTLED, tapUpdates.ts), and, when the
  * cart isn't empty, the cart line as it stands now: the session may have
  * started with a cart and no choice, so the line in its instructions had no
  * delivery fee.
  */
-export type OrderTypeSet = { orderType: OrderType; cart?: string }
+export type OrderTypeSet = { orderType: OrderType; note: string; cart?: string }
 
 /**
  * What checkout returns once it's on the way to Stripe: what the customer
@@ -353,8 +355,8 @@ export function createToolHandlers({ cart, ui, orderType, checkout }: ToolPorts)
       if (!isOrderType(type)) return { message: BAD_ORDER_TYPE }
       orderType.set(type)
       const inCart = cart.now()
-      if (Object.keys(inCart).length === 0) return { orderType: type }
-      return { orderType: type, cart: describeCart(summarizeCart(inCart, type)) }
+      if (Object.keys(inCart).length === 0) return { orderType: type, note: ORDER_TYPE_SETTLED }
+      return { orderType: type, note: ORDER_TYPE_SETTLED, cart: describeCart(summarizeCart(inCart, type)) }
     }),
 
     checkout: recovering(async () => {
