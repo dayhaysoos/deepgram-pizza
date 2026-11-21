@@ -2,6 +2,8 @@ allowBuilds:
   esbuild: true
   workerd: true
 
-# pnpm 12 waits 24 hours before installing a newly published version. Turned off
-# here so new use-shopping-cart release candidates install as soon as they ship.
-minimumReleaseAge: 0
+# pnpm 12 waits 24 hours before installing a newly published version, so a bad
+# release has time to be caught. use-shopping-cart is let through, so its new
+# release candidates install as soon as they ship.
+minimumReleaseAgeExclude:
+  - use-shopping-cart

@@ -13,5 +13,14 @@
   // warns in dev when one is missing, and makes deploy fail until both are set.
   "secrets": {
     "required": ["DEEPGRAM_API_KEY", "STRIPE_SECRET_KEY"]
-  }
+  },
+  // How often one visitor (one IP address) can call each server function, in
+  // requests per `period` seconds (10 or 60): see src/rateLimit.ts. A voice
+  // session asks for a token when it starts and on each of up to eight
+  // reconnect tries. `namespace_id` is any whole number, as a string, that no
+  // other limiter in your Cloudflare account uses; there's nothing to create.
+  "ratelimits": [
+    { "name": "TOKEN_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "CHECKOUT_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } }
+  ]
 }

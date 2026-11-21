@@ -3,15 +3,19 @@
 // the API key stays on the server.
 
 import { createServerFn } from '@tanstack/react-start'
+import { getRequest } from '@tanstack/react-start/server'
 import { env } from 'cloudflare:workers'
-import { grantDeepgramToken } from './deepgramToken'
+import { TOO_MANY_REQUESTS, underLimit } from '../rateLimit'
+import { grantDeepgramToken, type DeepgramTokenResult } from './deepgramToken'
 
 /**
  * Mints a short-lived Deepgram token for the Voice Agent socket. Returns
  * `{ token }`, or `{ message }` to show instead. POST, so it's never cached.
  *
  * The browser calls it before every connect: `await getDeepgramToken()`.
+ * A visitor who asks too often gets a message instead (src/rateLimit.ts).
  */
-export const getDeepgramToken = createServerFn({ method: 'POST' }).handler(() =>
-  grantDeepgramToken(env.DEEPGRAM_API_KEY, fetch),
-)
+export const getDeepgramToken = createServerFn({ method: 'POST' }).handler(async (): Promise<DeepgramTokenResult> => {
+  if (!(await underLimit(env.TOKEN_LIMITER, getRequest()))) return { message: TOO_MANY_REQUESTS }
+  return grantDeepgramToken(env.DEEPGRAM_API_KEY, fetch)
+})

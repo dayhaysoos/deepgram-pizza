@@ -14,6 +14,13 @@ export const Route = createRootRoute({
     ],
     links: [{ rel: 'stylesheet', href: appCss }],
   }),
+  // Sent with every page the server renders. Only this site may show the shop
+  // in a frame, so another site can't lay its own page over the buttons; and
+  // the browser takes the page as the type the server says it is.
+  headers: () => ({
+    'Content-Security-Policy': "frame-ancestors 'self'",
+    'X-Content-Type-Options': 'nosniff',
+  }),
   shellComponent: RootDocument,
 })
 

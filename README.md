@@ -118,7 +118,9 @@ pnpm run deploy
 
 Deploy fails until both secrets are set: they're listed under `secrets.required` in `wrangler.jsonc`.
 
-**Before you host it publicly:** the token server function has no rate limit or authentication. Anyone who can open your shop can mint Deepgram tokens on your key and run up your Deepgram bill. Add a rate limit or a sign-in first.
+**Before you host it publicly:** anyone who can open your shop can ask the token server function for a Deepgram token, and the voice session it opens runs on your Deepgram bill for as long as they keep it open. The template limits how fast one visitor (one IP address) can ask: 20 tokens and 10 checkouts a minute, set under `ratelimits` in `wrangler.jsonc` and checked in `src/rateLimit.ts`. That stops a script from hammering Deepgram or Stripe with your keys. It doesn't cap what you spend, and Cloudflare counts loosely, in each of its locations on its own. Before real traffic, put a sign-in or a bot check such as [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) in front of the token, and watch your usage in the Deepgram console.
+
+**Before you take real payments:** the template only runs Stripe in test mode, and the order page (`/order/success`) believes the session id in its url without asking Stripe. Confirm each payment on the server with a [Stripe webhook](https://docs.stripe.com/checkout/fulfillment) before you make anyone a pizza.
 
 ## How it works
 

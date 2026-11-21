@@ -36,7 +36,7 @@ Add a dependency outside this table only after asking.
 ## Architecture
 
 - **The cart lives in the browser, and so do the tools.** The agent asks for a tool. A browser handler registered with `useAgentClientTool` calls a use-shopping-cart action. The agent never changes the cart any other way.
-- **The server does two things:** it mints the short-lived Deepgram token, and it creates the Stripe Checkout Session. Each is a TanStack Start server function. Anything else on the server needs a clear reason.
+- **The server does two things:** it mints the short-lived Deepgram token, and it creates the Stripe Checkout Session. Each is a TanStack Start server function, and each asks the visitor's rate limit first (`underLimit` in `src/rateLimit.ts`; the limits are `ratelimits` in `wrangler.jsonc`). The limit slows a script; it doesn't cap the Deepgram bill, as the README's deploy section says. Anything else on the server needs a clear reason.
 - **`menu.json` is the single source of truth.** The menu UI, the agent's instructions, the tool parameter enums and the checkout validation all read the same file. Each size is its own product with its own id (`margherita-large`), so a tool call never carries a size to interpret.
 - **Every cart tool returns the cart.** After a change, the handler returns the updated cart summary (lines, count, formatted total, and the total as words to say, `totalSpoken`; for delivery, also `delivery`: the fee and the total with it, written and spoken). The agent speaks only from what tools return, so it never invents a price or a total.
 - **Tools recover; they don't throw.** An unknown id or a bad quantity returns a short message the agent can act on ("No 'hawaiian'. The pizzas are: …"). A thrown error ends the turn in silence.
@@ -69,6 +69,7 @@ Add a dependency outside this table only after asking.
 - `compatibility_date` can't be newer than what the workerd bundled with `@cloudflare/vite-plugin` supports; `pnpm dev` refuses to start otherwise. Bump it only together with the plugin.
 - `worker-configuration.d.ts` and `src/routeTree.gen.ts` are generated and committed, so `pnpm check` works on a fresh clone. After changing bindings or secrets in `wrangler.jsonc`, run `pnpm cf-typegen` (`wrangler types`) and commit the result. After adding or renaming a route, run `pnpm dev` or `pnpm build` once so the route tree regenerates, and commit it. Secret names are listed under `secrets.required` in `wrangler.jsonc` (names only).
 - `vite build` copies `.dev.vars` into `dist/server/`, so `dist/` must stay ignored.
+- TanStack Start checks that server function calls come from this site (CSRF) only while the app has no `src/start.ts`. Set page headers on the root route (`headers` in `src/routes/__root.tsx`); if a `src/start.ts` is ever needed, give its `requestMiddleware` `createCsrfMiddleware({ filter: (ctx) => ctx.handlerType === 'serverFn' })`.
 
 ## use-shopping-cart
 
@@ -97,12 +98,13 @@ The shop is fictional.
 - Vitest runs in Node, which has no `cloudflare:workers`. A test that imports the route tree (or anything that reaches a server function) must `vi.mock('cloudflare:workers', () => ({ env: {} }))`, as `src/router.test.ts` does. Keep pure logic out of server-function files so most tests don't need the mock.
 - To check 360 px when the browser window can't be resized, load the page in a same-origin `<iframe src="/" style="width:360px;height:740px">`; media queries follow the frame's width. Stripe's hosted Checkout won't render inside a frame, so pay with the test card at desktop width and check our own pages (drawer, success, cancelled) in the frame.
 - To check a failure in the browser, force it from the page before pressing the talk button: make `navigator.mediaDevices.getUserMedia` reject with `new DOMException('Permission denied', 'NotAllowedError')` for a denied microphone; wrap `window.fetch` to reject calls to `/_serverFn/` for a token or a checkout that can't be reached; wrap `window.WebSocket` to keep each Deepgram socket, and call `close()` on the live one for a dropped connection (send new ones to `ws://127.0.0.1:1/` to keep it down). The session log on `/dev/tools` shows each reconnect try.
+- To call a server function without a browser (checking a rate limit, say), run `pnpm build` and `pnpm preview`, then POST to `/_serverFn/<id>` with the headers `x-tsr-serverFn: true`, `Content-Type: application/json` and `Sec-Fetch-Site: same-origin`; without the last the framework answers 403. The ids are the 64-character hex strings in `dist/server`, and the body is `{ data }` serialized with seroval's `toJSONAsync`.
 - Voice itself needs a human with a microphone. Run the golden path in a real browser, or say plainly that you couldn't and which steps are still unverified.
 
 ## Tooling
 
 - pnpm runs install scripts only for packages allowed in `pnpm-workspace.yaml` `allowBuilds`. When a new dependency needs a build script, add it there with `pnpm approve-builds <pkg>`.
-- pnpm 12 normally waits 24 hours before installing a newly published version. That wait is off here (`minimumReleaseAge: 0` in `pnpm-workspace.yaml`) so use-shopping-cart release candidates install the day they ship. Pin exact versions, and look at what a fresh release changed before you install it.
+- pnpm 12 waits 24 hours before installing a newly published version. Only use-shopping-cart skips the wait (`minimumReleaseAgeExclude` in `pnpm-workspace.yaml`), so its release candidates install the day they ship. Pin its exact version, and look at what a fresh release changed before you install it.
 
 ## Licensing
 
